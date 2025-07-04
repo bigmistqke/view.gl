@@ -1,3 +1,8 @@
+type PickMaybe<
+  T extends Record<string, any> | undefined,
+  U extends keyof T | (string & {}),
+> = T extends Record<string, any> ? T[U] : undefined
+
 export type GL = WebGLRenderingContext | WebGL2RenderingContext
 
 /**********************************************************************************/
@@ -20,7 +25,7 @@ type GLTextureWrap = 'CLAMP_TO_EDGE' | 'REPEAT' | 'MIRRORED_REPEAT'
 /*                                                                                */
 /**********************************************************************************/
 
-type UniformKind = '1f' | '2f' | '3f' | '4f' | '1i' | '2i' | '3i' | '4i' | 'mat3' | 'mat4'
+export type UniformKind = '1f' | '2f' | '3f' | '4f' | '1i' | '2i' | '3i' | '4i' | 'mat3' | 'mat4'
 
 interface UniformKindMap {
   '1f': [number]
@@ -55,20 +60,18 @@ interface UniformKindMap {
   ]
 }
 
-export type InferUniformSetters<T extends UniformConfig | undefined> = T extends UniformConfig
-  ? {
-      [K in keyof T]: {
-        set(...args: UniformKindMap[T[K]]): void
-      }
-    }
-  : undefined
+export type UniformSchema = Record<string, UniformKind>
 
-export type InferUniforms<T extends UniformConfig | undefined> = T extends UniformConfig
-  ? {
-      dispose(): void
-      setters: InferUniformSetters<T>
-    }
-  : undefined
+export interface UniformMethods<TKind extends UniformKind> {
+  set(...args: UniformKindMap[TKind]): void
+}
+
+export type InferUniforms<T extends UniformSchema | undefined = Record<string, any>> =
+  T extends UniformSchema
+    ? {
+        [K in keyof T]: UniformMethods<T[K]>
+      }
+    : undefined
 
 /**********************************************************************************/
 /*                                                                                */
@@ -78,45 +81,69 @@ export type InferUniforms<T extends UniformConfig | undefined> = T extends Unifo
 
 export type AttributeKind = '1f' | '2f' | '3f' | '4f'
 
-type BufferData = Float32Array | WebGLBuffer
+export interface AttributeOptions {
+  kind: AttributeKind
+  instanced?: boolean
+}
 
-export type InterleaveAttributes<T extends AttributeConfig | undefined> = T extends AttributeConfig
-  ? {
-      set(buffer: Float32Array): void
-      bind(instancing: boolean): void
-    }
-  : undefined
-export type InferAttributeSetters<T extends AttributeConfig | undefined> = T extends AttributeConfig
-  ? {
-      [K in keyof T]: {
-        bind(data: Float32Array): void
-        set(instancing: boolean): void
-      }
-    }
-  : undefined
-export type InferAttributes<T extends AttributeConfig | undefined> = T extends AttributeConfig
-  ? {
-      interleave(layout: Array<string>): InterleaveAttributes<T>
-      dispose(): void
-      setters: InferAttributeSetters<T>
-    }
-  : undefined
+export type AttributeSchema = Record<string, AttributeOptions>
+
+export interface AttributeMethods {
+  bind(): void
+  set(data: Float32Array, usage?: GLUsage): AttributeMethods
+  dispose(): void
+}
+
+export type InferAttributeView<T extends AttributeSchema | undefined = Record<string, any>> =
+  T extends AttributeSchema
+    ? [
+        attributes: {
+          [K in keyof T]: AttributeMethods
+        },
+        disposeAttributes: () => void,
+      ]
+    : []
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                Instanced Attributes                            */
+/*                              Interleaved Attributes                           */
 /*                                                                                */
 /**********************************************************************************/
 
-export type InferInstancedAttributeSetter<T extends AttributeConfig | undefined> =
-  T extends AttributeConfig ? (buffer: BufferData) => void : undefined
-export type InferInstancedAttributes<T extends AttributeConfig | undefined> =
-  T extends AttributeConfig
-    ? {
-        set: InferInstancedAttributeSetter<T>
-        dispose(): void
-      }
-    : undefined
+export interface InterleavedAttributeLayout {
+  name: string
+  kind: AttributeKind
+}
+
+export interface InterleavedAttributeOptions {
+  layout: InterleavedAttributeLayout[]
+  instanced?: boolean
+}
+
+export type InterleavedAttributeSchema = Record<
+  string,
+  {
+    layout: InterleavedAttributeLayout[]
+    instanced?: boolean
+  }
+>
+
+export interface InterleavedAttributeMethods {
+  bind(): void
+  set(data: Float32Array, usage?: GLUsage): InterleavedAttributeMethods
+  dispose(): void
+}
+
+export type InferInterleavedAttributes<
+  T extends InterleavedAttributeSchema | undefined = Record<string, any>,
+> = T extends InterleavedAttributeSchema
+  ? [
+      interleavedAttributes: {
+        [K in keyof T]: InterleavedAttributeMethods
+      },
+      dispose: () => void,
+    ]
+  : []
 
 /**********************************************************************************/
 /*                                                                                */
@@ -124,56 +151,31 @@ export type InferInstancedAttributes<T extends AttributeConfig | undefined> =
 /*                                                                                */
 /**********************************************************************************/
 
-export type InferBufferSetters<T extends BufferConfig | undefined> = T extends BufferConfig
-  ? {
-      [K in keyof T['buffers']]: {
-        set(data: Float32Array | Uint16Array | Uint32Array): WebGLBuffer
-        get(): WebGLBuffer
-        bind(): Program<T>
-      }
-    }
-  : undefined
-export type InferBuffers<T extends BufferConfig | undefined> = T extends BufferConfig
-  ? {
-      dispose(): void
-      setters: InferBufferSetters<T>
-    }
-  : undefined
+export type BufferSchema = Record<string, BufferOptions>
 
-/**********************************************************************************/
-/*                                                                                */
-/*                                    Textures                                    */
-/*                                                                                */
-/**********************************************************************************/
+export interface BufferMethods {
+  set(data: Float32Array | Uint16Array | Uint32Array): BufferMethods
+  bind(): void
+  dispose(): void
+}
 
-export type InferTextureSetters<T extends TextureConfig | undefined> = T extends TextureConfig
-  ? {
-      [K in keyof T]: {
-        set(data?: ArrayBufferView | null): WebGLTexture
-        get(): WebGLTexture
-        bind(unit?: number): Program<T>
-        update(
-          x: number,
-          y: number,
-          width: number,
-          height: number,
-          data: ArrayBufferView,
-        ): Program<T>
-      }
-    }
-  : undefined
-export type InferTextures<T extends TextureConfig | undefined> = T extends TextureConfig
-  ? {
-      dispose(): void
-      setters: InferTextureSetters<T>
-    }
-  : undefined
+export type InferBuffers<T extends BufferSchema | undefined = Record<string, any>> =
+  T extends BufferSchema
+    ? [
+        buffers: {
+          [K in keyof T]: BufferMethods
+        },
+        disposeBuffers: () => void,
+      ]
+    : []
 
 /**********************************************************************************/
 /*                                                                                */
 /*                                   Framebuffers                                 */
 /*                                                                                */
 /**********************************************************************************/
+
+export type FramebufferSchema = Record<string, FramebufferOptions>
 
 export interface FramebufferOptions extends Omit<TextureOptions, 'data'> {
   attachment: 'color' | 'depth' | 'stencil' | 'depthStencil'
@@ -193,26 +195,20 @@ export interface TextureOptions {
   data?: ArrayBufferView | null
 }
 
-export type InferFramebufferSetters<T extends ProgramConfig['framebuffers']> =
-  T extends NonNullable<ProgramConfig['framebuffers']>
-    ? {
-        [K in keyof T]: {
-          bind(): Program<T>
-          unbind(): Program<T>
-          get(): WebGLFramebuffer
-          getTexture(): WebGLTexture | undefined
-          checkStatus(): boolean
-        }
-      }
-    : undefined
-export type InferFramebuffers<T extends ProgramConfig['framebuffers']> = T extends NonNullable<
-  ProgramConfig['framebuffers']
->
-  ? {
-      dispose(): void
-      setters: InferFramebufferSetters<T>
-    }
-  : undefined
+export interface FramebufferMethods {
+  bind(): void
+  dispose(): void
+}
+
+export type InferFramebuffers<T extends FramebufferSchema | undefined = Record<string, any>> =
+  T extends FramebufferSchema
+    ? [
+        framebuffers: {
+          [K in keyof T]: FramebufferMethods
+        },
+        dispose: () => void,
+      ]
+    : []
 
 export interface BufferOptions {
   target?: GLTarget
@@ -231,65 +227,50 @@ export interface ShaderConfig {
   fragment: string
 }
 
-type UniformConfig = Record<string, UniformKind>
-type AttributeConfig = Record<string, AttributeKind>
-type BufferConfig = Record<string, BufferOptions>
-type TextureConfig = Record<string, TextureOptions>
-type FramebufferConfig = Record<string, FramebufferOptions>
-export interface ProgramConfig {
-  uniforms?: UniformConfig
-  attributes?: AttributeConfig
-  instancedAttributes?: AttributeConfig
-  buffers?: BufferConfig
-  textures?: TextureConfig
-  framebuffers?: FramebufferConfig
-}
-
 /**********************************************************************************/
 /*                                                                                */
-/*                                   Program State                                */
+/*                                     View State                                 */
 /*                                                                                */
 /**********************************************************************************/
 
-export type ProgramState =
+export type ViewState =
   | {
       gl: WebGLRenderingContext
       isWebGL2: false
       program: WebGLProgram
-      vertexArrayObject?: never
       instancedArraysExt: ANGLE_instanced_arrays | null
     }
   | {
       gl: WebGL2RenderingContext
       isWebGL2: true
       program: WebGLProgram
-      vertexArrayObject: WebGLVertexArrayObject
       instancedArraysExt?: never
     }
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                     Program                                    */
+/*                                       View                                     */
 /*                                                                                */
 /**********************************************************************************/
 
-export interface Program<T extends ProgramConfig = ProgramConfig> {
-  dispose(): void
-  drawArrays(mode: number, first: number, count: number): void
-  drawArraysInstanced(mode: number, first: number, count: number, instanceCount: number): void
-  drawElements(mode: number, count: number, type: number, offset: number): void
-  drawElementsInstanced(
-    mode: number,
-    count: number,
-    type: number,
-    offset: number,
-    instanceCount: number,
-  ): void
-  attributes: InferAttributeSetters<T['attributes']>
-  interleaveAttributes: InterleaveAttributes<T['attributes']>
-  buffers: InferBufferSetters<T['buffers']>
-  framebuffers: InferFramebufferSetters<T['framebuffers']>
-  textures: InferTextureSetters<T['textures']>
-  uniforms: InferUniformSetters<T['uniforms']>
-  use(): void
+export interface ViewSchema {
+  uniforms?: UniformSchema
+  attributes?: AttributeSchema
+  interleavedAttributes?: InterleavedAttributeSchema
+  buffers?: BufferSchema
+  framebuffers?: FramebufferSchema
 }
+
+export type View<T extends ViewSchema = ViewSchema> = [
+  resources: {
+    attributes: PickMaybe<InferAttributeView<T['attributes']>, 'methods'>
+    interleavedAttributes: PickMaybe<
+      InferInterleavedAttributes<T['interleavedAttributes']>,
+      'methods'
+    >
+    buffers: PickMaybe<InferBuffers<T['buffers']>, 'methods'>
+    framebuffers: PickMaybe<InferFramebuffers<T['framebuffers']>, 'methods'>
+    uniforms: InferUniforms<T['uniforms']>
+  },
+  dispose: () => void,
+]
