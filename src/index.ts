@@ -1,5 +1,6 @@
 import type {
   AttributeKind,
+  AttributeMethods,
   AttributeSchema,
   BufferSchema,
   FramebufferSchema,
@@ -8,14 +9,18 @@ import type {
   InferBuffers,
   InferFramebuffers,
   InferInterleavedAttributes,
+  InferTextures,
   InferUniforms as InferUniformView,
   InterleavedAttributeSchema,
   RemoveSuffix,
-  TextureOptions,
+  TexImage2DOptions,
+  TextureParameters,
+  TextureSchema,
   UniformSchema,
   View,
   ViewSchema,
 } from './types.ts'
+import { createTexture } from './utils.js'
 
 function mapObject<T extends Record<string, any>, TReturn>(
   value: T,
@@ -63,66 +68,62 @@ const FRAMEBUFFER_ATTACHMENT_MAP = {
 /*                                                                                */
 /**********************************************************************************/
 
-const WRAPPER_MAPS = {
-  instancedArrays: new WeakMap<
-    GL,
-    RemoveSuffix<
-      Pick<
-        ANGLE_instanced_arrays,
-        'drawArraysInstancedANGLE' | 'drawElementsInstancedANGLE' | 'vertexAttribDivisorANGLE'
-      >,
-      'ANGLE'
-    > | null
-  >(),
-  vertexArrayObject: new WeakMap<
-    GL,
-    RemoveSuffix<
-      Pick<
-        OES_vertex_array_object,
-        'bindVertexArrayOES' | 'createVertexArrayOES' | 'deleteVertexArrayOES'
-      >,
-      'OES'
-    > | null
-  >(),
+const INSTANCED_ARRAYS_WRAPPER_MAP = new WeakMap<
+  GL,
+  RemoveSuffix<
+    Pick<
+      ANGLE_instanced_arrays,
+      'drawArraysInstancedANGLE' | 'drawElementsInstancedANGLE' | 'vertexAttribDivisorANGLE'
+    >,
+    'ANGLE'
+  > | null
+>()
+function getInstancedArrays(gl: GL) {
+  if (gl instanceof WebGL2RenderingContext) return gl
+
+  const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl)
+  if (cached) return cached
+
+  const ext = gl.getExtension('ANGLE_instanced_arrays')
+  if (!ext) return undefined
+
+  const wrapper = {
+    drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
+    drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
+    vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext),
+  }
+  INSTANCED_ARRAYS_WRAPPER_MAP.set(gl, wrapper)
+
+  return wrapper
 }
 
-const features = {
-  getInstancedArrays(gl: GL) {
-    if (gl instanceof WebGL2RenderingContext) return gl
+const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = new WeakMap<
+  GL,
+  RemoveSuffix<
+    Pick<
+      OES_vertex_array_object,
+      'bindVertexArrayOES' | 'createVertexArrayOES' | 'deleteVertexArrayOES'
+    >,
+    'OES'
+  > | null
+>()
+function getVertexArrayObject(gl: GL) {
+  if (gl instanceof WebGL2RenderingContext) return gl
 
-    const cached = WRAPPER_MAPS.instancedArrays.get(gl)
-    if (cached) return cached
+  const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl)
+  if (cached) return cached
 
-    const ext = gl.getExtension('ANGLE_instanced_arrays')
-    if (!ext) return undefined
+  const ext = gl.getExtension('OES_vertex_array_object')
+  if (!ext) return null
 
-    const wrapper = {
-      drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
-      drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
-      vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext),
-    }
-    WRAPPER_MAPS.instancedArrays.set(gl, wrapper)
+  const wrapper = {
+    bindVertexArray: ext.bindVertexArrayOES.bind(ext),
+    createVertexArray: ext.createVertexArrayOES.bind(ext),
+    deleteVertexArray: ext.deleteVertexArrayOES.bind(ext),
+  }
+  VERTEX_ARRAY_OBJECT_WRAPPER_MAP.set(gl, wrapper)
 
-    return wrapper
-  },
-  getVertexArrayObject(gl: GL) {
-    if (gl instanceof WebGL2RenderingContext) return gl
-
-    const cached = WRAPPER_MAPS.vertexArrayObject.get(gl)
-    if (cached) return cached
-
-    const ext = gl.getExtension('OES_vertex_array_object')
-    if (!ext) return null
-
-    const wrapper = {
-      bindVertexArray: ext.bindVertexArrayOES.bind(ext),
-      createVertexArray: ext.createVertexArrayOES.bind(ext),
-      deleteVertexArray: ext.deleteVertexArrayOES.bind(ext),
-    }
-    WRAPPER_MAPS.vertexArrayObject.set(gl, wrapper)
-
-    return wrapper
-  },
+  return wrapper
 }
 
 /**********************************************************************************/
@@ -143,14 +144,16 @@ export function view<T extends ViewSchema>(gl: GL, program: WebGLProgram, config
   const [framebuffers, disposeFramebuffers] = !config.framebuffers
     ? []
     : framebufferView(gl, config.framebuffers)
+  const [textures, disposeTextures] = !config.textures ? [] : textureView(gl, config.textures)
 
   return [
-    { uniforms, attributes, interleavedAttributes, buffers, framebuffers },
+    { uniforms, attributes, interleavedAttributes, buffers, framebuffers, textures },
     function dispose() {
       disposeAttributes?.()
       disposeInterleavedAttributes?.()
       disposeBuffers?.()
       disposeFramebuffers?.()
+      disposeTextures?.()
     },
   ] as View<T>
 }
@@ -166,16 +169,14 @@ export function uniformView<T extends UniformSchema>(gl: GL, program: WebGLProgr
     const location = assertedNotNullish(gl.getUniformLocation(program, name))
     return {
       set(...args: any[]) {
-        switch (kind) {
-          case 'mat3':
-            gl.uniformMatrix3fv(location, false, args[0])
-            break
-          case 'mat4':
-            gl.uniformMatrix4fv(location, false, args[0])
-            break
-          default:
-            // @ts-expect-error
-            gl[`uniform${kind}`](location, ...args)
+        if (kind.startsWith('mat')) {
+          gl[`uniformMatrix${kind.replace('mat', '')}fv`](location, false, args[0])
+        }
+        if (kind.startsWith('sampler')) {
+          gl.uniform1i(location, args[0])
+        } else {
+          // @ts-expect-error
+          gl[`uniform${kind}`](location, ...args)
         }
       },
     }
@@ -211,12 +212,12 @@ function handleAttribute(
 
   if (instanced) {
     // Get instanced-arrays-feature: extension if webgl, gl if webgl2
-    assertedNotNullish(features.getInstancedArrays(gl)).vertexAttribDivisor(location, 1)
+    assertedNotNullish(getInstancedArrays(gl)).vertexAttribDivisor(location, 1)
   }
 }
 
-function attributeView<T extends AttributeSchema>(gl: GL, program: WebGLProgram, config: T) {
-  const attributes = mapObject(config, ({ kind, instanced }, name) => {
+export function attributeView<T extends AttributeSchema>(gl: GL, program: WebGLProgram, config: T) {
+  const attributes = mapObject(config, ({ kind, instanced }, name): AttributeMethods => {
     const location = gl.getAttribLocation(program, name)
     if (location < 0) {
       throw new Error(`Attribute '${name}' not found`)
@@ -226,12 +227,12 @@ function attributeView<T extends AttributeSchema>(gl: GL, program: WebGLProgram,
     const size = SIZE_MAP[kind]
 
     return {
-      dispose() {
-        gl.deleteBuffer(buffer)
-      },
       bind() {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
         handleAttribute(gl, location, size, 0, 0, kind, instanced)
+      },
+      dispose() {
+        gl.deleteBuffer(buffer)
       },
       set(data, usage = 'STATIC_DRAW') {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
@@ -292,7 +293,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
     let vao: { bind(): void; dispose(): void } | undefined = undefined
 
     // Get VAO-feature: extension if webgl1, gl if webgl2
-    const feature = features.getVertexArrayObject(gl)
+    const feature = getVertexArrayObject(gl)
     if (feature) {
       const vertexArray = feature.createVertexArray()
       feature.bindVertexArray(vertexArray)
@@ -302,22 +303,16 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       }
       feature.bindVertexArray(null)
       vao = {
-        bind() {
-          feature.bindVertexArray(vertexArray)
-        },
         dispose() {
           feature.deleteVertexArray(vertexArray)
+        },
+        bind() {
+          feature.bindVertexArray(vertexArray)
         },
       }
     }
 
     return {
-      dispose() {
-        gl.deleteBuffer(buffer)
-        if (vao) {
-          vao.dispose()
-        }
-      },
       bind() {
         if (vao) {
           vao.bind()
@@ -329,10 +324,15 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
           }
         }
       },
+      dispose() {
+        gl.deleteBuffer(buffer)
+        if (vao) {
+          vao.dispose()
+        }
+      },
       set(value, usage = 'STATIC_DRAW') {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
         gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage])
-        return this
       },
     }
   })
@@ -361,13 +361,12 @@ export function bufferView<T extends BufferSchema>(gl: GL, config: T) {
       bind() {
         gl.bindBuffer(gl[target], buffer)
       },
+      dispose() {
+        gl.deleteBuffer(buffer)
+      },
       set(data) {
         gl.bindBuffer(gl[target], buffer)
         gl.bufferData(gl[target], data, gl[usage])
-        return this
-      },
-      dispose() {
-        gl.deleteBuffer(buffer)
       },
     }
   })
@@ -411,102 +410,52 @@ class FramebufferError extends Error {
   }
 }
 
-export function createTexture(
-  gl: GL,
-  {
-    target = 'TEXTURE_2D',
-    internalFormat = 'RGBA',
-    format = 'RGBA',
-    type = 'UNSIGNED_BYTE',
-    minFilter = 'NEAREST',
-    magFilter = 'NEAREST',
-    wrapS = 'CLAMP_TO_EDGE',
-    wrapT = 'CLAMP_TO_EDGE',
-    width,
-    height,
-  }: TextureOptions,
-  data?: ArrayBufferView | null,
-): WebGLTexture {
-  const texture = gl.createTexture()
-
-  function getTextureConstant(name: string) {
-    if (!(name in gl)) {
-      throw new Error(`Attempted to create webgl2-only texture (${name}) in webgl1`)
-    }
-    return gl[name]
-  }
-
-  gl.bindTexture(gl[target], texture)
-  gl.texImage2D(
-    gl[target],
-    0,
-    getTextureConstant(internalFormat),
-    width,
-    height,
-    0,
-    getTextureConstant(format),
-    getTextureConstant(type),
-    data ?? data ?? null,
-  )
-
-  // Set texture parameters
-  gl.texParameteri(gl[target], gl.TEXTURE_MIN_FILTER, gl[minFilter])
-  gl.texParameteri(gl[target], gl.TEXTURE_MAG_FILTER, gl[magFilter])
-  gl.texParameteri(gl[target], gl.TEXTURE_WRAP_S, gl[wrapS])
-  gl.texParameteri(gl[target], gl.TEXTURE_WRAP_T, gl[wrapT])
-
-  return texture
-}
-
 export function framebufferView<T extends FramebufferSchema>(gl: GL, config: T) {
   if (!config) return [] as InferFramebuffers<T>
 
   // Initialize framebuffers
-  const framebuffers = mapObject(config, ({ attachment, ...options }, name) =>
-    // createFrameBufferMethods(gl, name as string, options),
-    {
-      // Create framebuffer
-      const framebuffer = assertedNotNullish(
-        gl.createFramebuffer(),
-        `Failed to create framebuffer: ${name}`,
-      )
+  const framebuffers = mapObject(config, ({ attachment, ...options }, name) => {
+    // Create framebuffer
+    const framebuffer = assertedNotNullish(
+      gl.createFramebuffer(),
+      `Failed to create framebuffer: ${name}`,
+    )
 
-      gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
 
-      let texture: WebGLTexture
-      try {
-        // Create texture for the framebuffer
-        texture = createTexture(gl, options)
-      } catch {
-        throw new Error(`Failed to create texture: ${name}`)
-      }
+    let texture: WebGLTexture
+    try {
+      // Create texture for the framebuffer
+      texture = createTexture(gl, options)
+    } catch {
+      throw new Error(`Failed to create texture: ${name}`)
+    }
 
-      gl.framebufferTexture2D(
-        gl.FRAMEBUFFER,
-        // Determine attachment point based on attachment kind
-        gl[FRAMEBUFFER_ATTACHMENT_MAP[attachment]],
-        gl.TEXTURE_2D,
-        texture,
-        0,
-      )
+    gl.framebufferTexture2D(
+      gl.FRAMEBUFFER,
+      // Determine attachment point based on attachment kind
+      gl[FRAMEBUFFER_ATTACHMENT_MAP[attachment]],
+      gl.TEXTURE_2D,
+      texture,
+      0,
+    )
 
-      // Check framebuffer completeness
-      const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
-      if (status !== gl.FRAMEBUFFER_COMPLETE) {
-        throw new FramebufferError(gl, name, status)
-      }
+    // Check framebuffer completeness
+    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+    if (status !== gl.FRAMEBUFFER_COMPLETE) {
+      throw new FramebufferError(gl, name, status)
+    }
 
-      return {
-        dispose() {
-          gl.deleteFramebuffer(framebuffer)
-          gl.deleteTexture(texture)
-        },
-        bind() {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
-        },
-      }
-    },
-  )
+    return {
+      bind() {
+        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+      },
+      dispose() {
+        gl.deleteFramebuffer(framebuffer)
+        gl.deleteTexture(texture)
+      },
+    }
+  })
 
   // Restore default framebuffer
   gl.bindFramebuffer(gl.FRAMEBUFFER, null)
@@ -519,4 +468,82 @@ export function framebufferView<T extends FramebufferSchema>(gl: GL, config: T) 
       }
     },
   ] as InferFramebuffers<T>
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                  Texture View                                  */
+/*                                                                                */
+/**********************************************************************************/
+
+export function textureView<T extends TextureSchema>(gl: GL, schema: T) {
+  const textures = mapObject(schema, ({ target = 'TEXTURE_2D' }, name) => {
+    const texture = assertedNotNullish(gl.createTexture(), `Failed to create texture '${name}'`)
+
+    return {
+      bind(unit = 0) {
+        gl.activeTexture(gl.TEXTURE0 + unit)
+        gl.bindTexture(gl[target], texture)
+      },
+      dispose() {
+        gl.deleteTexture(texture)
+      },
+      set(
+        source: ImageBufferSource | null,
+        {
+          level = 0,
+          internalFormat = 'RGBA',
+          width = 1,
+          height = 1,
+          border = 0,
+          format = 'RGBA',
+          type = 'UNSIGNED_BYTE',
+        }: Partial<TexImage2DOptions> = {},
+      ) {
+        gl.bindTexture(gl[target], texture)
+
+        if (!source) {
+          gl.texImage2D(
+            gl[target],
+            level,
+            gl[internalFormat],
+            width,
+            height,
+            border,
+            gl[format],
+            gl[type],
+            null,
+          )
+          return
+        }
+
+        if (
+          source instanceof ImageBitmap ||
+          source instanceof HTMLImageElement ||
+          source instanceof HTMLCanvasElement ||
+          source instanceof HTMLVideoElement
+        ) {
+          gl.texImage2D(gl[target], level, gl[internalFormat], gl[format], gl[type], source)
+          return
+        }
+
+        throw new Error(`Unsupported image source for texture '${name}'`)
+      },
+      parameters(params: TextureParameters) {
+        gl.bindTexture(gl[target], texture)
+        for (const [pname, value] of Object.entries(params)) {
+          gl.texParameteri(gl[target], gl[pname], gl[value])
+        }
+      },
+    }
+  })
+
+  return [
+    textures,
+    function dispose() {
+      for (const name in textures) {
+        textures[name].dispose()
+      }
+    },
+  ] as InferTextures<T>
 }

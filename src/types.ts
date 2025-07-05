@@ -2,11 +2,6 @@ export type RemoveSuffix<T, S extends string> = {
   [K in keyof T as K extends `${infer Prefix}${S}` ? Prefix : K]: T[K]
 }
 
-type PickMaybe<
-  T extends Record<string, any> | undefined,
-  U extends keyof T | (string & {}),
-> = T extends Record<string, any> ? T[U] : undefined
-
 export type GL = WebGLRenderingContext | WebGL2RenderingContext
 
 /**********************************************************************************/
@@ -29,39 +24,118 @@ type GLTextureWrap = 'CLAMP_TO_EDGE' | 'REPEAT' | 'MIRRORED_REPEAT'
 /*                                                                                */
 /**********************************************************************************/
 
-export type UniformKind = '1f' | '2f' | '3f' | '4f' | '1i' | '2i' | '3i' | '4i' | 'mat3' | 'mat4'
+export type UniformKind =
+  | '1f'
+  | '2f'
+  | '3f'
+  | '4f'
+  | '1i'
+  | '2i'
+  | '3i'
+  | '4i'
+  | '1ui'
+  | '2ui'
+  | '3ui'
+  | '4ui'
+  | 'mat2'
+  | 'mat3'
+  | 'mat4'
+  | 'mat2x3'
+  | 'mat2x4'
+  | 'mat3x2'
+  | 'mat3x4'
+  | 'mat4x2'
+  | 'mat4x3'
+  | 'sampler2D'
+  | 'samplerCube'
+  | 'sampler2DArray'
+  | 'isampler2D'
+  | 'isamplerCube'
+  | 'isampler2DArray'
+  | 'usampler2D'
+  | 'usamplerCube'
+  | 'usampler2DArray'
 
+// prettier-ignore
 interface UniformKindMap {
   '1f': [number]
   '2f': [number, number]
   '3f': [number, number, number]
   '4f': [number, number, number, number]
+
   '1i': [number]
   '2i': [number, number]
   '3i': [number, number, number]
   '4i': [number, number, number, number]
-  mat3: [Float32Array] | [number, number, number, number, number, number, number, number, number]
-  mat4: [
-    | Float32Array
-    | [
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-        number,
-      ],
-  ]
+
+  '1ui': [number]
+  '2ui': [number, number]
+  '3ui': [number, number, number]
+  '4ui': [number, number, number, number]
+
+  mat2:
+    | [Float32Array]
+    | [number, number, number, number]
+
+  mat3:
+    | [Float32Array]
+    | [number, number, number, number, number, number, number, number, number]
+
+  mat4:
+    | [Float32Array]
+    | [number, number, number, number,
+       number, number, number, number,
+       number, number, number, number,
+       number, number, number, number]
+
+  mat2x3:
+    | [Float32Array]
+    | [number, number, number,
+       number, number, number]
+
+  mat2x4:
+    | [Float32Array]
+    | [number, number, number, number,
+       number, number, number, number]
+
+  mat3x2:
+    | [Float32Array]
+    | [number, number,
+       number, number,
+       number, number]
+
+  mat3x4:
+    | [Float32Array]
+    | [number, number, number, number,
+       number, number, number, number,
+       number, number, number, number]
+
+  mat4x2:
+    | [Float32Array]
+    | [number, number,
+       number, number,
+       number, number,
+       number, number]
+
+  mat4x3:
+    | [Float32Array]
+    | [number, number, number,
+       number, number, number,
+       number, number, number,
+       number, number, number]
+
+  // texture unit index
+  sampler2D: [number]           
+  samplerCube: [number]
+  sampler2DArray: [number]
+
+  isampler2D: [number]
+  isamplerCube: [number]
+  isampler2DArray: [number]
+
+  usampler2D: [number]
+  usamplerCube: [number]
+  usampler2DArray: [number]
 }
 
 export type UniformSchema = Record<string, UniformKind>
@@ -134,7 +208,7 @@ export type InterleavedAttributeSchema = Record<
 
 export interface InterleavedAttributeMethods {
   bind(): void
-  set(data: Float32Array, usage?: GLUsage): InterleavedAttributeMethods
+  set(data: Float32Array, usage?: GLUsage): void
   dispose(): void
 }
 
@@ -158,7 +232,7 @@ export type InferInterleavedAttributes<
 export type BufferSchema = Record<string, BufferOptions>
 
 export interface BufferMethods {
-  set(data: Float32Array | Uint16Array | Uint32Array): BufferMethods
+  set(data: Float32Array | Uint16Array | Uint32Array): void
   bind(): void
   dispose(): void
 }
@@ -219,6 +293,120 @@ export interface BufferOptions {
   usage?: GLUsage
 }
 
+export type TextureTarget =
+  | 'TEXTURE_2D'
+  | 'TEXTURE_CUBE_MAP'
+  | 'TEXTURE_3D' // WebGL2 only
+  | 'TEXTURE_2D_ARRAY' // WebGL2 only
+
+export type TextureDesc = {
+  target?: TextureTarget
+}
+
+export type TextureSchema = Record<string, TextureDesc>
+
+export type InferTextures<T extends TextureSchema | undefined> = T extends TextureSchema
+  ? [
+      textures: {
+        [K in keyof T]: {
+          dispose(): void
+          bind(unit?: number): void
+          set(
+            data: ImageBufferSource | null,
+            options?: Partial<{
+              level: number
+              internalFormat: number
+              width: number
+              height: number
+              border: number
+              format: number
+              type: number
+            }>,
+          ): void
+          parameters(params: Record<number, number>): void
+        }
+      },
+      dispose: () => void,
+    ]
+  : undefined
+
+export type TextureParameterName =
+  | 'TEXTURE_MIN_FILTER'
+  | 'TEXTURE_MAG_FILTER'
+  | 'TEXTURE_WRAP_S'
+  | 'TEXTURE_WRAP_T'
+  | 'TEXTURE_WRAP_R' // For WebGL2 (3D textures)
+
+export type TextureParameterValue =
+  // Filters
+  | 'NEAREST'
+  | 'LINEAR'
+  | 'NEAREST_MIPMAP_NEAREST'
+  | 'LINEAR_MIPMAP_NEAREST'
+  | 'NEAREST_MIPMAP_LINEAR'
+  | 'LINEAR_MIPMAP_LINEAR'
+
+  // Wrap modes
+  | 'CLAMP_TO_EDGE'
+  | 'REPEAT'
+  | 'MIRRORED_REPEAT'
+
+// The texture parameters record type
+export type TextureParameters = Partial<Record<TextureParameterName, TextureParameterValue>>
+
+// Internal formats (commonly used)
+export type InternalFormat =
+  | 'ALPHA'
+  | 'RGB'
+  | 'RGBA'
+  | 'LUMINANCE'
+  | 'LUMINANCE_ALPHA'
+  | 'DEPTH_COMPONENT'
+  | 'DEPTH_STENCIL'
+  // WebGL2 adds many more, e.g.
+  | 'R8'
+  | 'RG8'
+  | 'RGB8'
+  | 'RGBA8'
+  | 'DEPTH_COMPONENT16'
+  | 'DEPTH_COMPONENT24'
+  | 'DEPTH24_STENCIL8'
+
+// Formats (same as internalFormat in WebGL1)
+export type Format =
+  | 'ALPHA'
+  | 'RGB'
+  | 'RGBA'
+  | 'LUMINANCE'
+  | 'LUMINANCE_ALPHA'
+  | 'DEPTH_COMPONENT'
+  | 'DEPTH_STENCIL'
+
+// Data types
+export type PixelType =
+  | 'UNSIGNED_BYTE'
+  | 'UNSIGNED_SHORT_5_6_5'
+  | 'UNSIGNED_SHORT_4_4_4_4'
+  | 'UNSIGNED_SHORT_5_5_5_1'
+  | 'FLOAT' // WebGL extension or WebGL2
+  | 'HALF_FLOAT' // WebGL2 or extension
+  | 'UNSIGNED_INT_24_8' // WebGL2
+  | 'UNSIGNED_INT'
+  | 'BYTE'
+  | 'SHORT'
+  | 'INT'
+
+// Options for the set() method
+export type TexImage2DOptions = {
+  level: number
+  internalFormat: InternalFormat
+  width: number
+  height: number
+  border: number
+  format: Format
+  type: PixelType
+}
+
 /**********************************************************************************/
 /*                                                                                */
 /*                                      Config                                    */
@@ -263,18 +451,19 @@ export interface ViewSchema {
   interleavedAttributes?: InterleavedAttributeSchema
   buffers?: BufferSchema
   framebuffers?: FramebufferSchema
+  textures?: TextureSchema
 }
 
 export type View<T extends ViewSchema = ViewSchema> = [
   resources: {
-    attributes: PickMaybe<InferAttributeView<T['attributes']>, 'methods'>
-    interleavedAttributes: PickMaybe<
-      InferInterleavedAttributes<T['interleavedAttributes']>,
-      'methods'
-    >
-    buffers: PickMaybe<InferBuffers<T['buffers']>, 'methods'>
-    framebuffers: PickMaybe<InferFramebuffers<T['framebuffers']>, 'methods'>
+    attributes: InferAttributeView<T['attributes']> extends [infer T] ? T : undefined
+    interleavedAttributes: InferInterleavedAttributes<T['interleavedAttributes']> extends [infer T]
+      ? T
+      : undefined
+    buffers: InferBuffers<T['buffers']> extends [infer T] ? T : undefined
+    framebuffers: InferFramebuffers<T['framebuffers']> extends [infer T] ? T : undefined
     uniforms: InferUniforms<T['uniforms']>
+    textures: InferTextures<T['textures']> extends [infer T] ? T : undefined
   },
   dispose: () => void,
 ]

@@ -1,4 +1,4 @@
-import { GL } from './types'
+import { GL, TextureOptions } from './types'
 
 function createGLShader(gl: GL, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type)
@@ -46,4 +46,51 @@ export function createGLProgram(
   gl.deleteShader(fragmentShader)
 
   return program
+}
+
+export function createTexture(
+  gl: GL,
+  {
+    target = 'TEXTURE_2D',
+    internalFormat = 'RGBA',
+    format = 'RGBA',
+    type = 'UNSIGNED_BYTE',
+    minFilter = 'NEAREST',
+    magFilter = 'NEAREST',
+    wrapS = 'CLAMP_TO_EDGE',
+    wrapT = 'CLAMP_TO_EDGE',
+    width,
+    height,
+  }: TextureOptions,
+  data?: ArrayBufferView | null,
+): WebGLTexture {
+  const texture = gl.createTexture()
+
+  function getTextureConstant(name: string) {
+    if (!(name in gl)) {
+      throw new Error(`Attempted to create webgl2-only texture (${name}) in webgl1`)
+    }
+    return gl[name]
+  }
+
+  gl.bindTexture(gl[target], texture)
+  gl.texImage2D(
+    gl[target],
+    0,
+    getTextureConstant(internalFormat),
+    width,
+    height,
+    0,
+    getTextureConstant(format),
+    getTextureConstant(type),
+    data ?? data ?? null,
+  )
+
+  // Set texture parameters
+  gl.texParameteri(gl[target], gl.TEXTURE_MIN_FILTER, gl[minFilter])
+  gl.texParameteri(gl[target], gl.TEXTURE_MAG_FILTER, gl[magFilter])
+  gl.texParameteri(gl[target], gl.TEXTURE_WRAP_S, gl[wrapS])
+  gl.texParameteri(gl[target], gl.TEXTURE_WRAP_T, gl[wrapT])
+
+  return texture
 }
