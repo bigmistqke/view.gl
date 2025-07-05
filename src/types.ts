@@ -1,3 +1,7 @@
+export type RemoveSuffix<T, S extends string> = {
+  [K in keyof T as K extends `${infer Prefix}${S}` ? Prefix : K]: T[K]
+}
+
 type PickMaybe<
   T extends Record<string, any> | undefined,
   U extends keyof T | (string & {}),
