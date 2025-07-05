@@ -3,6 +3,7 @@ import type {
   AttributeMethods,
   AttributeSchema,
   BufferSchema,
+  FramebufferMethods,
   FramebufferSchema,
   GL,
   InferAttributeView,
@@ -11,9 +12,11 @@ import type {
   InferInterleavedAttributes,
   InferTextures,
   InferUniforms as InferUniformView,
+  InterleavedAttributeMethods,
   InterleavedAttributeSchema,
   RemoveSuffix,
   TexImage2DOptions,
+  TextureMethods,
   TextureParameters,
   TextureSchema,
   UniformSchema,
@@ -132,30 +135,26 @@ function getVertexArrayObject(gl: GL) {
 /*                                                                                */
 /**********************************************************************************/
 
-export function view<T extends ViewSchema>(gl: GL, program: WebGLProgram, config: T): View<T> {
-  const uniforms = !config.uniforms ? undefined : uniformView(gl, program, config.uniforms)
-  const [attributes, disposeAttributes] = !config.attributes
-    ? []
-    : attributeView(gl, program, config.attributes)
-  const [interleavedAttributes, disposeInterleavedAttributes] = !config.interleavedAttributes
-    ? []
-    : interleavedAttributeView(gl, program, config.interleavedAttributes)
-  const [buffers, disposeBuffers] = !config.buffers ? [] : bufferView(gl, config.buffers)
-  const [framebuffers, disposeFramebuffers] = !config.framebuffers
-    ? []
-    : framebufferView(gl, config.framebuffers)
-  const [textures, disposeTextures] = !config.textures ? [] : textureView(gl, config.textures)
-
-  return [
-    { uniforms, attributes, interleavedAttributes, buffers, framebuffers, textures },
-    function dispose() {
-      disposeAttributes?.()
-      disposeInterleavedAttributes?.()
-      disposeBuffers?.()
-      disposeFramebuffers?.()
-      disposeTextures?.()
-    },
-  ] as View<T>
+export function view<T extends ViewSchema>(
+  gl: GL,
+  program: WebGLProgram,
+  config: T,
+  signal: AbortSignal,
+): View<T> {
+  return {
+    uniforms: !config.uniforms ? undefined : uniformView(gl, program, config.uniforms),
+    attributes: !config.attributes
+      ? undefined
+      : attributeView(gl, program, config.attributes, signal),
+    interleavedAttributes: !config.interleavedAttributes
+      ? undefined
+      : interleavedAttributeView(gl, program, config.interleavedAttributes, signal),
+    buffers: !config.buffers ? undefined : bufferView(gl, config.buffers),
+    framebuffers: !config.framebuffers
+      ? undefined
+      : framebufferView(gl, config.framebuffers, signal),
+    textures: !config.textures ? undefined : textureView(gl, config.textures, signal),
+  } as View<T>
 }
 
 /**********************************************************************************/
@@ -164,7 +163,11 @@ export function view<T extends ViewSchema>(gl: GL, program: WebGLProgram, config
 /*                                                                                */
 /**********************************************************************************/
 
-export function uniformView<T extends UniformSchema>(gl: GL, program: WebGLProgram, config: T) {
+export function uniformView<T extends UniformSchema>(
+  gl: GL,
+  program: WebGLProgram,
+  config: T,
+): InferUniformView<T> {
   return mapObject(config, (kind, name) => {
     const location = assertedNotNullish(gl.getUniformLocation(program, name))
     return {
@@ -180,7 +183,7 @@ export function uniformView<T extends UniformSchema>(gl: GL, program: WebGLProgr
         }
       },
     }
-  }) as InferUniformView<T>
+  })
 }
 
 /**********************************************************************************/
@@ -216,7 +219,12 @@ function handleAttribute(
   }
 }
 
-export function attributeView<T extends AttributeSchema>(gl: GL, program: WebGLProgram, config: T) {
+export function attributeView<T extends AttributeSchema>(
+  gl: GL,
+  program: WebGLProgram,
+  config: T,
+  signal?: AbortSignal,
+): InferAttributeView<T> {
   const attributes = mapObject(config, ({ kind, instanced }, name): AttributeMethods => {
     const location = gl.getAttribLocation(program, name)
     if (location < 0) {
@@ -242,14 +250,13 @@ export function attributeView<T extends AttributeSchema>(gl: GL, program: WebGLP
     }
   })
 
-  return [
-    attributes,
-    function dispose() {
-      for (const name in attributes) {
-        attributes[name].dispose()
-      }
-    },
-  ] as InferAttributeView<T>
+  signal?.addEventListener('abort', function dispose() {
+    for (const name in attributes) {
+      attributes[name].dispose()
+    }
+  })
+
+  return attributes
 }
 
 /**********************************************************************************/
@@ -262,7 +269,8 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   gl: GL,
   program: WebGLProgram,
   schema: T,
-) {
+  signal?: AbortSignal,
+): InferInterleavedAttributes<T> {
   // Initialize interleaved attributes
   const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
     // Increment number to keep track of offset
@@ -303,11 +311,11 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       }
       feature.bindVertexArray(null)
       vao = {
-        dispose() {
-          feature.deleteVertexArray(vertexArray)
-        },
         bind() {
           feature.bindVertexArray(vertexArray)
+        },
+        dispose() {
+          feature.deleteVertexArray(vertexArray)
         },
       }
     }
@@ -334,17 +342,16 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
         gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage])
       },
+    } satisfies InterleavedAttributeMethods
+  })
+
+  signal?.addEventListener('abort', function dispose() {
+    for (const name in interleavedAttributes) {
+      interleavedAttributes[name].dispose()
     }
   })
 
-  return [
-    interleavedAttributes,
-    function dispose() {
-      for (const name in interleavedAttributes) {
-        interleavedAttributes[name].dispose()
-      }
-    },
-  ] as InferInterleavedAttributes<T>
+  return interleavedAttributes
 }
 
 /**********************************************************************************/
@@ -353,7 +360,11 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
 /*                                                                                */
 /**********************************************************************************/
 
-export function bufferView<T extends BufferSchema>(gl: GL, config: T) {
+export function bufferView<T extends BufferSchema>(
+  gl: GL,
+  config: T,
+  signal?: AbortSignal,
+): InferBuffers<T> {
   // Initialize buffers
   const buffers = mapObject(config, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
     const buffer = assertedNotNullish(gl.createBuffer())
@@ -371,14 +382,13 @@ export function bufferView<T extends BufferSchema>(gl: GL, config: T) {
     }
   })
 
-  return [
-    buffers,
-    function dispose() {
-      for (const name in buffers) {
-        buffers[name].dispose()
-      }
-    },
-  ] as InferBuffers<T>
+  signal?.addEventListener('abort', function dispose() {
+    for (const name in buffers) {
+      buffers[name].dispose()
+    }
+  })
+
+  return buffers
 }
 
 /**********************************************************************************/
@@ -410,9 +420,11 @@ class FramebufferError extends Error {
   }
 }
 
-export function framebufferView<T extends FramebufferSchema>(gl: GL, config: T) {
-  if (!config) return [] as InferFramebuffers<T>
-
+export function framebufferView<T extends FramebufferSchema>(
+  gl: GL,
+  config: T,
+  signal?: AbortSignal,
+): InferFramebuffers<T> {
   // Initialize framebuffers
   const framebuffers = mapObject(config, ({ attachment, ...options }, name) => {
     // Create framebuffer
@@ -454,20 +466,19 @@ export function framebufferView<T extends FramebufferSchema>(gl: GL, config: T) 
         gl.deleteFramebuffer(framebuffer)
         gl.deleteTexture(texture)
       },
-    }
+    } satisfies FramebufferMethods
   })
 
   // Restore default framebuffer
   gl.bindFramebuffer(gl.FRAMEBUFFER, null)
 
-  return [
-    framebuffers,
-    function dispose() {
-      for (const name in framebuffers) {
-        framebuffers[name].dispose()
-      }
-    },
-  ] as InferFramebuffers<T>
+  signal?.addEventListener('abort', function dispose() {
+    for (const name in framebuffers) {
+      framebuffers[name].dispose()
+    }
+  })
+
+  return framebuffers
 }
 
 /**********************************************************************************/
@@ -476,7 +487,11 @@ export function framebufferView<T extends FramebufferSchema>(gl: GL, config: T) 
 /*                                                                                */
 /**********************************************************************************/
 
-export function textureView<T extends TextureSchema>(gl: GL, schema: T) {
+export function textureView<T extends TextureSchema>(
+  gl: GL,
+  schema: T,
+  signal?: AbortSignal,
+): InferTextures<T> {
   const textures = mapObject(schema, ({ target = 'TEXTURE_2D' }, name) => {
     const texture = assertedNotNullish(gl.createTexture(), `Failed to create texture '${name}'`)
 
@@ -535,15 +550,14 @@ export function textureView<T extends TextureSchema>(gl: GL, schema: T) {
           gl.texParameteri(gl[target], gl[pname], gl[value])
         }
       },
+    } satisfies TextureMethods
+  })
+
+  signal?.addEventListener('abort', function dispose() {
+    for (const name in textures) {
+      textures[name].dispose()
     }
   })
 
-  return [
-    textures,
-    function dispose() {
-      for (const name in textures) {
-        textures[name].dispose()
-      }
-    },
-  ] as InferTextures<T>
+  return textures
 }

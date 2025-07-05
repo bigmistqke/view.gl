@@ -144,12 +144,9 @@ export interface UniformMethods<TKind extends UniformKind> {
   set(...args: UniformKindMap[TKind]): void
 }
 
-export type InferUniforms<T extends UniformSchema | undefined = Record<string, any>> =
-  T extends UniformSchema
-    ? {
-        [K in keyof T]: UniformMethods<T[K]>
-      }
-    : undefined
+export type InferUniforms<T extends UniformSchema> = {
+  [K in keyof T]: UniformMethods<T[K]>
+}
 
 /**********************************************************************************/
 /*                                                                                */
@@ -172,15 +169,9 @@ export interface AttributeMethods {
   dispose(): void
 }
 
-export type InferAttributeView<T extends AttributeSchema | undefined = Record<string, any>> =
-  T extends AttributeSchema
-    ? [
-        attributes: {
-          [K in keyof T]: AttributeMethods
-        },
-        disposeAttributes: () => void,
-      ]
-    : []
+export type InferAttributeView<T extends AttributeSchema> = {
+  [K in keyof T]: AttributeMethods
+}
 
 /**********************************************************************************/
 /*                                                                                */
@@ -212,16 +203,9 @@ export interface InterleavedAttributeMethods {
   dispose(): void
 }
 
-export type InferInterleavedAttributes<
-  T extends InterleavedAttributeSchema | undefined = Record<string, any>,
-> = T extends InterleavedAttributeSchema
-  ? [
-      interleavedAttributes: {
-        [K in keyof T]: InterleavedAttributeMethods
-      },
-      dispose: () => void,
-    ]
-  : []
+export type InferInterleavedAttributes<T extends InterleavedAttributeSchema> = {
+  [K in keyof T]: InterleavedAttributeMethods
+}
 
 /**********************************************************************************/
 /*                                                                                */
@@ -237,15 +221,9 @@ export interface BufferMethods {
   dispose(): void
 }
 
-export type InferBuffers<T extends BufferSchema | undefined = Record<string, any>> =
-  T extends BufferSchema
-    ? [
-        buffers: {
-          [K in keyof T]: BufferMethods
-        },
-        disposeBuffers: () => void,
-      ]
-    : []
+export type InferBuffers<T extends BufferSchema> = {
+  [K in keyof T]: BufferMethods
+}
 
 /**********************************************************************************/
 /*                                                                                */
@@ -278,15 +256,9 @@ export interface FramebufferMethods {
   dispose(): void
 }
 
-export type InferFramebuffers<T extends FramebufferSchema | undefined = Record<string, any>> =
-  T extends FramebufferSchema
-    ? [
-        framebuffers: {
-          [K in keyof T]: FramebufferMethods
-        },
-        dispose: () => void,
-      ]
-    : []
+export type InferFramebuffers<T extends FramebufferSchema> = {
+  [K in keyof T]: FramebufferMethods
+}
 
 export interface BufferOptions {
   target?: GLTarget
@@ -305,30 +277,16 @@ export type TextureDesc = {
 
 export type TextureSchema = Record<string, TextureDesc>
 
-export type InferTextures<T extends TextureSchema | undefined> = T extends TextureSchema
-  ? [
-      textures: {
-        [K in keyof T]: {
-          dispose(): void
-          bind(unit?: number): void
-          set(
-            data: ImageBufferSource | null,
-            options?: Partial<{
-              level: number
-              internalFormat: number
-              width: number
-              height: number
-              border: number
-              format: number
-              type: number
-            }>,
-          ): void
-          parameters(params: Record<number, number>): void
-        }
-      },
-      dispose: () => void,
-    ]
-  : undefined
+export interface TextureMethods {
+  dispose(): void
+  bind(unit?: number): void
+  set(data: ImageBufferSource | null, options?: Partial<TexImage2DOptions>): void
+  parameters(params: Record<number, number>): void
+}
+
+export type InferTextures<T extends TextureSchema> = {
+  [K in keyof T]: TextureMethods
+}
 
 export type TextureParameterName =
   | 'TEXTURE_MIN_FILTER'
@@ -454,16 +412,17 @@ export interface ViewSchema {
   textures?: TextureSchema
 }
 
-export type View<T extends ViewSchema = ViewSchema> = [
-  resources: {
-    attributes: InferAttributeView<T['attributes']> extends [infer T] ? T : undefined
-    interleavedAttributes: InferInterleavedAttributes<T['interleavedAttributes']> extends [infer T]
-      ? T
-      : undefined
-    buffers: InferBuffers<T['buffers']> extends [infer T] ? T : undefined
-    framebuffers: InferFramebuffers<T['framebuffers']> extends [infer T] ? T : undefined
-    uniforms: InferUniforms<T['uniforms']>
-    textures: InferTextures<T['textures']> extends [infer T] ? T : undefined
-  },
-  dispose: () => void,
-]
+export type View<T extends ViewSchema = ViewSchema> = {
+  attributes: T['attributes'] extends AttributeSchema
+    ? InferAttributeView<T['attributes']>
+    : undefined
+  interleavedAttributes: T['interleavedAttributes'] extends InterleavedAttributeSchema
+    ? InferInterleavedAttributes<T['interleavedAttributes']>
+    : undefined
+  buffers: T['buffers'] extends BufferSchema ? InferBuffers<T['buffers']> : undefined
+  framebuffers: T['framebuffers'] extends FramebufferSchema
+    ? InferFramebuffers<T['framebuffers']>
+    : undefined
+  uniforms: T['uniforms'] extends UniformSchema ? InferUniforms<T['uniforms']> : undefined
+  textures: T['textures'] extends TextureSchema ? InferTextures<T['textures']> : undefined
+}
