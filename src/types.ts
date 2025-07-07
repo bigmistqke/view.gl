@@ -1,3 +1,17 @@
+export type Merge<A, B> = {
+  [K in keyof A | keyof B]: K extends keyof A
+    ? K extends keyof B
+      ? A[K] | B[K]
+      : A[K]
+    : K extends keyof B
+    ? B[K]
+    : never
+}
+
+export type Prettify<T> = {
+  [K in keyof T]: T[K]
+} & {}
+
 export type RemoveSuffix<T, S extends string> = {
   [K in keyof T as K extends `${infer Prefix}${S}` ? Prefix : K]: T[K]
 }
@@ -24,7 +38,7 @@ type GLTextureWrap = 'CLAMP_TO_EDGE' | 'REPEAT' | 'MIRRORED_REPEAT'
 /*                                                                                */
 /**********************************************************************************/
 
-export type UniformKind =
+export type UniformShorthand =
   | '1f'
   | '2f'
   | '3f'
@@ -56,86 +70,169 @@ export type UniformKind =
   | 'usamplerCube'
   | 'usampler2DArray'
 
+export type UniformKind =
+  | 'float'
+  | 'vec2'
+  | 'vec3'
+  | 'vec4'
+  | 'int'
+  | 'ivec2'
+  | 'ivec3'
+  | 'ivec4'
+  | 'bool'
+  | 'bvec2'
+  | 'bvec3'
+  | 'bvec4'
+  | 'mat2'
+  | 'mat3'
+  | 'mat4'
+  | 'sampler2D'
+  | 'samplerCube'
+  // webgl2
+  | 'uint'
+  | 'uvec2'
+  | 'uvec3'
+  | 'uvec4'
+  | 'mat2x3'
+  | 'mat2x4'
+  | 'mat3x2'
+  | 'mat3x4'
+  | 'mat4x2'
+  | 'mat4x3'
+  | 'sampler3D'
+  | 'sampler2DArray'
+  | 'sampler2DShadow'
+  | 'samplerCubeShadow'
+  | 'sampler2DArrayShadow'
+  | 'isampler2D'
+  | 'isampler3D'
+  | 'isamplerCube'
+  | 'isampler2DArray'
+  | 'usampler2D'
+  | 'usampler3D'
+  | 'usamplerCube'
+  | 'usampler2DArray'
+
 // prettier-ignore
 interface UniformKindMap {
-  '1f': [number]
-  '2f': [number, number]
-  '3f': [number, number, number]
-  '4f': [number, number, number, number]
+  // Float scalars and vectors
+  float: [number];
+  vec2: [number, number];
+  vec3: [number, number, number];
+  vec4: [number, number, number, number];
 
-  '1i': [number]
-  '2i': [number, number]
-  '3i': [number, number, number]
-  '4i': [number, number, number, number]
+  // Signed integer scalars and vectors
+  int: [number];
+  ivec2: [number, number];
+  ivec3: [number, number, number];
+  ivec4: [number, number, number, number];
 
-  '1ui': [number]
-  '2ui': [number, number]
-  '3ui': [number, number, number]
-  '4ui': [number, number, number, number]
+  // Booleans (set with uniform1i)
+  bool: [number];
+  bvec2: [number, number];
+  bvec3: [number, number, number];
+  bvec4: [number, number, number, number];
 
+  // Unsigned integer scalars and vectors (WebGL2)
+  uint: [number];
+  uvec2: [number, number];
+  uvec3: [number, number, number];
+  uvec4: [number, number, number, number];
+
+  // Matrices (float arrays or explicit numbers)
   mat2:
     | [Float32Array]
-    | [number, number, number, number]
+    | [
+        number, number,
+        number, number
+      ];
 
   mat3:
     | [Float32Array]
-    | [number, number, number, number, number, number, number, number, number]
+    | [
+        number, number, number,
+        number, number, number,
+        number, number, number
+      ];
 
   mat4:
     | [Float32Array]
-    | [number, number, number, number,
-       number, number, number, number,
-       number, number, number, number,
-       number, number, number, number]
+    | [
+        number, number, number, number,
+        number, number, number, number,
+        number, number, number, number,
+        number, number, number, number
+      ];
 
+  // WebGL2 extended matrix types
   mat2x3:
     | [Float32Array]
-    | [number, number, number,
-       number, number, number]
+    | [
+        number, number, number,
+        number, number, number
+      ];
 
   mat2x4:
     | [Float32Array]
-    | [number, number, number, number,
-       number, number, number, number]
+    | [
+        number, number, number, number,
+        number, number, number, number
+      ];
 
   mat3x2:
     | [Float32Array]
-    | [number, number,
-       number, number,
-       number, number]
+    | [
+        number, number,
+        number, number,
+        number, number
+      ];
 
   mat3x4:
     | [Float32Array]
-    | [number, number, number, number,
-       number, number, number, number,
-       number, number, number, number]
+    | [
+        number, number, number, number,
+        number, number, number, number,
+        number, number, number, number
+      ];
 
   mat4x2:
     | [Float32Array]
-    | [number, number,
-       number, number,
-       number, number,
-       number, number]
+    | [
+        number, number,
+        number, number,
+        number, number,
+        number, number
+      ];
 
   mat4x3:
     | [Float32Array]
-    | [number, number, number,
-       number, number, number,
-       number, number, number,
-       number, number, number]
+    | [
+        number, number, number,
+        number, number, number,
+        number, number, number,
+        number, number, number
+      ];
 
-  // texture unit index
-  sampler2D: [number]           
-  samplerCube: [number]
-  sampler2DArray: [number]
+  // Samplers — always a single number (texture unit)
+  sampler2D: [number];
+  samplerCube: [number];
+  sampler3D: [number];             // WebGL2
+  sampler2DArray: [number];        // WebGL2
+  sampler2DShadow: [number];       // WebGL2
+  samplerCubeShadow: [number];     // WebGL2
+  sampler2DArrayShadow: [number];  // WebGL2
 
-  isampler2D: [number]
-  isamplerCube: [number]
-  isampler2DArray: [number]
+  // Integer samplers (WebGL2)
+  isampler2D: [number];
+  isampler3D: [number];
+  isamplerCube: [number];
+  isampler2DArray: [number];
 
-  usampler2D: [number]
-  usamplerCube: [number]
-  usampler2DArray: [number]
+  // Unsigned integer samplers (WebGL2)
+  usampler2D: [number];
+  usampler3D: [number];
+  usamplerCube: [number];
+  usampler2DArray: [number];
 }
 
 export type UniformSchema = Record<string, UniformKind>
@@ -144,7 +241,7 @@ export interface UniformMethods<TKind extends UniformKind> {
   set(...args: UniformKindMap[TKind]): void
 }
 
-export type InferUniforms<T extends UniformSchema> = {
+export type UniformView<T extends UniformSchema> = {
   [K in keyof T]: UniformMethods<T[K]>
 }
 
@@ -154,7 +251,47 @@ export type InferUniforms<T extends UniformSchema> = {
 /*                                                                                */
 /**********************************************************************************/
 
-export type AttributeKind = '1f' | '2f' | '3f' | '4f'
+export type AttributeShortHand =
+  | '1f'
+  | '2f'
+  | '3f'
+  | '4f'
+  | '1i'
+  | '2i'
+  | '3i'
+  | '4i'
+  | '1ui'
+  | '2ui'
+  | '3ui'
+  | '4ui'
+
+export type AttributeKind =
+  // webgl1
+  | 'float'
+  | 'vec2'
+  | 'vec3'
+  | 'vec4'
+  | 'mat2'
+  | 'mat3'
+  | 'mat4'
+
+  // webgl2
+  | 'mat2x3'
+  | 'mat2x4'
+  | 'mat3x2'
+  | 'mat3x4'
+  | 'mat4x2'
+  | 'mat4x3'
+
+  // (via vertexAttribIPointer)
+  | 'int'
+  | 'ivec2'
+  | 'ivec3'
+  | 'ivec4'
+  | 'uint'
+  | 'uvec2'
+  | 'uvec3'
+  | 'uvec4'
 
 export interface AttributeOptions {
   kind: AttributeKind
@@ -163,14 +300,14 @@ export interface AttributeOptions {
 
 export type AttributeSchema = Record<string, AttributeOptions>
 
-export interface AttributeMethods {
+export interface AttributeMethods<T = AttributeKind> {
   bind(): void
-  set(data: Float32Array, usage?: GLUsage): AttributeMethods
+  set(data: Float32Array, usage?: GLUsage): { bind(): void }
   dispose(): void
 }
 
-export type InferAttributeView<T extends AttributeSchema> = {
-  [K in keyof T]: AttributeMethods
+export type AttributeView<T extends AttributeSchema> = {
+  [K in keyof T]: AttributeMethods<T[K]['kind']>
 }
 
 /**********************************************************************************/
@@ -189,22 +326,18 @@ export interface InterleavedAttributeOptions {
   instanced?: boolean
 }
 
-export type InterleavedAttributeSchema = Record<
-  string,
-  {
-    layout: InterleavedAttributeLayout[]
-    instanced?: boolean
-  }
->
+export type InterleavedAttributeSchema = Record<string, InterleavedAttributeOptions>
 
-export interface InterleavedAttributeMethods {
+export interface InterleavedAttributeMethods<
+  T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
+> {
   bind(): void
   set(data: Float32Array, usage?: GLUsage): void
   dispose(): void
 }
 
-export type InferInterleavedAttributes<T extends InterleavedAttributeSchema> = {
-  [K in keyof T]: InterleavedAttributeMethods
+export type InterleavedAttributeView<T extends InterleavedAttributeSchema> = {
+  [K in keyof T]: InterleavedAttributeMethods<T[K]['layout']>
 }
 
 /**********************************************************************************/
@@ -212,6 +345,11 @@ export type InferInterleavedAttributes<T extends InterleavedAttributeSchema> = {
 /*                                     Buffers                                    */
 /*                                                                                */
 /**********************************************************************************/
+
+export interface BufferOptions {
+  target?: GLTarget
+  usage?: GLUsage
+}
 
 export type BufferSchema = Record<string, BufferOptions>
 
@@ -221,7 +359,7 @@ export interface BufferMethods {
   dispose(): void
 }
 
-export type InferBuffers<T extends BufferSchema> = {
+export type BufferView<T extends BufferSchema> = {
   [K in keyof T]: BufferMethods
 }
 
@@ -256,14 +394,15 @@ export interface FramebufferMethods {
   dispose(): void
 }
 
-export type InferFramebuffers<T extends FramebufferSchema> = {
+export type FramebufferView<T extends FramebufferSchema> = {
   [K in keyof T]: FramebufferMethods
 }
 
-export interface BufferOptions {
-  target?: GLTarget
-  usage?: GLUsage
-}
+/**********************************************************************************/
+/*                                                                                */
+/*                                   Texture View                                 */
+/*                                                                                */
+/**********************************************************************************/
 
 export type TextureTarget =
   | 'TEXTURE_2D'
@@ -271,11 +410,7 @@ export type TextureTarget =
   | 'TEXTURE_3D' // WebGL2 only
   | 'TEXTURE_2D_ARRAY' // WebGL2 only
 
-export type TextureDesc = {
-  target?: TextureTarget
-}
-
-export type TextureSchema = Record<string, TextureDesc>
+export type TextureSchema = Record<string, TextureOptions>
 
 export interface TextureMethods {
   dispose(): void
@@ -284,7 +419,7 @@ export interface TextureMethods {
   parameters(params: Record<number, number>): void
 }
 
-export type InferTextures<T extends TextureSchema> = {
+export type TextureView<T extends TextureSchema> = {
   [K in keyof T]: TextureMethods
 }
 
@@ -367,38 +502,6 @@ export type TexImage2DOptions = {
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                      Config                                    */
-/*                                                                                */
-/**********************************************************************************/
-
-export interface ShaderConfig {
-  gl: GL
-  vertex: string
-  fragment: string
-}
-
-/**********************************************************************************/
-/*                                                                                */
-/*                                     View State                                 */
-/*                                                                                */
-/**********************************************************************************/
-
-export type ViewState =
-  | {
-      gl: WebGLRenderingContext
-      isWebGL2: false
-      program: WebGLProgram
-      instancedArraysExt: ANGLE_instanced_arrays | null
-    }
-  | {
-      gl: WebGL2RenderingContext
-      isWebGL2: true
-      program: WebGLProgram
-      instancedArraysExt?: never
-    }
-
-/**********************************************************************************/
-/*                                                                                */
 /*                                       View                                     */
 /*                                                                                */
 /**********************************************************************************/
@@ -413,16 +516,14 @@ export interface ViewSchema {
 }
 
 export type View<T extends ViewSchema = ViewSchema> = {
-  attributes: T['attributes'] extends AttributeSchema
-    ? InferAttributeView<T['attributes']>
-    : undefined
+  attributes: T['attributes'] extends AttributeSchema ? AttributeView<T['attributes']> : undefined
   interleavedAttributes: T['interleavedAttributes'] extends InterleavedAttributeSchema
-    ? InferInterleavedAttributes<T['interleavedAttributes']>
+    ? InterleavedAttributeView<T['interleavedAttributes']>
     : undefined
-  buffers: T['buffers'] extends BufferSchema ? InferBuffers<T['buffers']> : undefined
+  buffers: T['buffers'] extends BufferSchema ? BufferView<T['buffers']> : undefined
   framebuffers: T['framebuffers'] extends FramebufferSchema
-    ? InferFramebuffers<T['framebuffers']>
+    ? FramebufferView<T['framebuffers']>
     : undefined
-  uniforms: T['uniforms'] extends UniformSchema ? InferUniforms<T['uniforms']> : undefined
-  textures: T['textures'] extends TextureSchema ? InferTextures<T['textures']> : undefined
+  uniforms: T['uniforms'] extends UniformSchema ? UniformView<T['uniforms']> : never
+  textures: T['textures'] extends TextureSchema ? TextureView<T['textures']> : undefined
 }

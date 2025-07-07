@@ -1,69 +1,43 @@
+import { FRAMEBUFFER_ATTACHMENT_MAP, KIND_SIZE_MAP, KIND_TO_UNIFORM_FN_NAME } from './constants'
 import type {
   AttributeKind,
   AttributeMethods,
   AttributeSchema,
+  AttributeView,
   BufferSchema,
+  BufferView,
   FramebufferMethods,
   FramebufferSchema,
+  FramebufferView,
   GL,
-  InferAttributeView,
-  InferBuffers,
-  InferFramebuffers,
-  InferInterleavedAttributes,
-  InferTextures,
-  InferUniforms as InferUniformView,
+  UniformView as InferUniformView,
   InterleavedAttributeMethods,
   InterleavedAttributeSchema,
+  InterleavedAttributeView,
   RemoveSuffix,
   TexImage2DOptions,
   TextureMethods,
   TextureParameters,
   TextureSchema,
+  TextureView,
+  UniformKind,
   UniformSchema,
   View,
   ViewSchema,
-} from './types.ts'
-import { createTexture } from './utils.js'
+} from './types'
+import { assertedNotNullish, createTexture, mapObject } from './utils'
 
-function mapObject<T extends Record<string, any>, TReturn>(
-  value: T,
-  callback: (value: T[keyof T], key: Extract<keyof T, string>, index: number) => TReturn,
-): { [TKey in keyof T]: TReturn } {
-  return Object.fromEntries(
-    Object.entries(value).map(([key, value], index) => [key, callback(value, key, index)]),
-  )
-}
+const isMatKind = <
+  T extends UniformKind | AttributeKind,
+  TPrefix extends string,
+  TPostfix extends string,
+>(
+  kind: T,
+): kind is T & `${TPrefix}mat${TPostfix}` => kind.includes('mat')
 
-function assertedNotNullish<T>(value: T, message?: string): NonNullable<T> {
-  if (value === undefined || value === null) throw new Error(message)
-  return value
-}
-
-/**********************************************************************************/
-/*                                                                                */
-/*                                    Constants                                   */
-/*                                                                                */
-/**********************************************************************************/
-
-const SIZE_MAP = {
-  '1f': 1,
-  '2f': 2,
-  '3f': 3,
-  '4f': 4,
-  '1i': 1,
-  '2i': 2,
-  '3i': 3,
-  '4i': 4,
-  mat3: 9,
-  mat4: 16,
-} as const
-
-const FRAMEBUFFER_ATTACHMENT_MAP = {
-  color: 'COLOR_ATTACHMENT0',
-  depth: 'DEPTH_ATTACHMENT',
-  stencil: 'STENCIL_ATTACHMENT',
-  depthStencil: 'DEPTH_STENCIL_ATTACHMENT',
-} as const
+const isSamplerKind = <TPrefix extends string, TPostfix extends string>(
+  kind: UniformKind,
+): kind is UniformKind & `${TPrefix}sampler${TPostfix}` => kind.includes('sampler')
 
 /**********************************************************************************/
 /*                                                                                */
@@ -138,22 +112,22 @@ function getVertexArrayObject(gl: GL) {
 export function view<T extends ViewSchema>(
   gl: GL,
   program: WebGLProgram,
-  config: T,
-  signal: AbortSignal,
+  schema: T,
+  signal?: AbortSignal,
 ): View<T> {
   return {
-    uniforms: !config.uniforms ? undefined : uniformView(gl, program, config.uniforms),
-    attributes: !config.attributes
+    uniforms: !schema.uniforms ? undefined : uniformView(gl, program, schema.uniforms),
+    attributes: !schema.attributes
       ? undefined
-      : attributeView(gl, program, config.attributes, signal),
-    interleavedAttributes: !config.interleavedAttributes
+      : attributeView(gl, program, schema.attributes, signal),
+    interleavedAttributes: !schema.interleavedAttributes
       ? undefined
-      : interleavedAttributeView(gl, program, config.interleavedAttributes, signal),
-    buffers: !config.buffers ? undefined : bufferView(gl, config.buffers),
-    framebuffers: !config.framebuffers
+      : interleavedAttributeView(gl, program, schema.interleavedAttributes, signal),
+    buffers: !schema.buffers ? undefined : bufferView(gl, schema.buffers),
+    framebuffers: !schema.framebuffers
       ? undefined
-      : framebufferView(gl, config.framebuffers, signal),
-    textures: !config.textures ? undefined : textureView(gl, config.textures, signal),
+      : framebufferView(gl, schema.framebuffers, signal),
+    textures: !schema.textures ? undefined : textureView(gl, schema.textures, signal),
   } as View<T>
 }
 
@@ -166,21 +140,36 @@ export function view<T extends ViewSchema>(
 export function uniformView<T extends UniformSchema>(
   gl: GL,
   program: WebGLProgram,
-  config: T,
+  schema: T,
 ): InferUniformView<T> {
-  return mapObject(config, (kind, name) => {
-    const location = assertedNotNullish(gl.getUniformLocation(program, name))
+  return mapObject(schema, (kind: UniformKind, name) => {
+    const location = assertedNotNullish(
+      gl.getUniformLocation(program, name),
+      `Could not find location of uniform: ${name}`,
+    )
+
+    if (isSamplerKind(kind)) {
+      return {
+        set(arg: number) {
+          gl.uniform1i(location, arg)
+        },
+      }
+    }
+
+    // @ts-ignore FIX WEBGL/WEBGL2 TYPES
+    const fn = gl[`uniform${KIND_TO_UNIFORM_FN_NAME[kind]}`].bind(gl)
+
+    if (isMatKind(kind)) {
+      return {
+        set(...args: any[]) {
+          fn(location, false, args[0])
+        },
+      }
+    }
+
     return {
       set(...args: any[]) {
-        if (kind.startsWith('mat')) {
-          gl[`uniformMatrix${kind.replace('mat', '')}fv`](location, false, args[0])
-        }
-        if (kind.startsWith('sampler')) {
-          gl.uniform1i(location, args[0])
-        } else {
-          // @ts-expect-error
-          gl[`uniform${kind}`](location, ...args)
-        }
+        fn(location, ...args)
       },
     }
   })
@@ -200,18 +189,11 @@ function handleAttribute(
   size: number,
   stride: number,
   offset: number,
-  kind: AttributeKind,
+  type: 'FLOAT' | 'INT',
   instanced?: boolean,
 ) {
   gl.enableVertexAttribArray(location)
-  gl.vertexAttribPointer(
-    location,
-    size,
-    gl[kind.endsWith('i') ? 'INT' : 'FLOAT'],
-    false,
-    stride,
-    offset,
-  )
+  gl.vertexAttribPointer(location, size, gl[type], false, stride, offset)
 
   if (instanced) {
     // Get instanced-arrays-feature: extension if webgl, gl if webgl2
@@ -222,22 +204,23 @@ function handleAttribute(
 export function attributeView<T extends AttributeSchema>(
   gl: GL,
   program: WebGLProgram,
-  config: T,
+  schema: T,
   signal?: AbortSignal,
-): InferAttributeView<T> {
-  const attributes = mapObject(config, ({ kind, instanced }, name): AttributeMethods => {
+): AttributeView<T> {
+  const attributes = mapObject(schema, ({ kind, instanced }, name): AttributeMethods => {
     const location = gl.getAttribLocation(program, name)
     if (location < 0) {
       throw new Error(`Attribute '${name}' not found`)
     }
 
     const buffer = assertedNotNullish(gl.createBuffer())
-    const size = SIZE_MAP[kind]
+    const size = KIND_SIZE_MAP[kind]
+    const type = kind.startsWith('i') ? 'INT' : 'FLOAT'
 
     return {
       bind() {
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        handleAttribute(gl, location, size, 0, 0, kind, instanced)
+        handleAttribute(gl, location, size, 0, 0, type, instanced)
       },
       dispose() {
         gl.deleteBuffer(buffer)
@@ -270,7 +253,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   program: WebGLProgram,
   schema: T,
   signal?: AbortSignal,
-): InferInterleavedAttributes<T> {
+): InterleavedAttributeView<T> {
   // Initialize interleaved attributes
   const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
     // Increment number to keep track of offset
@@ -284,11 +267,12 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
         throw new Error(`Attribute '${layout.name}' not found`)
       }
 
-      const size = SIZE_MAP[layout.kind]
+      const size = KIND_SIZE_MAP[layout.kind]
       const offset = index
+      const type = layout.kind.startsWith('i') ? 'INT' : 'FLOAT'
       index += size * 4
 
-      return () => handleAttribute(gl, location, size, stride, offset, layout.kind, instanced)
+      return () => handleAttribute(gl, location, size, stride, offset, type, instanced)
     })
 
     // Set stride to final index
@@ -362,11 +346,11 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
 
 export function bufferView<T extends BufferSchema>(
   gl: GL,
-  config: T,
+  schema: T,
   signal?: AbortSignal,
-): InferBuffers<T> {
+): BufferView<T> {
   // Initialize buffers
-  const buffers = mapObject(config, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
+  const buffers = mapObject(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
     const buffer = assertedNotNullish(gl.createBuffer())
     return {
       bind() {
@@ -375,7 +359,7 @@ export function bufferView<T extends BufferSchema>(
       dispose() {
         gl.deleteBuffer(buffer)
       },
-      set(data) {
+      set(data: Float32Array) {
         gl.bindBuffer(gl[target], buffer)
         gl.bufferData(gl[target], data, gl[usage])
       },
@@ -422,11 +406,11 @@ class FramebufferError extends Error {
 
 export function framebufferView<T extends FramebufferSchema>(
   gl: GL,
-  config: T,
+  schema: T,
   signal?: AbortSignal,
-): InferFramebuffers<T> {
+): FramebufferView<T> {
   // Initialize framebuffers
-  const framebuffers = mapObject(config, ({ attachment, ...options }, name) => {
+  const framebuffers = mapObject(schema, ({ attachment, ...options }, name) => {
     // Create framebuffer
     const framebuffer = assertedNotNullish(
       gl.createFramebuffer(),
@@ -491,13 +475,14 @@ export function textureView<T extends TextureSchema>(
   gl: GL,
   schema: T,
   signal?: AbortSignal,
-): InferTextures<T> {
+): TextureView<T> {
   const textures = mapObject(schema, ({ target = 'TEXTURE_2D' }, name) => {
     const texture = assertedNotNullish(gl.createTexture(), `Failed to create texture '${name}'`)
 
     return {
       bind(unit = 0) {
         gl.activeTexture(gl.TEXTURE0 + unit)
+        // @ts-ignore FIX WEBGL/WEBGL2 TYPES
         gl.bindTexture(gl[target], texture)
       },
       dispose() {
@@ -515,17 +500,21 @@ export function textureView<T extends TextureSchema>(
           type = 'UNSIGNED_BYTE',
         }: Partial<TexImage2DOptions> = {},
       ) {
+        // @ts-ignore FIX WEBGL/WEBGL2 TYPES
         gl.bindTexture(gl[target], texture)
 
         if (!source) {
           gl.texImage2D(
+            // @ts-ignore FIX WEBGL/WEBGL2 TYPES
             gl[target],
             level,
+            // @ts-ignore FIX WEBGL/WEBGL2 TYPES
             gl[internalFormat],
             width,
             height,
             border,
             gl[format],
+            // @ts-ignore FIX WEBGL/WEBGL2 TYPES
             gl[type],
             null,
           )
@@ -538,6 +527,7 @@ export function textureView<T extends TextureSchema>(
           source instanceof HTMLCanvasElement ||
           source instanceof HTMLVideoElement
         ) {
+          // @ts-ignore FIX WEBGL/WEBGL2 TYPES
           gl.texImage2D(gl[target], level, gl[internalFormat], gl[format], gl[type], source)
           return
         }
@@ -545,9 +535,11 @@ export function textureView<T extends TextureSchema>(
         throw new Error(`Unsupported image source for texture '${name}'`)
       },
       parameters(params: TextureParameters) {
+        // @ts-ignore FIX WEBGL/WEBGL2 TYPES
         gl.bindTexture(gl[target], texture)
-        for (const [pname, value] of Object.entries(params)) {
-          gl.texParameteri(gl[target], gl[pname], gl[value])
+        for (const [propertyName, property] of Object.entries(params)) {
+          // @ts-ignore FIX WEBGL/WEBGL2 TYPES
+          gl.texParameteri(gl[target], gl[propertyName], gl[property])
         }
       },
     } satisfies TextureMethods

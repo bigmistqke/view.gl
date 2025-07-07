@@ -1,4 +1,18 @@
-import { GL, TextureOptions } from './types'
+import type { GL, TextureOptions } from './types'
+
+export function mapObject<T extends Record<string, any>, TReturn>(
+  value: T,
+  callback: (value: T[keyof T], key: Extract<keyof T, string>, index: number) => TReturn,
+): { [TKey in keyof T]: TReturn } {
+  return Object.fromEntries(
+    Object.entries(value).map(([key, value], index) => [key, callback(value, key, index)]),
+  )
+}
+
+export function assertedNotNullish<T>(value: T, message?: string): NonNullable<T> {
+  if (value === undefined || value === null) throw new Error(message)
+  return value
+}
 
 function createGLShader(gl: GL, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type)
