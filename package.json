@@ -1,16 +1,32 @@
 {
-  "name": "petite.gl",
+  "name": "view.gl",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "exports": {
+    ".": {
+      "import": "./index.mjs",
+      "types": "./index.d.mts"
+    },
+    "./tag": {
+      "import": "./tag.mjs",
+      "types": "./tag.d.mts"
+    }
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite serve dev",
+    "build": "tsup"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.5.1",
   "dependencies": {
-    "tsup": "^8.5.0"
+    "tsup": "^8.5.0",
+    "vite": "^7.0.2",
+    "vite-tsconfig-paths": "^5.1.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
   }
 }
