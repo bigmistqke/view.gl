@@ -423,11 +423,13 @@ export type AttributeKind =
 export interface AttributeOptions {
   kind: AttributeKind
   instanced?: boolean
+  buffer?: WebGLBuffer
 }
 
 export type AttributeSchema = Record<string, AttributeOptions>
 
 export interface AttributeMethods<T = AttributeKind> {
+  buffer: WebGLBuffer
   bind(): void
   set(data: Float32Array, usage?: GLUsage): { bind(): void }
   dispose(): void
@@ -506,6 +508,8 @@ export interface TextureOptions {
   target?: GLTextureTarget
   width: number
   height: number
+  level?: number
+  border?: number
   internalFormat?: GLTextureFormat
   format?: GLTextureFormat
   type?: GLTextureType
@@ -517,6 +521,8 @@ export interface TextureOptions {
 }
 
 export interface FramebufferMethods {
+  texture: WebGLTexture
+  framebuffer: WebGLFramebuffer
   bind(): void
   dispose(): void
 }
@@ -540,6 +546,7 @@ export type TextureTarget =
 export type TextureSchema = Record<string, TextureOptions>
 
 export interface TextureMethods {
+  texture: WebGLTexture
   dispose(): void
   bind(unit?: number): void
   set(data: ImageBufferSource | null, options?: Partial<TexImage2DOptions>): void

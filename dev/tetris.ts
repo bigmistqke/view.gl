@@ -350,12 +350,12 @@ function createTetris() {
   function next() {
     board.blit(tetromino)
     tetromino.next()
-    render()
 
     if (checkCollision()) {
       document.removeEventListener('keydown', handleKeyDown)
       animationTimeout.clear()
     } else {
+      render()
       animationTimeout.set(animate, 1_000)
     }
   }
@@ -425,11 +425,11 @@ function createTetris() {
   }
 
   function animate() {
+    console.log('this happens')
     tetromino.offset[1]--
     if (checkCollision()) {
       next()
     }
-    render()
     animationTimeout.set(animate, 1_000)
   }
   setTimeout(animate, 1_000)

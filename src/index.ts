@@ -139,31 +139,37 @@ export function attributeView<T extends AttributeSchema>(
   schema: T,
   { signal }: ViewOptions = {},
 ): AttributeView<T> {
-  const attributes = mapObject(schema, ({ kind, instanced }, name): AttributeMethods => {
-    const location = gl.getAttribLocation(program, name)
-    if (location < 0) {
-      throw new Error(`Attribute '${name}' not found`)
-    }
+  const attributes = mapObject(
+    schema,
+    (
+      { kind, instanced, buffer = assertedNotNullish(gl.createBuffer()) },
+      name,
+    ): AttributeMethods => {
+      const location = gl.getAttribLocation(program, name)
+      if (location < 0) {
+        throw new Error(`Attribute '${name}' not found`)
+      }
 
-    const buffer = assertedNotNullish(gl.createBuffer())
-    const size = kindToSize(kind)
-    const type = kind.startsWith('i') ? 'INT' : 'FLOAT'
+      const size = kindToSize(kind)
+      const type = kind.startsWith('i') ? 'INT' : 'FLOAT'
 
-    return {
-      bind() {
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        handleAttribute(gl, location, size, 0, 0, type, instanced)
-      },
-      dispose() {
-        gl.deleteBuffer(buffer)
-      },
-      set(data, usage = 'STATIC_DRAW') {
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        gl.bufferData(gl.ARRAY_BUFFER, data, gl[usage])
-        return this
-      },
-    }
-  })
+      return {
+        buffer,
+        bind() {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+          handleAttribute(gl, location, size, 0, 0, type, instanced)
+        },
+        dispose() {
+          gl.deleteBuffer(buffer)
+        },
+        set(data, usage = 'STATIC_DRAW') {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+          gl.bufferData(gl.ARRAY_BUFFER, data, gl[usage])
+          return this
+        },
+      }
+    },
+  )
 
   signal?.addEventListener('abort', function dispose() {
     for (const name in attributes) {
@@ -382,6 +388,8 @@ export function framebufferView<T extends FramebufferSchema>(
     }
 
     return {
+      texture,
+      framebuffer,
       bind() {
         gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
       },
@@ -419,6 +427,7 @@ export function textureView<T extends TextureSchema>(
     const texture = assertedNotNullish(gl.createTexture(), `Failed to create texture '${name}'`)
 
     return {
+      texture,
       bind(unit = 0) {
         gl.activeTexture(gl.TEXTURE0 + unit)
         // @ts-ignore FIX WEBGL/WEBGL2 TYPES
