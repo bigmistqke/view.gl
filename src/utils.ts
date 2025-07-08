@@ -1,4 +1,11 @@
-import type { GL, TextureOptions } from './types'
+import type {
+  AttributeKind,
+  GL,
+  KIND_TO_SIZE_MAP,
+  KIND_TO_UNIFORM_FN_NAME_MAP,
+  TextureOptions,
+  UniformKind,
+} from './types'
 
 export function mapObject<T extends Record<string, any>, TReturn>(
   value: T,
@@ -107,4 +114,62 @@ export function createTexture(
   gl.texParameteri(gl[target], gl.TEXTURE_WRAP_T, gl[wrapT])
 
   return texture
+}
+
+export const isMatKind = <
+  T extends UniformKind | AttributeKind,
+  TPrefix extends string,
+  TPostfix extends string,
+>(
+  kind: T,
+): kind is T & `${TPrefix}mat${TPostfix}` => kind.includes('mat')
+
+export const isSamplerKind = <TPrefix extends string, TPostfix extends string>(
+  kind: UniformKind,
+): kind is UniformKind & `${TPrefix}sampler${TPostfix}` => kind.includes('sampler')
+
+export const isVecKind = <TPrefix extends string, TPostfix extends string>(
+  kind: UniformKind,
+): kind is UniformKind & `${TPrefix}vec${TPostfix}` => kind.includes('vec')
+
+export const kindToUniformFnName = <T extends UniformKind>(
+  kind: T,
+): KIND_TO_UNIFORM_FN_NAME_MAP[T] => {
+  switch (kind[0]) {
+    // mat
+    case 'm':
+      return 'Matrix' + kind.slice(3) + 'fv'
+    // sampler/booleans/integer
+    case 's':
+    case 'b':
+    case 'i':
+      return (kind.match(/\d/)?.[0] ?? '1') + 'i'
+    // unsigned integers
+    case 'u':
+      return (kind[4] || '1') + 'ui'
+    // vec
+    case 'v':
+      return kind[3] + 'f'
+    default:
+      switch (kind) {
+        case 'float':
+          return '1f'
+        case 'uint':
+          return '1ui'
+        default:
+          return '1i'
+      }
+  }
+}
+
+export const kindToSize = <T extends UniformKind>(kind: T): KIND_TO_SIZE_MAP[T] => {
+  switch (kind[0]) {
+    case 'm':
+      const [a, b] = kind.match(/\d+/g)!.map(Number)
+      return a * (b || a)
+    case 'v':
+      return +kind.match(/\d/)![0]
+    default:
+      return 1
+  }
 }

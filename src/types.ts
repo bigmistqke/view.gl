@@ -32,13 +32,131 @@ type GLTextureType = 'UNSIGNED_BYTE' | 'FLOAT' | 'HALF_FLOAT'
 type GLTextureFilter = 'NEAREST' | 'LINEAR'
 type GLTextureWrap = 'CLAMP_TO_EDGE' | 'REPEAT' | 'MIRRORED_REPEAT'
 
+export interface KIND_TO_UNIFORM_FN_NAME_MAP {
+  // Floats (WebGL1 + WebGL2)
+  float: '1f'
+  vec2: '2f'
+  vec3: '3f'
+  vec4: '4f'
+
+  // Signed Integers (WebGL1 + WebGL2)
+  int: '1i'
+  ivec2: '2i'
+  ivec3: '3i'
+  ivec4: '4i'
+
+  // Matrices (WebGL1 + WebGL2)
+  mat2: 'Matrix2fv'
+  mat3: 'Matrix3fv'
+  mat4: 'Matrix4fv'
+
+  // Unsigned Integers (WebGL2 only)
+  uint: '1ui'
+  uvec2: '2ui'
+  uvec3: '3ui'
+  uvec4: '4ui'
+
+  // WebGL2 extended matrix types
+  mat2x3: 'Matrix2x3fv'
+  mat2x4: 'Matrix2x4fv'
+  mat3x2: 'Matrix3x2fv'
+  mat3x4: 'Matrix3x4fv'
+  mat4x2: 'Matrix4x2fv'
+  mat4x3: 'Matrix4x3fv'
+
+  // Booleans — GLSL booleans are set with uniform1i
+  bool: '1i'
+  bvec2: '2i'
+  bvec3: '3i'
+  bvec4: '4i'
+
+  // Samplers — all use 1i to bind texture unit indices
+  sampler2D: '1i'
+  samplerCube: '1i'
+  sampler2DArray: '1i'
+  sampler3D: '1i' // WebGL2
+  sampler2DShadow: '1i' // WebGL2
+  samplerCubeShadow: '1i' // WebGL2
+  sampler2DArrayShadow: '1i' // WebGL2
+
+  // Integer samplers (WebGL2)
+  isampler2D: '1i'
+  isampler3D: '1i'
+  isamplerCube: '1i'
+  isampler2DArray: '1i'
+
+  // Unsigned integer samplers (WebGL2)
+  usampler2D: '1i'
+  usampler3D: '1i'
+  usamplerCube: '1i'
+  usampler2DArray: '1i'
+}
+
+export interface KIND_TO_SIZE_MAP {
+  // Floats
+  float: 1
+  vec2: 2
+  vec3: 3
+  vec4: 4
+
+  // Signed integers
+  int: 1
+  ivec2: 2
+  ivec3: 3
+  ivec4: 4
+
+  // Booleans (set as ints)
+  bool: 1
+  bvec2: 2
+  bvec3: 3
+  bvec4: 4
+
+  // Unsigned integers (WebGL2)
+  uint: 1
+  uvec2: 2
+  uvec3: 3
+  uvec4: 4
+
+  // Matrices
+  mat2: 4
+  mat3: 9
+  mat4: 16
+  mat2x3: 6
+  mat2x4: 8
+  mat3x2: 6
+  mat3x4: 12
+  mat4x2: 8
+  mat4x3: 12
+
+  // Samplers (texture unit indices)
+  sampler2D: 1
+  samplerCube: 1
+  sampler3D: 1
+  sampler2DArray: 1
+  sampler2DShadow: 1
+  samplerCubeShadow: 1
+  sampler2DArrayShadow: 1
+
+  // Integer samplers (WebGL2)
+  isampler2D: 1
+  isampler3D: 1
+  isamplerCube: 1
+  isampler2DArray: 1
+
+  // Unsigned integer samplers (WebGL2)
+  usampler2D: 1
+  usampler3D: 1
+  usamplerCube: 1
+  usampler2DArray: 1
+}
+
 /**********************************************************************************/
 /*                                                                                */
 /*                                     Uniform                                    */
 /*                                                                                */
 /**********************************************************************************/
 
-export type UniformShorthand =
+export type UniformFnName =
   | '1f'
   | '2f'
   | '3f'
@@ -235,11 +353,20 @@ interface UniformKindMap {
   usampler2DArray: [number];
 }
 
-export type UniformSchema = Record<string, UniformKind>
-
-export interface UniformMethods<TKind extends UniformKind> {
-  set(...args: UniformKindMap[TKind]): void
+export interface UniformOptions {
+  kind: UniformKind
+  size?: number
 }
+
+export type UniformSchema = Record<string, UniformOptions>
+
+export type UniformMethods<TOptions extends UniformOptions> = TOptions['size'] extends number
+  ? {
+      set(arg: Float32Array): void
+    }
+  : {
+      set(...args: UniformKindMap[TOptions['kind']]): void
+    }
 
 export type UniformView<T extends UniformSchema> = {
   [K in keyof T]: UniformMethods<T[K]>
@@ -506,6 +633,10 @@ export type TexImage2DOptions = {
 /*                                                                                */
 /**********************************************************************************/
 
+export interface ViewOptions {
+  signal?: AbortSignal
+}
+
 export interface ViewSchema {
   uniforms?: UniformSchema
   attributes?: AttributeSchema
@@ -526,4 +657,67 @@ export type View<T extends ViewSchema = ViewSchema> = {
     : undefined
   uniforms: T['uniforms'] extends UniformSchema ? UniformView<T['uniforms']> : never
   textures: T['textures'] extends TextureSchema ? TextureView<T['textures']> : undefined
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                       Tags                                     */
+/*                                                                                */
+/**********************************************************************************/
+
+export interface GLSL {
+  template: string
+  uniforms: Record<string, UniformOptions>
+  attributes: Record<string, AttributeOptions>
+  interleavedAttributes: Record<string, InterleavedAttributeOptions>
+}
+
+export type UniformTag<
+  TName extends string = string,
+  TKind extends UniformKind = UniformKind,
+  TOptions extends Partial<UniformOptions> = UniformOptions,
+> = TOptions extends { size: infer TSize }
+  ? {
+      type: 'uniform'
+      kind: TKind
+      name: TName
+      size: TSize
+    }
+  : {
+      type: 'uniform'
+      kind: TKind
+      name: TName
+    }
+
+export interface AttributeTag<
+  TName extends string = string,
+  TKind extends AttributeKind = AttributeKind,
+  TInstanced extends boolean | undefined = boolean | undefined,
+> {
+  type: 'attribute'
+  kind: TKind
+  instanced: TInstanced
+  name: TName
+}
+
+export interface AttributeTagFn<TKey extends AttributeKind> {
+  <TName extends string, TInstanced extends boolean>(name: TName, instanced: TInstanced): Prettify<
+    AttributeTag<TName, TKey, TInstanced>
+  >
+  <TName extends string>(name: TName): Prettify<AttributeTag<TName, TKey, undefined>>
+}
+
+export interface InterleaveTag<
+  TName extends string = string,
+  TLayout extends Array<AttributeTag<string, AttributeKind, undefined>> = Array<
+    AttributeTag<string, AttributeKind, undefined>
+  >,
+  TInstanced extends boolean | undefined = boolean,
+> {
+  name: TName
+  type: 'interleavedAttribute'
+  layout: {
+    [TKey in keyof TLayout]: Prettify<Pick<TLayout[TKey], 'kind' | 'name'>>
+  }
+  instanced: TInstanced
 }

@@ -1,6 +1,5 @@
-import { FRAMEBUFFER_ATTACHMENT_MAP, KIND_SIZE_MAP, KIND_TO_UNIFORM_FN_NAME } from './constants'
+import { getInstancedArrays, getVertexArrayObject } from './features'
 import type {
-  AttributeKind,
   AttributeMethods,
   AttributeSchema,
   AttributeView,
@@ -14,94 +13,25 @@ import type {
   InterleavedAttributeMethods,
   InterleavedAttributeSchema,
   InterleavedAttributeView,
-  RemoveSuffix,
   TexImage2DOptions,
   TextureMethods,
   TextureParameters,
   TextureSchema,
   TextureView,
-  UniformKind,
   UniformSchema,
   View,
+  ViewOptions,
   ViewSchema,
 } from './types'
-import { assertedNotNullish, createTexture, mapObject } from './utils'
-
-const isMatKind = <
-  T extends UniformKind | AttributeKind,
-  TPrefix extends string,
-  TPostfix extends string,
->(
-  kind: T,
-): kind is T & `${TPrefix}mat${TPostfix}` => kind.includes('mat')
-
-const isSamplerKind = <TPrefix extends string, TPostfix extends string>(
-  kind: UniformKind,
-): kind is UniformKind & `${TPrefix}sampler${TPostfix}` => kind.includes('sampler')
-
-/**********************************************************************************/
-/*                                                                                */
-/*                                       Features                                 */
-/*                                                                                */
-/**********************************************************************************/
-
-const INSTANCED_ARRAYS_WRAPPER_MAP = new WeakMap<
-  GL,
-  RemoveSuffix<
-    Pick<
-      ANGLE_instanced_arrays,
-      'drawArraysInstancedANGLE' | 'drawElementsInstancedANGLE' | 'vertexAttribDivisorANGLE'
-    >,
-    'ANGLE'
-  > | null
->()
-function getInstancedArrays(gl: GL) {
-  if (gl instanceof WebGL2RenderingContext) return gl
-
-  const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl)
-  if (cached) return cached
-
-  const ext = gl.getExtension('ANGLE_instanced_arrays')
-  if (!ext) return undefined
-
-  const wrapper = {
-    drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
-    drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
-    vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext),
-  }
-  INSTANCED_ARRAYS_WRAPPER_MAP.set(gl, wrapper)
-
-  return wrapper
-}
-
-const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = new WeakMap<
-  GL,
-  RemoveSuffix<
-    Pick<
-      OES_vertex_array_object,
-      'bindVertexArrayOES' | 'createVertexArrayOES' | 'deleteVertexArrayOES'
-    >,
-    'OES'
-  > | null
->()
-function getVertexArrayObject(gl: GL) {
-  if (gl instanceof WebGL2RenderingContext) return gl
-
-  const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl)
-  if (cached) return cached
-
-  const ext = gl.getExtension('OES_vertex_array_object')
-  if (!ext) return null
-
-  const wrapper = {
-    bindVertexArray: ext.bindVertexArrayOES.bind(ext),
-    createVertexArray: ext.createVertexArrayOES.bind(ext),
-    deleteVertexArray: ext.deleteVertexArrayOES.bind(ext),
-  }
-  VERTEX_ARRAY_OBJECT_WRAPPER_MAP.set(gl, wrapper)
-
-  return wrapper
-}
+import {
+  assertedNotNullish,
+  createTexture,
+  isMatKind,
+  isSamplerKind,
+  kindToSize,
+  kindToUniformFnName,
+  mapObject,
+} from './utils'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -113,21 +43,21 @@ export function view<T extends ViewSchema>(
   gl: GL,
   program: WebGLProgram,
   schema: T,
-  signal?: AbortSignal,
+  options?: ViewOptions,
 ): View<T> {
   return {
     uniforms: !schema.uniforms ? undefined : uniformView(gl, program, schema.uniforms),
     attributes: !schema.attributes
       ? undefined
-      : attributeView(gl, program, schema.attributes, signal),
+      : attributeView(gl, program, schema.attributes, options),
     interleavedAttributes: !schema.interleavedAttributes
       ? undefined
-      : interleavedAttributeView(gl, program, schema.interleavedAttributes, signal),
+      : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
     buffers: !schema.buffers ? undefined : bufferView(gl, schema.buffers),
     framebuffers: !schema.framebuffers
       ? undefined
-      : framebufferView(gl, schema.framebuffers, signal),
-    textures: !schema.textures ? undefined : textureView(gl, schema.textures, signal),
+      : framebufferView(gl, schema.framebuffers, options),
+    textures: !schema.textures ? undefined : textureView(gl, schema.textures, options),
   } as View<T>
 }
 
@@ -142,7 +72,7 @@ export function uniformView<T extends UniformSchema>(
   program: WebGLProgram,
   schema: T,
 ): InferUniformView<T> {
-  return mapObject(schema, (kind: UniformKind, name) => {
+  return mapObject(schema, ({ kind, size }, name) => {
     const location = assertedNotNullish(
       gl.getUniformLocation(program, name),
       `Could not find location of uniform: ${name}`,
@@ -156,8 +86,10 @@ export function uniformView<T extends UniformSchema>(
       }
     }
 
+    const fnName = `uniform${kindToUniformFnName(kind)}${size ? 'v' : ''}`
+
     // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-    const fn = gl[`uniform${KIND_TO_UNIFORM_FN_NAME[kind]}`].bind(gl)
+    const fn = gl[fnName].bind(gl)
 
     if (isMatKind(kind)) {
       return {
@@ -205,7 +137,7 @@ export function attributeView<T extends AttributeSchema>(
   gl: GL,
   program: WebGLProgram,
   schema: T,
-  signal?: AbortSignal,
+  { signal }: ViewOptions = {},
 ): AttributeView<T> {
   const attributes = mapObject(schema, ({ kind, instanced }, name): AttributeMethods => {
     const location = gl.getAttribLocation(program, name)
@@ -214,7 +146,7 @@ export function attributeView<T extends AttributeSchema>(
     }
 
     const buffer = assertedNotNullish(gl.createBuffer())
-    const size = KIND_SIZE_MAP[kind]
+    const size = kindToSize(kind)
     const type = kind.startsWith('i') ? 'INT' : 'FLOAT'
 
     return {
@@ -252,7 +184,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   gl: GL,
   program: WebGLProgram,
   schema: T,
-  signal?: AbortSignal,
+  { signal }: ViewOptions = {},
 ): InterleavedAttributeView<T> {
   // Initialize interleaved attributes
   const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
@@ -267,7 +199,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
         throw new Error(`Attribute '${layout.name}' not found`)
       }
 
-      const size = KIND_SIZE_MAP[layout.kind]
+      const size = kindToSize(layout.kind)
       const offset = index
       const type = layout.kind.startsWith('i') ? 'INT' : 'FLOAT'
       index += size * 4
@@ -347,7 +279,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
 export function bufferView<T extends BufferSchema>(
   gl: GL,
   schema: T,
-  signal?: AbortSignal,
+  { signal }: ViewOptions = {},
 ): BufferView<T> {
   // Initialize buffers
   const buffers = mapObject(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
@@ -404,10 +336,17 @@ class FramebufferError extends Error {
   }
 }
 
+export const FRAMEBUFFER_ATTACHMENT_MAP = {
+  color: 'COLOR_ATTACHMENT0',
+  depth: 'DEPTH_ATTACHMENT',
+  stencil: 'STENCIL_ATTACHMENT',
+  depthStencil: 'DEPTH_STENCIL_ATTACHMENT',
+} as const
+
 export function framebufferView<T extends FramebufferSchema>(
   gl: GL,
   schema: T,
-  signal?: AbortSignal,
+  { signal }: ViewOptions = {},
 ): FramebufferView<T> {
   // Initialize framebuffers
   const framebuffers = mapObject(schema, ({ attachment, ...options }, name) => {
@@ -474,7 +413,7 @@ export function framebufferView<T extends FramebufferSchema>(
 export function textureView<T extends TextureSchema>(
   gl: GL,
   schema: T,
-  signal?: AbortSignal,
+  { signal }: ViewOptions = {},
 ): TextureView<T> {
   const textures = mapObject(schema, ({ target = 'TEXTURE_2D' }, name) => {
     const texture = assertedNotNullish(gl.createTexture(), `Failed to create texture '${name}'`)
