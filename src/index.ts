@@ -5,19 +5,11 @@ import type {
   AttributeView,
   BufferSchema,
   BufferView,
-  FramebufferMethods,
-  FramebufferSchema,
-  FramebufferView,
   GL,
   UniformView as InferUniformView,
   InterleavedAttributeMethods,
   InterleavedAttributeSchema,
   InterleavedAttributeView,
-  TexImage2DOptions,
-  TextureMethods,
-  TextureParameters,
-  TextureSchema,
-  TextureView,
   UniformSchema,
   View,
   ViewOptions,
@@ -25,7 +17,6 @@ import type {
 } from './types'
 import {
   assertedNotNullish,
-  createTexture,
   isMatKind,
   isSamplerKind,
   kindToSize,
@@ -54,10 +45,6 @@ export function view<T extends ViewSchema>(
       ? undefined
       : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
     buffers: !schema.buffers ? undefined : bufferView(gl, schema.buffers),
-    framebuffers: !schema.framebuffers
-      ? undefined
-      : framebufferView(gl, schema.framebuffers, options),
-    textures: !schema.textures ? undefined : textureView(gl, schema.textures, options),
   } as View<T>
 }
 
@@ -311,193 +298,4 @@ export function bufferView<T extends BufferSchema>(
   })
 
   return buffers
-}
-
-/**********************************************************************************/
-/*                                                                                */
-/*                                 Framebuffer View                               */
-/*                                                                                */
-/**********************************************************************************/
-
-class FramebufferError extends Error {
-  constructor(gl: GL, name: string, status: number) {
-    let errorMessage = `Framebuffer '${name}' not complete. Status: `
-    switch (status) {
-      case gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
-        errorMessage += 'FRAMEBUFFER_INCOMPLETE_ATTACHMENT'
-        break
-      case gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
-        errorMessage += 'FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT'
-        break
-      case gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
-        errorMessage += 'FRAMEBUFFER_INCOMPLETE_DIMENSIONS'
-        break
-      case gl.FRAMEBUFFER_UNSUPPORTED:
-        errorMessage += 'FRAMEBUFFER_UNSUPPORTED'
-        break
-      default:
-        errorMessage += `Unknown (${status})`
-    }
-    super(errorMessage)
-  }
-}
-
-export const FRAMEBUFFER_ATTACHMENT_MAP = {
-  color: 'COLOR_ATTACHMENT0',
-  depth: 'DEPTH_ATTACHMENT',
-  stencil: 'STENCIL_ATTACHMENT',
-  depthStencil: 'DEPTH_STENCIL_ATTACHMENT',
-} as const
-
-export function framebufferView<T extends FramebufferSchema>(
-  gl: GL,
-  schema: T,
-  { signal }: ViewOptions = {},
-): FramebufferView<T> {
-  // Initialize framebuffers
-  const framebuffers = mapObject(schema, ({ attachment, ...options }, name) => {
-    // Create framebuffer
-    const framebuffer = assertedNotNullish(
-      gl.createFramebuffer(),
-      `Failed to create framebuffer: ${name}`,
-    )
-
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
-
-    let texture: WebGLTexture
-    try {
-      // Create texture for the framebuffer
-      texture = createTexture(gl, options)
-    } catch {
-      throw new Error(`Failed to create texture: ${name}`)
-    }
-
-    gl.framebufferTexture2D(
-      gl.FRAMEBUFFER,
-      // Determine attachment point based on attachment kind
-      gl[FRAMEBUFFER_ATTACHMENT_MAP[attachment]],
-      gl.TEXTURE_2D,
-      texture,
-      0,
-    )
-
-    // Check framebuffer completeness
-    const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
-    if (status !== gl.FRAMEBUFFER_COMPLETE) {
-      throw new FramebufferError(gl, name, status)
-    }
-
-    return {
-      texture,
-      framebuffer,
-      bind() {
-        gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
-      },
-      dispose() {
-        gl.deleteFramebuffer(framebuffer)
-        gl.deleteTexture(texture)
-      },
-    } satisfies FramebufferMethods
-  })
-
-  // Restore default framebuffer
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-
-  signal?.addEventListener('abort', function dispose() {
-    for (const name in framebuffers) {
-      framebuffers[name].dispose()
-    }
-  })
-
-  return framebuffers
-}
-
-/**********************************************************************************/
-/*                                                                                */
-/*                                  Texture View                                  */
-/*                                                                                */
-/**********************************************************************************/
-
-export function textureView<T extends TextureSchema>(
-  gl: GL,
-  schema: T,
-  { signal }: ViewOptions = {},
-): TextureView<T> {
-  const textures = mapObject(schema, ({ target = 'TEXTURE_2D' }, name) => {
-    const texture = assertedNotNullish(gl.createTexture(), `Failed to create texture '${name}'`)
-
-    return {
-      texture,
-      bind(unit = 0) {
-        gl.activeTexture(gl.TEXTURE0 + unit)
-        // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-        gl.bindTexture(gl[target], texture)
-      },
-      dispose() {
-        gl.deleteTexture(texture)
-      },
-      set(
-        source: ImageBufferSource | null,
-        {
-          level = 0,
-          internalFormat = 'RGBA',
-          width = 1,
-          height = 1,
-          border = 0,
-          format = 'RGBA',
-          type = 'UNSIGNED_BYTE',
-        }: Partial<TexImage2DOptions> = {},
-      ) {
-        // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-        gl.bindTexture(gl[target], texture)
-
-        if (!source) {
-          gl.texImage2D(
-            // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-            gl[target],
-            level,
-            // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-            gl[internalFormat],
-            width,
-            height,
-            border,
-            gl[format],
-            // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-            gl[type],
-            null,
-          )
-          return
-        }
-
-        if (
-          source instanceof ImageBitmap ||
-          source instanceof HTMLImageElement ||
-          source instanceof HTMLCanvasElement ||
-          source instanceof HTMLVideoElement
-        ) {
-          // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-          gl.texImage2D(gl[target], level, gl[internalFormat], gl[format], gl[type], source)
-          return
-        }
-
-        throw new Error(`Unsupported image source for texture '${name}'`)
-      },
-      parameters(params: TextureParameters) {
-        // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-        gl.bindTexture(gl[target], texture)
-        for (const [propertyName, property] of Object.entries(params)) {
-          // @ts-ignore FIX WEBGL/WEBGL2 TYPES
-          gl.texParameteri(gl[target], gl[propertyName], gl[property])
-        }
-      },
-    } satisfies TextureMethods
-  })
-
-  signal?.addEventListener('abort', function dispose() {
-    for (const name in textures) {
-      textures[name].dispose()
-    }
-  })
-
-  return textures
 }

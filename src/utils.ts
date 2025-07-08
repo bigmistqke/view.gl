@@ -1,5 +1,6 @@
 import type {
   AttributeKind,
+  FramebufferOptions,
   GL,
   KIND_TO_SIZE_MAP,
   KIND_TO_UNIFORM_FN_NAME_MAP,
@@ -69,6 +70,88 @@ export function createGLProgram(
   return program
 }
 
+/**********************************************************************************/
+/*                                                                                */
+/*                              Kind To Uniform Name                              */
+/*                                                                                */
+/**********************************************************************************/
+
+export const kindToUniformFnName = <T extends UniformKind>(
+  kind: T,
+): KIND_TO_UNIFORM_FN_NAME_MAP[T] => {
+  switch (kind[0]) {
+    // mat
+    case 'm':
+      return 'Matrix' + kind.slice(3) + 'fv'
+    // sampler/booleans/integer
+    case 's':
+    case 'b':
+    case 'i':
+      return (kind.match(/\d/)?.[0] ?? '1') + 'i'
+    // unsigned integers
+    case 'u':
+      return (kind[4] || '1') + 'ui'
+    // vec
+    case 'v':
+      return kind[3] + 'f'
+    default:
+      switch (kind) {
+        case 'float':
+          return '1f'
+        case 'uint':
+          return '1ui'
+        default:
+          return '1i'
+      }
+  }
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                   Kind To Size                                 */
+/*                                                                                */
+/**********************************************************************************/
+
+export const kindToSize = <T extends UniformKind>(kind: T): KIND_TO_SIZE_MAP[T] => {
+  switch (kind[0]) {
+    case 'm':
+      const [a, b] = kind.match(/\d+/g)!.map(Number)
+      return a * (b || a)
+    case 'v':
+      return +kind.match(/\d/)![0]
+    default:
+      return 1
+  }
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                      Guards                                    */
+/*                                                                                */
+/**********************************************************************************/
+
+export const isMatKind = <
+  T extends UniformKind | AttributeKind,
+  TPrefix extends string,
+  TPostfix extends string,
+>(
+  kind: T,
+): kind is T & `${TPrefix}mat${TPostfix}` => kind.includes('mat')
+
+export const isSamplerKind = <TPrefix extends string, TPostfix extends string>(
+  kind: UniformKind,
+): kind is UniformKind & `${TPrefix}sampler${TPostfix}` => kind.includes('sampler')
+
+export const isVecKind = <TPrefix extends string, TPostfix extends string>(
+  kind: UniformKind,
+): kind is UniformKind & `${TPrefix}vec${TPostfix}` => kind.includes('vec')
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                  Create Texture                                */
+/*                                                                                */
+/**********************************************************************************/
+
 export function createTexture(
   gl: GL,
   {
@@ -104,9 +187,10 @@ export function createTexture(
     0,
     getTextureConstant(format),
     getTextureConstant(type),
-    data ?? data ?? null,
+    data ?? null,
   )
 
+  console.log(minFilter)
   // Set texture parameters
   gl.texParameteri(gl[target], gl.TEXTURE_MIN_FILTER, gl[minFilter])
   gl.texParameteri(gl[target], gl.TEXTURE_MAG_FILTER, gl[magFilter])
@@ -116,60 +200,71 @@ export function createTexture(
   return texture
 }
 
-export const isMatKind = <
-  T extends UniformKind | AttributeKind,
-  TPrefix extends string,
-  TPostfix extends string,
->(
-  kind: T,
-): kind is T & `${TPrefix}mat${TPostfix}` => kind.includes('mat')
+/**********************************************************************************/
+/*                                                                                */
+/*                               Create Framebuffer                               */
+/*                                                                                */
+/**********************************************************************************/
 
-export const isSamplerKind = <TPrefix extends string, TPostfix extends string>(
-  kind: UniformKind,
-): kind is UniformKind & `${TPrefix}sampler${TPostfix}` => kind.includes('sampler')
+const FRAMEBUFFER_ATTACHMENT_MAP = {
+  color: 'COLOR_ATTACHMENT0',
+  depth: 'DEPTH_ATTACHMENT',
+  stencil: 'STENCIL_ATTACHMENT',
+  depthStencil: 'DEPTH_STENCIL_ATTACHMENT',
+} as const
 
-export const isVecKind = <TPrefix extends string, TPostfix extends string>(
-  kind: UniformKind,
-): kind is UniformKind & `${TPrefix}vec${TPostfix}` => kind.includes('vec')
-
-export const kindToUniformFnName = <T extends UniformKind>(
-  kind: T,
-): KIND_TO_UNIFORM_FN_NAME_MAP[T] => {
-  switch (kind[0]) {
-    // mat
-    case 'm':
-      return 'Matrix' + kind.slice(3) + 'fv'
-    // sampler/booleans/integer
-    case 's':
-    case 'b':
-    case 'i':
-      return (kind.match(/\d/)?.[0] ?? '1') + 'i'
-    // unsigned integers
-    case 'u':
-      return (kind[4] || '1') + 'ui'
-    // vec
-    case 'v':
-      return kind[3] + 'f'
-    default:
-      switch (kind) {
-        case 'float':
-          return '1f'
-        case 'uint':
-          return '1ui'
-        default:
-          return '1i'
-      }
+class FramebufferError extends Error {
+  constructor(gl: GL, status: number) {
+    let errorMessage = `Framebuffer '${name}' not complete. Status: `
+    switch (status) {
+      case gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
+        errorMessage += 'FRAMEBUFFER_INCOMPLETE_ATTACHMENT'
+        break
+      case gl.FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT:
+        errorMessage += 'FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT'
+        break
+      case gl.FRAMEBUFFER_INCOMPLETE_DIMENSIONS:
+        errorMessage += 'FRAMEBUFFER_INCOMPLETE_DIMENSIONS'
+        break
+      case gl.FRAMEBUFFER_UNSUPPORTED:
+        errorMessage += 'FRAMEBUFFER_UNSUPPORTED'
+        break
+      default:
+        errorMessage += `Unknown (${status})`
+    }
+    super(errorMessage)
   }
 }
 
-export const kindToSize = <T extends UniformKind>(kind: T): KIND_TO_SIZE_MAP[T] => {
-  switch (kind[0]) {
-    case 'm':
-      const [a, b] = kind.match(/\d+/g)!.map(Number)
-      return a * (b || a)
-    case 'v':
-      return +kind.match(/\d/)![0]
-    default:
-      return 1
+export function createFramebuffer(gl: GL, { attachment, texture, ...options }: FramebufferOptions) {
+  // Create texture for the framebuffer
+  texture ??= createTexture(gl, options)
+
+  // Create framebuffer
+  const framebuffer = assertedNotNullish(
+    gl.createFramebuffer(),
+    `Failed to create framebuffer: ${name}`,
+  )
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+
+  gl.framebufferTexture2D(
+    gl.FRAMEBUFFER,
+    // Determine attachment point based on attachment kind
+    gl[FRAMEBUFFER_ATTACHMENT_MAP[attachment]],
+    gl.TEXTURE_2D,
+    texture,
+    0,
+  )
+
+  // Check framebuffer completeness
+  const status = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+  if (status !== gl.FRAMEBUFFER_COMPLETE) {
+    throw new FramebufferError(gl, status)
+  }
+
+  return {
+    texture,
+    framebuffer,
   }
 }

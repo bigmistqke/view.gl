@@ -66,17 +66,17 @@ export const attribute = new Proxy(
 export function interleave<
   const TName extends string,
   const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
-  const TInstanced extends boolean,
->(name: TName, layout: TLayout, instanced: TInstanced): InterleaveTag<TName, TLayout, TInstanced>
+  const TOptions extends Omit<AttributeOptions, 'kind'>,
+>(name: TName, layout: TLayout, instanced: TOptions): InterleaveTag<TName, TLayout, TOptions>
 export function interleave<
   const TName extends string,
   const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
->(name: TName, layout: TLayout): InterleaveTag<TName, TLayout, false>
+>(name: TName, layout: TLayout): InterleaveTag<TName, TLayout, { instanced: false }>
 export function interleave<
   const TName extends string,
   const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
-  const TInstanced extends boolean,
->(name: TName, layout: TLayout, instanced?: TInstanced) {
+  const TOptions extends Omit<AttributeOptions, 'kind'>,
+>(name: TName, layout: TLayout, { instanced, buffer }?: TOptions = {}) {
   return {
     type: 'interleavedAttribute',
     name,
@@ -85,8 +85,9 @@ export function interleave<
       name,
       kind,
     })),
-    instanced: !!instanced as TInstanced,
-  } as InterleaveTag<TName, TLayout, TInstanced>
+    instanced: !!instanced,
+    buffer,
+  } as InterleaveTag<TName, TLayout, TOptions>
 }
 
 /**********************************************************************************/
@@ -107,10 +108,10 @@ export function glsl<
       typeof hole === 'string'
         ? hole
         : hole.type === 'interleavedAttribute'
-        ? hole.layout.reduce((a, v) => `${a}attribute ${v.kind} ${v.name}`, '')
+        ? hole.layout.reduce((a, v) => `${a}attribute ${v.kind} ${v.name};\n`, '')
         : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole
-        ? `${hole.type} ${hole.kind} ${hole.name}[${hole.size}]`
-        : `${hole.type} ${hole.kind} ${hole.name}`
+        ? `${hole.type} ${hole.kind} ${hole.name}[${hole.size}];`
+        : `${hole.type} ${hole.kind} ${hole.name};`
     return out + holePart + templatePart
   }, initial || '')
 

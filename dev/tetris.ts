@@ -246,12 +246,12 @@ function createBoard(
 const vertex = glsl`
 precision mediump float;
 
-${attribute.float('a_index', { instanced: true })};
-${attribute.float('a_pixel', { instanced: true })};
-${attribute.vec2('a_vertex')};
-${uniform.vec2('u_offset')};
-${uniform.vec2('u_dimensions')};
-${uniform.vec3('u_palette', { size: 7 })};
+${attribute.float('a_index', { instanced: true })}
+${attribute.float('a_pixel', { instanced: true })}
+${attribute.vec2('a_vertex')}
+${uniform.vec2('u_offset')}
+${uniform.vec2('u_dimensions')}
+${uniform.vec3('u_palette', { size: 7 })}
 
 varying vec3 v_color;
 
@@ -425,7 +425,6 @@ function createTetris() {
   }
 
   function animate() {
-    console.log('this happens')
     tetromino.offset[1]--
     if (checkCollision()) {
       next()

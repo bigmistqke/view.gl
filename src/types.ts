@@ -494,14 +494,13 @@ export type BufferView<T extends BufferSchema> = {
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                   Framebuffers                                 */
+/*                                    Framebuffer                                 */
 /*                                                                                */
 /**********************************************************************************/
 
-export type FramebufferSchema = Record<string, FramebufferOptions>
-
 export interface FramebufferOptions extends Omit<TextureOptions, 'data'> {
   attachment: 'color' | 'depth' | 'stencil' | 'depthStencil'
+  texture?: WebGLTexture
 }
 
 export interface TextureOptions {
@@ -520,15 +519,9 @@ export interface TextureOptions {
   data?: ArrayBufferView | null
 }
 
-export interface FramebufferMethods {
+export interface Framebuffer {
   texture: WebGLTexture
   framebuffer: WebGLFramebuffer
-  bind(): void
-  dispose(): void
-}
-
-export type FramebufferView<T extends FramebufferSchema> = {
-  [K in keyof T]: FramebufferMethods
 }
 
 /**********************************************************************************/
@@ -649,8 +642,6 @@ export interface ViewSchema {
   attributes?: AttributeSchema
   interleavedAttributes?: InterleavedAttributeSchema
   buffers?: BufferSchema
-  framebuffers?: FramebufferSchema
-  textures?: TextureSchema
 }
 
 export type View<T extends ViewSchema = ViewSchema> = {
@@ -659,11 +650,7 @@ export type View<T extends ViewSchema = ViewSchema> = {
     ? InterleavedAttributeView<T['interleavedAttributes']>
     : undefined
   buffers: T['buffers'] extends BufferSchema ? BufferView<T['buffers']> : undefined
-  framebuffers: T['framebuffers'] extends FramebufferSchema
-    ? FramebufferView<T['framebuffers']>
-    : undefined
   uniforms: T['uniforms'] extends UniformSchema ? UniformView<T['uniforms']> : never
-  textures: T['textures'] extends TextureSchema ? TextureView<T['textures']> : undefined
 }
 
 /**********************************************************************************/
@@ -715,17 +702,16 @@ export interface AttributeTagFn<TKey extends AttributeKind> {
   <TName extends string>(name: TName): Prettify<AttributeTag<TName, TKey, undefined>>
 }
 
-export interface InterleaveTag<
+export type InterleaveTag<
   TName extends string = string,
   TLayout extends Array<AttributeTag<string, AttributeKind, undefined>> = Array<
     AttributeTag<string, AttributeKind, undefined>
   >,
-  TInstanced extends boolean | undefined = boolean,
-> {
+  TOptions extends Omit<AttributeOptions, 'kind'> = Omit<AttributeOptions, 'kind'>,
+> = TOptions & {
   name: TName
   type: 'interleavedAttribute'
   layout: {
     [TKey in keyof TLayout]: Prettify<Pick<TLayout[TKey], 'kind' | 'name'>>
   }
-  instanced: TInstanced
 }

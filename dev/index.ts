@@ -1,3 +1,4 @@
+import { view } from 'view.gl'
 import { attribute, compile, glsl, interleave, uniform } from 'view.gl/tag'
 
 const canvas = document.createElement('canvas')
@@ -11,8 +12,10 @@ gl.viewport(0, 0, canvas.width, canvas.height)
 const vertex = glsl`
 precision mediump float;
 
-${interleave('instancedData', [attribute.vec2('a_pos'), attribute.vec3('a_color')], true)}
-${attribute.vec2('a_vertex', false)}
+${interleave('instancedData', [attribute.vec2('a_pos'), attribute.vec3('a_color')], {
+  instanced: true,
+})}
+${attribute.vec2('a_vertex')}
 ${uniform.float('u_time')}
 
 varying vec3 v_color;
@@ -39,13 +42,14 @@ void main() {
   gl_FragColor = vec4(v_color, 1.0);
 }`
 
+const { program, schema } = compile(gl, vertex, fragment)
 const {
-  program,
   attributes: { a_vertex },
   uniforms: { u_time },
   interleavedAttributes: { instancedData },
-} = compile(gl, vertex, fragment)
+} = view(gl, program, schema)
 
+// Upload interleaved buffer
 instancedData.set(
   new Float32Array(
     (function* () {
@@ -62,8 +66,7 @@ instancedData.set(
     })(),
   ),
 )
-
-instancedData.bind() // Upload interleaved buffer
+instancedData.bind()
 
 // Create triangle vertex buffer
 a_vertex
