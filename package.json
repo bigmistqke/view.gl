@@ -21,12 +21,11 @@
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.5.1",
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
     "vite": "^7.0.2",
     "vite-tsconfig-paths": "^5.1.4"
-  },
-  "devDependencies": {
-    "typescript": "^5.8.3"
   }
 }
