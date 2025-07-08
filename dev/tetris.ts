@@ -1,3 +1,4 @@
+import { GL } from 'src/types'
 import { attributeView, uniformView } from 'view.gl'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
 
@@ -94,23 +95,138 @@ const TETROMINO_KIND = Object.keys(TETROMINO) as Array<keyof typeof TETROMINO>
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                       App                                      */
+/*                                Create Tetromino                                */
 /*                                                                                */
 /**********************************************************************************/
 
-function createTetris() {
-  const canvas = document.createElement('canvas')
-  canvas.width = WIDTH * 30
-  canvas.height = HEIGHT * 30
-  document.body.append(canvas)
+function getRandomTetrominoKind() {
+  return TETROMINO_KIND[Math.floor(Math.random() * TETROMINO_KIND.length)]!
+}
 
-  const gl = canvas.getContext('webgl2')!
-  gl.viewport(0, 0, canvas.width, canvas.height)
+function createTetromino(
+  gl: GL,
+  program: WebGLProgram,
+  schema: {
+    a_index: { kind: 'float'; instanced: true }
+    a_pixel: { kind: 'float'; instanced: true }
+  },
+) {
+  const { a_index, a_pixel } = attributeView(gl, program, schema)
 
-  const { program, schema } = compile(
-    gl,
-    // Vertex
-    glsl`
+  let pixels: Float32Array = null!
+  let dimensions: [number, number] = null!
+  let offset: [number, number] = null!
+  let pixelCount: number = null!
+
+  return {
+    get dimensions() {
+      return dimensions
+    },
+    get pixels() {
+      return pixels
+    },
+    get offset() {
+      return offset
+    },
+    get pixelCount() {
+      return pixelCount
+    },
+    bindAttributes() {
+      a_index.bind()
+      a_pixel.bind()
+    },
+    next(kind = getRandomTetrominoKind()) {
+      const template = TETROMINO[kind]
+      pixels = template.pixels()
+      pixelCount = template.dimensions[0] * template.dimensions[1]
+      offset = [
+        Math.floor((WIDTH - template.dimensions[0]) / 2),
+        HEIGHT - template.dimensions[1],
+      ] as [number, number]
+      dimensions = template.dimensions as [number, number]
+
+      a_index.set(new Float32Array(Array.from({ length: pixelCount }, (_, index) => index)))
+      a_pixel.set(pixels)
+    },
+    rotate(clockwise = true) {
+      rotate(pixels, dimensions[1], clockwise)
+      a_pixel.set(pixels).bind()
+    },
+  }
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                   Create Board                                 */
+/*                                                                                */
+/**********************************************************************************/
+
+function createBoard(
+  gl: GL,
+  program: WebGLProgram,
+  schema: {
+    a_index: { kind: 'float'; instanced: true }
+    a_pixel: { kind: 'float'; instanced: true }
+  },
+) {
+  const { a_index, a_pixel } = attributeView(gl, program, schema)
+  const array = new Float32Array(Array.from({ length: WIDTH * HEIGHT }, () => 0))
+
+  a_index.set(new Float32Array(Array.from({ length: WIDTH * HEIGHT }, (_, index) => index)))
+  a_pixel.set(array)
+
+  return {
+    bindAttributes() {
+      a_index.bind()
+      a_pixel.bind()
+    },
+    array,
+    blit({ pixelCount, offset, dimensions, pixels }: ReturnType<typeof createTetromino>) {
+      for (let i = 0; i < pixelCount; i++) {
+        const pixel = pixels[i]!
+
+        if (pixel) {
+          const x = offset[0] + (i % dimensions[0])
+          const y = offset[1] + Math.floor(i / dimensions[0]) + 1
+          const index = x + y * WIDTH
+          array[index] = pixel
+        }
+      }
+
+      let writeRow = 0
+
+      for (let y = 0; y < HEIGHT; y++) {
+        let isComplete = true
+
+        for (let x = 0; x < WIDTH; x++) {
+          if (array[x + y * WIDTH] === 0) {
+            isComplete = false
+            break
+          }
+        }
+
+        if (!isComplete) {
+          if (writeRow !== y) {
+            for (let x = 0; x < WIDTH; x++) {
+              array[x + writeRow * WIDTH] = array[x + y * WIDTH]!
+            }
+          }
+          writeRow++
+        }
+      }
+
+      a_pixel.set(array)
+    },
+  }
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                  Create Tetris                                 */
+/*                                                                                */
+/**********************************************************************************/
+
+const vertex = glsl`
 precision mediump float;
 
 ${attribute.float('a_index', true)};
@@ -138,9 +254,9 @@ void main(){
   }else{
     v_color = u_palette[int(a_pixel) - 1];
   }
-}`,
-    // Fragment
-    glsl`
+}`
+
+const fragment = glsl`
 precision mediump float;
 
 varying vec3 v_color;
@@ -150,56 +266,63 @@ void main() {
     discard;
   }
   gl_FragColor = vec4(v_color, 1.0);
-}`,
-  )
+}`
 
+function createTetris() {
+  let isPlaying = true
+
+  // Setup canvas
+  const canvas = document.createElement('canvas')
+  canvas.width = WIDTH * 30
+  canvas.height = HEIGHT * 30
+  document.body.append(canvas)
+
+  // Setup gl
+  const gl = canvas.getContext('webgl2')!
+  gl.viewport(0, 0, canvas.width, canvas.height)
+
+  // Setup program + schema
+  const { program, schema } = compile(gl, vertex, fragment)
+  gl.useProgram(program)
+
+  // Setup views
   const { u_dimensions, u_offset, u_palette } = uniformView(gl, program, schema.uniforms)
   const { a_vertex, ...localSchema } = schema.attributes
   const globalAttributes = attributeView(gl, program, { a_vertex })
-  const board = attributeView(gl, program, localSchema)
-  const tetromino = attributeView(gl, program, localSchema)
 
-  let boardArray = new Float32Array(Array.from({ length: WIDTH * HEIGHT }, () => 0))
-  let current: {
-    pixels: Float32Array
-    dimensions: [number, number]
-    offset: [number, number]
-    pixelCount: number
-    rotate(clockwise?: boolean): void
-  } = null!
+  // Setup board
+  const board = createBoard(gl, program, localSchema)
 
-  setupCurrent()
-  let playing = true
+  // Setup tetromino
+  const tetromino = createTetromino(gl, program, localSchema)
+  tetromino.next()
 
-  board.a_index.set(new Float32Array(Array.from({ length: WIDTH * HEIGHT }, (_, index) => index)))
-  board.a_pixel.set(boardArray)
-  // prettier-ignore
-  globalAttributes.a_vertex.set(new Float32Array([
-    // triangle 1
-    -0.5, -0.5,
-    0.5, -0.5,
-    -0.5,  0.5,
-    // triangle 2
-    -0.5,  0.5,
-    0.5, -0.5,
-    0.5,  0.5
-  ])).bind()
+  // Inititalize static uniforms/attributes
+  u_palette.set(new Float32Array(Object.values(TETROMINO).flatMap(({ color }) => color)))
+  globalAttributes.a_vertex
+    .set(
+      new Float32Array([
+        // triangle 1
+        -0.5, -0.5, 0.5, -0.5, -0.5, 0.5,
+        // triangle 2
+        -0.5, 0.5, 0.5, -0.5, 0.5, 0.5,
+      ]),
+    )
+    .bind()
 
-  function collision() {
-    if (!current) return
+  function checkCollision() {
+    for (let i = 0; i < tetromino.pixelCount; i++) {
+      const x = (i % tetromino.dimensions[0]) + tetromino.offset[0]
+      const y = Math.floor(i / tetromino.dimensions[0]) + tetromino.offset[1]
 
-    for (let i = 0; i < current.pixelCount; i++) {
-      const x = (i % current.dimensions[0]) + current.offset[0]
-      const y = Math.floor(i / current.dimensions[0]) + current.offset[1]
-
-      let pixel = current.pixels[i]!
+      let pixel = tetromino.pixels[i]!
 
       if (pixel > 0) {
         if (x < 0) return true
         if (x >= WIDTH) return true
         if (y < 0) return true
 
-        const boardPixel = boardArray[x + y * WIDTH]
+        const boardPixel = board.array[x + y * WIDTH]
 
         if (boardPixel !== 0) {
           return true
@@ -208,133 +331,58 @@ void main() {
     }
   }
 
-  function blitCurrentToBoardArray() {
-    if (!current) return
-
-    for (let i = 0; i < current.pixelCount; i++) {
-      const pixel = current.pixels[i]!
-
-      if (pixel) {
-        const x = current.offset[0] + (i % current.dimensions[0])
-        const y = current.offset[1] + Math.floor(i / current.dimensions[0]) + 1
-        const index = x + y * WIDTH
-        boardArray[index] = pixel
-      }
-    }
-  }
-
-  function evaluate() {
-    let writeRow = 0
-
-    for (let y = 0; y < HEIGHT; y++) {
-      let isComplete = true
-
-      for (let x = 0; x < WIDTH; x++) {
-        if (boardArray[x + y * WIDTH] === 0) {
-          isComplete = false
-          break
-        }
-      }
-
-      if (!isComplete) {
-        for (let x = 0; x < WIDTH; x++) {
-          boardArray[x + writeRow * WIDTH] = boardArray[x + y * WIDTH]!
-        }
-        writeRow++
-      }
-    }
-
-    board.a_pixel.set(boardArray)
-  }
-
-  function getRandomTetrominoKind() {
-    return TETROMINO_KIND[Math.floor(Math.random() * TETROMINO_KIND.length)]!
-  }
-
-  function setupCurrent(kind = getRandomTetrominoKind()) {
-    const template = TETROMINO[kind]
-    const pixels = template.pixels()
-    const pixelCount = template.dimensions[0] * template.dimensions[1]
-    const offset = [
-      Math.floor((WIDTH - template.dimensions[0]) / 2),
-      HEIGHT - template.dimensions[1],
-    ] as [number, number]
-
-    tetromino.a_index.set(new Float32Array(Array.from({ length: pixelCount }, (_, index) => index)))
-    tetromino.a_pixel.set(pixels)
-
-    current = {
-      pixels,
-      dimensions: template.dimensions as [number, number],
-      offset,
-      pixelCount,
-      rotate(clockwise = true) {
-        rotate(pixels, template.dimensions[1], clockwise)
-        tetromino.a_pixel.set(pixels).bind()
-      },
-    }
-
-    if (collision()) {
-      playing = false
-      return false
-    }
-
-    return true
-  }
-
   function next() {
-    blitCurrentToBoardArray()
-    evaluate()
+    board.blit(tetromino)
     render()
-    return setupCurrent()
+    tetromino.next()
+
+    if (checkCollision()) {
+      isPlaying = false
+    }
   }
 
+  // Initialize event listeners
   document.addEventListener('keydown', event => {
-    if (!current) return
-    if (!playing) return
+    if (!isPlaying) return
+
     switch (event.key) {
       case 'ArrowUp':
-        current.rotate()
-        if (collision()) {
-          current.rotate(false)
+        tetromino.rotate()
+        if (checkCollision()) {
+          tetromino.rotate(false)
         }
         break
       case 'ArrowDown':
-        current.offset[1]--
-        if (collision()) {
-          if (!next()) {
-            return
-          }
+        tetromino.offset[1]--
+        if (checkCollision()) {
+          next()
         }
         break
       case 'ArrowLeft':
-        current.offset[0]--
-        if (collision()) {
-          current.offset[0]++
+        tetromino.offset[0]--
+        if (checkCollision()) {
+          tetromino.offset[0]++
         }
         break
       case 'ArrowRight':
-        current.offset[0]++
-        if (collision()) {
-          current.offset[0]--
+        tetromino.offset[0]++
+        if (checkCollision()) {
+          tetromino.offset[0]--
         }
         break
       case ' ':
         while (true) {
-          current.offset[1]--
-          if (collision()) {
-            if (!next()) {
-              return
-            }
+          tetromino.offset[1]--
+          if (checkCollision()) {
+            next()
             break
           }
         }
     }
-    render()
+    if (isPlaying) {
+      render()
+    }
   })
-
-  gl.useProgram(program)
-  u_palette.set(new Float32Array(Object.values(TETROMINO).flatMap(({ color }) => color)))
 
   function render() {
     gl.clearColor(0.0, 0.5, 0.0, 0.3)
@@ -343,27 +391,22 @@ void main() {
     // Draw board
     u_offset.set(0, 0)
     u_dimensions.set(WIDTH, HEIGHT)
-    board.a_pixel.bind()
-    board.a_index.bind()
+    board.bindAttributes()
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, WIDTH * HEIGHT)
 
     // Draw tetromino
-    u_offset.set(...current.offset)
-    u_dimensions.set(...current.dimensions)
-    tetromino.a_pixel.bind()
-    tetromino.a_index.bind()
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, current.pixelCount)
+    u_offset.set(...tetromino.offset)
+    u_dimensions.set(...tetromino.dimensions)
+    tetromino.bindAttributes()
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, tetromino.pixelCount)
   }
 
   function animate() {
-    if (!playing) return
-    if (current) {
-      current.offset[1]--
-      if (collision()) {
-        if (!next()) {
-          return
-        }
-      }
+    if (!isPlaying) return
+
+    tetromino.offset[1]--
+    if (checkCollision()) {
+      next()
     }
     render()
     setTimeout(animate, 1_000)
