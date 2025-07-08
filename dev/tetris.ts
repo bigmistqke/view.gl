@@ -44,6 +44,19 @@ function rotate(data: Float32Array, size: number, clockwise: boolean = true): vo
   }
 }
 
+function createTimeout() {
+  let timeout: number
+  return {
+    set(callback: () => void, time: number) {
+      clearTimeout(timeout)
+      timeout = setTimeout(callback, time)
+    },
+    clear() {
+      clearTimeout(timeout)
+    },
+  }
+}
+
 /**********************************************************************************/
 /*                                                                                */
 /*                                    Constants                                   */
@@ -118,6 +131,22 @@ function createTetromino(
   let offset: [number, number] = null!
   let pixelCount: number = null!
 
+  function next(kind = getRandomTetrominoKind()) {
+    const template = TETROMINO[kind]
+    pixels = template.pixels()
+    pixelCount = template.dimensions[0] * template.dimensions[1]
+    offset = [Math.ceil((WIDTH - template.dimensions[0]) / 2), HEIGHT - template.dimensions[1]] as [
+      number,
+      number,
+    ]
+    dimensions = template.dimensions as [number, number]
+
+    a_index.set(new Float32Array(Array.from({ length: pixelCount }, (_, index) => index)))
+    a_pixel.set(pixels)
+  }
+
+  next()
+
   return {
     get dimensions() {
       return dimensions
@@ -135,19 +164,7 @@ function createTetromino(
       a_index.bind()
       a_pixel.bind()
     },
-    next(kind = getRandomTetrominoKind()) {
-      const template = TETROMINO[kind]
-      pixels = template.pixels()
-      pixelCount = template.dimensions[0] * template.dimensions[1]
-      offset = [
-        Math.floor((WIDTH - template.dimensions[0]) / 2),
-        HEIGHT - template.dimensions[1],
-      ] as [number, number]
-      dimensions = template.dimensions as [number, number]
-
-      a_index.set(new Float32Array(Array.from({ length: pixelCount }, (_, index) => index)))
-      a_pixel.set(pixels)
-    },
+    next,
     rotate(clockwise = true) {
       rotate(pixels, dimensions[1], clockwise)
       a_pixel.set(pixels).bind()
@@ -269,13 +286,13 @@ void main() {
 }`
 
 function createTetris() {
-  let isPlaying = true
-
   // Setup canvas
   const canvas = document.createElement('canvas')
   canvas.width = WIDTH * 30
   canvas.height = HEIGHT * 30
   document.body.append(canvas)
+
+  const animationTimeout = createTimeout()
 
   // Setup gl
   const gl = canvas.getContext('webgl2')!
@@ -295,7 +312,6 @@ function createTetris() {
 
   // Setup tetromino
   const tetromino = createTetromino(gl, program, localSchema)
-  tetromino.next()
 
   // Inititalize static uniforms/attributes
   u_palette.set(new Float32Array(Object.values(TETROMINO).flatMap(({ color }) => color)))
@@ -333,41 +349,50 @@ function createTetris() {
 
   function next() {
     board.blit(tetromino)
-    render()
     tetromino.next()
+    render()
 
     if (checkCollision()) {
-      isPlaying = false
+      document.removeEventListener('keydown', handleKeyDown)
+      animationTimeout.clear()
+    } else {
+      animationTimeout.set(animate, 1_000)
     }
   }
 
   // Initialize event listeners
-  document.addEventListener('keydown', event => {
-    if (!isPlaying) return
-
+  function handleKeyDown(event: KeyboardEvent) {
     switch (event.key) {
       case 'ArrowUp':
         tetromino.rotate()
         if (checkCollision()) {
           tetromino.rotate(false)
+        } else {
+          render()
         }
         break
       case 'ArrowDown':
         tetromino.offset[1]--
         if (checkCollision()) {
           next()
+        } else {
+          render()
         }
         break
       case 'ArrowLeft':
         tetromino.offset[0]--
         if (checkCollision()) {
           tetromino.offset[0]++
+        } else {
+          render()
         }
         break
       case 'ArrowRight':
         tetromino.offset[0]++
         if (checkCollision()) {
           tetromino.offset[0]--
+        } else {
+          render()
         }
         break
       case ' ':
@@ -379,10 +404,8 @@ function createTetris() {
           }
         }
     }
-    if (isPlaying) {
-      render()
-    }
-  })
+  }
+  document.addEventListener('keydown', handleKeyDown)
 
   function render() {
     gl.clearColor(0.0, 0.5, 0.0, 0.3)
@@ -402,16 +425,16 @@ function createTetris() {
   }
 
   function animate() {
-    if (!isPlaying) return
-
     tetromino.offset[1]--
     if (checkCollision()) {
       next()
     }
     render()
-    setTimeout(animate, 1_000)
+    animationTimeout.set(animate, 1_000)
   }
-  animate()
+  setTimeout(animate, 1_000)
+
+  render()
 }
 
 createTetris()
