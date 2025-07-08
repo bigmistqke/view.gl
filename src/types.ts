@@ -701,9 +701,10 @@ export interface AttributeTag<
 }
 
 export interface AttributeTagFn<TKey extends AttributeKind> {
-  <TName extends string, TInstanced extends boolean>(name: TName, instanced: TInstanced): Prettify<
-    AttributeTag<TName, TKey, TInstanced>
-  >
+  <TName extends string, TOptions extends Omit<AttributeOptions, 'kind'>>(
+    name: TName,
+    options: TOptions,
+  ): Prettify<AttributeTag<TName, TKey, TOptions['instanced']>>
   <TName extends string>(name: TName): Prettify<AttributeTag<TName, TKey, undefined>>
 }
 

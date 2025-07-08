@@ -229,8 +229,8 @@ function createBoard(
 const vertex = glsl`
 precision mediump float;
 
-${attribute.float('a_index', true)};
-${attribute.float('a_pixel', true)};
+${attribute.float('a_index', { instanced: true })};
+${attribute.float('a_pixel', { instanced: true })};
 ${attribute.vec2('a_vertex')};
 ${uniform.vec2('u_offset')};
 ${uniform.vec2('u_dimensions')};

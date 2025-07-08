@@ -1,5 +1,6 @@
 import type {
   AttributeKind,
+  AttributeOptions,
   AttributeTag,
   AttributeTagFn,
   GLSL,
@@ -34,7 +35,7 @@ export const uniform = new Proxy(
     get(target, property) {
       // @ts-expect-error
       if (typeof property === 'symbol') return target[property]
-      return (name: string, options?: { size?: number }) => ({
+      return (name: string, options?: Omit<UniformOptions, 'kind'>) => ({
         type: 'uniform',
         name,
         kind: property,
@@ -52,11 +53,11 @@ export const attribute = new Proxy(
     get(target, property) {
       // @ts-expect-error
       if (typeof property === 'symbol') return target[property]
-      return (name: string, instanced?: boolean) => ({
+      return (name: string, options?: Omit<AttributeOptions, 'kind'>) => ({
         type: 'attribute',
         name,
-        instanced,
         kind: property,
+        ...options,
       })
     },
   },
@@ -79,6 +80,7 @@ export function interleave<
   return {
     type: 'interleavedAttribute',
     name,
+    // remove instanced- and type-property
     layout: layout.map(({ name, kind }) => ({
       name,
       kind,
@@ -157,15 +159,15 @@ export function compile<TVertex extends GLSL, TFragment extends GLSL>(
       uniforms: {
         ...vertex.uniforms,
         ...fragment.uniforms,
-      } as Merge<TVertex['uniforms'], TFragment['uniforms']>,
+      } as Prettify<Merge<TVertex['uniforms'], TFragment['uniforms']>>,
       attributes: {
         ...vertex.attributes,
         ...fragment.attributes,
-      } as Merge<TVertex['attributes'], TFragment['attributes']>,
+      } as Prettify<Merge<TVertex['attributes'], TFragment['attributes']>>,
       interleavedAttributes: {
         ...vertex.interleavedAttributes,
         ...fragment.interleavedAttributes,
-      } as Merge<TVertex['interleavedAttributes'], TFragment['interleavedAttributes']>,
+      } as Prettify<Merge<TVertex['interleavedAttributes'], TFragment['interleavedAttributes']>>,
     },
   }
 }
