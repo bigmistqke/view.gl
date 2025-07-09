@@ -40,11 +40,7 @@ function createGLShader(gl: GL, type: number, source: string): WebGLShader {
   return shader
 }
 
-export function createGLProgram(
-  gl: GL,
-  vertexSource: string,
-  fragmentSource: string,
-): WebGLProgram {
+export function createProgram(gl: GL, vertexSource: string, fragmentSource: string): WebGLProgram {
   const program = gl.createProgram()
   if (!program) throw new Error('Failed to create WebGL program')
 

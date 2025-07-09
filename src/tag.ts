@@ -11,7 +11,7 @@ import type {
   UniformOptions,
   UniformTag,
 } from './types'
-import { createGLProgram } from './utils'
+import { createProgram } from './utils'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -99,25 +99,30 @@ export function interleave<
 export function glsl<
   Elem extends string,
   Template extends ReadonlyArray<Elem>,
-  Hole extends UniformTag | AttributeTag | InterleaveTag | string,
+  Hole extends UniformTag | AttributeTag | InterleaveTag | string | number,
   Holes extends Hole[],
 >([initial, ...rest]: Template, ...holes: [...Holes]) {
+  const v300 = initial?.startsWith('#version 300 es')
   const template = rest.reduce((out, templatePart, index) => {
     const hole = holes[index]
     const holePart =
-      typeof hole === 'string'
+      typeof hole === 'string' || typeof hole === 'number'
         ? hole
         : hole.type === 'interleavedAttribute'
-        ? hole.layout.reduce((a, v) => `${a}attribute ${v.kind} ${v.name};\n`, '')
+        ? hole.layout.reduce(
+            (a, v) =>
+              v300 ? `${a}in ${v.kind} ${v.name};\n` : `${a}attribute ${v.kind} ${v.name};\n`,
+            '',
+          )
         : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole
         ? `${hole.type} ${hole.kind} ${hole.name}[${hole.size}];`
-        : `${hole.type} ${hole.kind} ${hole.name};`
+        : `${hole.type === 'attribute' && v300 ? 'in' : hole.type} ${hole.kind} ${hole.name};`
     return out + holePart + templatePart
   }, initial || '')
 
   return holes.reduce(
     (resources, resource) => {
-      if (typeof resource === 'string') {
+      if (typeof resource === 'string' || typeof resource === 'number') {
         return resources
       }
       // @ts-expect-error
@@ -126,17 +131,22 @@ export function glsl<
     },
     {
       template,
-      uniforms: {} as {
+      uniforms: {},
+      attributes: {},
+      interleavedAttributes: {},
+    } as {
+      template: string
+      uniforms: {
         [K in Extract<Holes[number], UniformTag> as K['name']]: Prettify<Omit<K, 'name' | 'type'>>
-      },
-      attributes: {} as {
+      }
+      attributes: {
         [K in Extract<Holes[number], AttributeTag> as K['name']]: Prettify<Omit<K, 'name' | 'type'>>
-      },
-      interleavedAttributes: {} as {
+      }
+      interleavedAttributes: {
         [K in Extract<Holes[number], InterleaveTag> as K['name']]: Prettify<
           Omit<K, 'name' | 'type'>
         >
-      },
+      }
     },
   )
 }
@@ -152,7 +162,10 @@ export function compile<TVertex extends GLSL, TFragment extends GLSL>(
   vertex: TVertex,
   fragment: TFragment,
 ) {
-  const program = createGLProgram(gl, vertex.template, fragment.template)
+  console.log(vertex.template)
+  console.log(fragment.template)
+
+  const program = createProgram(gl, vertex.template, fragment.template)
 
   return {
     program,
@@ -160,15 +173,24 @@ export function compile<TVertex extends GLSL, TFragment extends GLSL>(
       uniforms: {
         ...vertex.uniforms,
         ...fragment.uniforms,
-      } as Prettify<Merge<TVertex['uniforms'], TFragment['uniforms']>>,
+      },
       attributes: {
         ...vertex.attributes,
         ...fragment.attributes,
-      } as Prettify<Merge<TVertex['attributes'], TFragment['attributes']>>,
+      },
       interleavedAttributes: {
         ...vertex.interleavedAttributes,
         ...fragment.interleavedAttributes,
-      } as Prettify<Merge<TVertex['interleavedAttributes'], TFragment['interleavedAttributes']>>,
+      },
     },
+  } as {
+    program: WebGLProgram
+    schema: {
+      uniforms: Prettify<Merge<TVertex['uniforms'], TFragment['uniforms']>>
+      attributes: Prettify<Merge<TVertex['attributes'], TFragment['attributes']>>
+      interleavedAttributes: Prettify<
+        Merge<TVertex['interleavedAttributes'], TFragment['interleavedAttributes']>
+      >
+    }
   }
 }

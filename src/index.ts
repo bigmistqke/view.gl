@@ -60,10 +60,9 @@ export function uniformView<T extends UniformSchema>(
   schema: T,
 ): InferUniformView<T> {
   return mapObject(schema, ({ kind, size }, name) => {
-    const location = assertedNotNullish(
-      gl.getUniformLocation(program, name),
-      `Could not find location of uniform: ${name}`,
-    )
+    const location = gl.getUniformLocation(program, name)
+
+    console.log('location', location, name)
 
     if (isSamplerKind(kind)) {
       return {

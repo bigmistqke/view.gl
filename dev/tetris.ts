@@ -66,7 +66,7 @@ function createTimeout() {
 const WIDTH = 10
 const HEIGHT = 20
 
-const TETROMINO = {
+export const TETROMINO = {
   I: {
     dimensions: [4, 4] as const,
     pixels: () => new Float32Array([0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]),

@@ -169,7 +169,7 @@ const renderView = view(gl, renderProgram, {
 stepView.attributes.a_vertex.set(new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]))
 
 // Initialize two framebuffers (with their respective texture) for ping-pong
-const textureOptions = {
+const framebufferOptions = {
   attachment: 'color',
   width: WIDTH,
   height: HEIGHT,
@@ -178,10 +178,10 @@ const textureOptions = {
   minFilter: 'NEAREST',
 } satisfies FramebufferOptions
 
-let read = createFramebuffer(gl, textureOptions)
-let write = createFramebuffer(gl, textureOptions)
+let read = createFramebuffer(gl, framebufferOptions)
+let write = createFramebuffer(gl, framebufferOptions)
 
-// --- Initialize state texture (random live/dead) ---
+// Initialize state texture (random live/dead)
 gl.bindTexture(gl.TEXTURE_2D, read.texture)
 gl.texSubImage2D(
   gl.TEXTURE_2D,
