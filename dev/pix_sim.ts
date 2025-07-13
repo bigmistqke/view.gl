@@ -5,20 +5,71 @@ import { attribute, compile, glsl, uniform } from 'view.gl/tag'
 
 export const MATERIALS = {
   SAND: {
-    color: [0, 1, 1],
+    color: [1, 0.8, 0], // Yellow sand
+    id: 1,
+  },
+  WATER: {
+    color: [0, 0.5, 1], // Blue water
+    id: 2,
+  },
+  STONE: {
+    color: [0.5, 0.5, 0.5], // Gray stone
+    id: 3,
   },
 } as const
 
 const MATERIAL_SIZE = Object.keys(MATERIALS).length
 
 let playing = false
+let currentMaterial = MATERIALS.SAND.id
 
 const canvas = document.createElement('canvas')
 const gl = canvas.getContext('webgl2', { antialias: false })!
 if (!gl) {
   throw new Error('WebGL not supported')
 }
-document.body.append(canvas)
+
+// Create UI container
+const container = document.createElement('div')
+container.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 10px;'
+
+// Create material buttons
+const buttonContainer = document.createElement('div')
+buttonContainer.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px;'
+
+Object.entries(MATERIALS).forEach(([name, material]) => {
+  const button = document.createElement('button')
+  button.textContent = name.toLowerCase()
+  button.style.cssText = `
+    padding: 5px 10px;
+    font-size: 14px;
+    font-family: times new roman;
+    cursor: pointer;
+    background: ${
+      currentMaterial === material.id
+        ? `rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`
+        : 'transparent'
+    };
+    border-color: ${name === 'SAND' ? 'black' : 'white'};
+    border: 2px solid rgb(${material.color.map(c => Math.floor(c * 255)).join(',')});
+    border-radius: 2px;
+  `
+  button.onclick = () => {
+    currentMaterial = material.id
+    // Update all button borders
+    buttonContainer.querySelectorAll('button').forEach((btn, idx) => {
+      btn.style.background =
+        idx === material.id - 1
+          ? `rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`
+          : 'transparent'
+    })
+  }
+  buttonContainer.appendChild(button)
+})
+
+container.appendChild(canvas)
+container.appendChild(buttonContainer)
+document.body.append(container)
 
 function spray() {
   return Math.floor(Math.random() * 8) * (Math.random() < 0.5 ? 1 : -1)
@@ -27,7 +78,7 @@ function spray() {
 canvas.addEventListener('mousedown', event => {
   const rect = canvas.getBoundingClientRect()
   const controller = new AbortController()
-  playing = false
+  // playing = false
   window.addEventListener(
     'mousemove',
     event => {
@@ -36,13 +87,13 @@ canvas.addEventListener('mousedown', event => {
 
       const dimensions = [8, 8] as const
 
-      // Encode sand material (MAT_SAND = 1 = 001 in binary)
+      // Encode selected material using bit encoding
       const data = new Uint8Array(
         (function* () {
           for (let i = 0; i < dimensions[0] * dimensions[1]; i++) {
-            yield 255 // Red channel (bit 0 = 1)
-            yield 0 // Green channel (bit 1 = 0)
-            yield 0 // Blue channel (bit 2 = 0)
+            yield (currentMaterial & 1) * 255 // Red channel (bit 0)
+            yield ((currentMaterial >> 1) & 1) * 255 // Green channel (bit 1)
+            yield ((currentMaterial >> 2) & 1) * 255 // Blue channel (bit 2)
             yield 255 // Alpha channel
           }
         })(),
@@ -83,8 +134,8 @@ canvas.addEventListener('mousedown', event => {
     'mouseup',
     () => {
       controller.abort()
-      playing = true
-      animate()
+      // playing = true
+      // animate()
     },
     controller,
   )
@@ -145,14 +196,6 @@ void main() {
   // Sample the current state
   vec4 current = texture(u_texture, v_uv);
   
-  // Sample neighbors
-  vec4 above = texture(u_texture, v_uv + DIR_UP * u_texelSize);
-  vec4 below = texture(u_texture, v_uv + DIR_DOWN * u_texelSize);
-  vec4 aboveLeft = texture(u_texture, v_uv + (DIR_UP + DIR_LEFT) * u_texelSize);
-  vec4 aboveRight = texture(u_texture, v_uv + (DIR_UP + DIR_RIGHT) * u_texelSize);
-  vec4 belowLeft = texture(u_texture, v_uv + (DIR_DOWN + DIR_LEFT) * u_texelSize);
-  vec4 belowRight = texture(u_texture, v_uv + (DIR_DOWN + DIR_RIGHT) * u_texelSize);
-  
   // Check boundaries
   bool atBottom = v_uv.y - u_texelSize.y < 0.0;
   bool atLeft = v_uv.x - u_texelSize.x < 0.0;
@@ -163,52 +206,202 @@ void main() {
   fragColor = current;
 
   int material = getMaterial(current);
-  int matBelow = getMaterial(below);
-  int matAbove = getMaterial(above);
-  int matAboveLeft = getMaterial(aboveLeft);
-  int matAboveRight = getMaterial(aboveRight);
-  int matBelowLeft = getMaterial(belowLeft);
-  int matBelowRight = getMaterial(belowRight);
+
+  int below = getMaterial(texture(u_texture, v_uv + DIR_DOWN * u_texelSize));
+  int above = getMaterial(texture(u_texture, v_uv + DIR_UP * u_texelSize));
+  int aboveLeft = getMaterial(texture(u_texture, v_uv + (DIR_UP + DIR_LEFT) * u_texelSize));
+  int aboveRight = getMaterial(texture(u_texture, v_uv + (DIR_UP + DIR_RIGHT) * u_texelSize));
+  int belowLeft = getMaterial(texture(u_texture, v_uv + (DIR_DOWN + DIR_LEFT) * u_texelSize));
+  int belowRight = getMaterial(texture(u_texture, v_uv + (DIR_DOWN + DIR_RIGHT) * u_texelSize));
   
   // Physics simulation using switch
   switch (material) {
-    case MAT_EMPTY:
-      // This pixel is empty - check what can fall into it
-      if (!atTop && matAbove == MAT_SAND) {
-        // Sand from directly above
+    case MAT_EMPTY:{
+      // Empty cell - check what can fall/flow into it
+      
+      // Check for sand from above (highest priority - sand is denser)
+      bool sandDirectlyAbove = !atTop && above == MAT_SAND;
+      if (sandDirectlyAbove) {
         fragColor = encodeMaterial(MAT_SAND);
-      } else if (!atTop && !atRight && matAboveLeft == MAT_SAND) {
-        // Sand sliding from above-left
+        break;
+      }
+      
+      // Check for sand sliding from diagonal
+      bool sandAboveLeft = !atTop && !atRight && aboveLeft == MAT_SAND;
+      bool sandAboveRight = !atTop && !atLeft && aboveRight == MAT_SAND;
+      
+      if (sandAboveLeft) {
         vec4 left = texture(u_texture, v_uv + DIR_LEFT * u_texelSize);
-        if (getMaterial(left) != MAT_EMPTY || atBottom) {
+        bool leftBlocked = getMaterial(left) != MAT_EMPTY;
+        bool canSlideFromLeft = leftBlocked || atBottom;
+        if (canSlideFromLeft) {
           fragColor = encodeMaterial(MAT_SAND);
+          break;
         }
-      } else if (!atTop && !atLeft && matAboveRight == MAT_SAND) {
-        // Sand sliding from above-right
+      }
+      
+      if (sandAboveRight) {
         vec4 right = texture(u_texture, v_uv + DIR_RIGHT * u_texelSize);
-        if (getMaterial(right) != MAT_EMPTY || atBottom) {
+        bool rightBlocked = getMaterial(right) != MAT_EMPTY;
+        bool canSlideFromRight = rightBlocked || atBottom;
+        if (canSlideFromRight) {
           fragColor = encodeMaterial(MAT_SAND);
+          break;
         }
       }
-      break;
       
-    case MAT_SAND:
-      // Sand particle - check if it should fall
-      if (!atBottom && matBelow == MAT_EMPTY) {
-        // Fall straight down
-        fragColor = encodeMaterial(MAT_EMPTY);
-      } else if (!atBottom && !atLeft && matBelowLeft == MAT_EMPTY) {
-        // Slide down-left
-        fragColor = encodeMaterial(MAT_EMPTY);
-      } else if (!atBottom && !atRight && matBelowRight == MAT_EMPTY) {
-        // Slide down-right
-        fragColor = encodeMaterial(MAT_EMPTY);
+      // Check for water from above
+      bool waterDirectlyAbove = !atTop && above == MAT_WATER;
+      if (waterDirectlyAbove) {
+        fragColor = encodeMaterial(MAT_WATER);
+        break;
       }
-      break;
       
-    case MAT_WATER:
-      // Future: Water physics
+      // Check for water sliding from diagonal
+      bool waterAboveLeft = !atTop && !atRight && aboveLeft == MAT_WATER;
+      bool waterAboveRight = !atTop && !atLeft && aboveRight == MAT_WATER;
+      
+      if (waterAboveLeft) {
+        vec4 left = texture(u_texture, v_uv + DIR_LEFT * u_texelSize);
+        bool sandToLeft = getMaterial(left) == MAT_SAND;
+        if (!sandToLeft) {
+          fragColor = encodeMaterial(MAT_WATER);
+          break;
+        }
+      }
+      
+      if (waterAboveRight) {
+        vec4 right = texture(u_texture, v_uv + DIR_RIGHT * u_texelSize);
+        bool sandToRight = getMaterial(right) == MAT_SAND;
+        if (!sandToRight) {
+          fragColor = encodeMaterial(MAT_WATER);
+          break;
+        }
+      }
+      
+      // Check for water flowing horizontally
+      vec4 left = texture(u_texture, v_uv + DIR_LEFT * u_texelSize);
+      vec4 right = texture(u_texture, v_uv + DIR_RIGHT * u_texelSize);
+      int matLeft = getMaterial(left);
+      int matRight = getMaterial(right);
+      
+      bool waterToLeft = !atRight && matLeft == MAT_WATER;
+      bool waterToRight = !atLeft && matRight == MAT_WATER;
+      
+      if (!waterToLeft && !waterToRight) break;
+      
+      // Random choice for symmetric flow
+      float rand = fract(sin(dot(v_uv * 1000.0, vec2(12.9898, 78.233))) * 43758.5453);
+      bool preferLeft = rand < 0.5;
+      
+      if (
+        waterToLeft && waterToRight ||
+        waterToLeft ||
+        waterToRight
+      ) {
+        fragColor = encodeMaterial(MAT_WATER);
+        break;
+      } 
+    }
+      
+    case MAT_SAND: {
+      // Sand particle - check if it should fall
+      bool canFallThrough = below == MAT_EMPTY || below == MAT_WATER;
+      bool canFallDown = !atBottom && canFallThrough;
+      
+      if (canFallDown) {
+        fragColor = encodeMaterial(MAT_EMPTY);
+        break;
+      }
+      
+      // Check diagonal falling
+      bool canFallThroughLeft = belowLeft == MAT_EMPTY || belowLeft == MAT_WATER;
+      bool canFallThroughRight = belowRight == MAT_EMPTY || belowRight == MAT_WATER;
+      
+      bool canFallDownLeft = !atBottom && !atLeft && canFallThroughLeft;
+      bool canFallDownRight = !atBottom && !atRight && canFallThroughRight;
+      
+      if (canFallDownLeft || canFallDownRight) {
+        fragColor = encodeMaterial(MAT_EMPTY);
+        break;
+      }
+      
+      // Sand stays in place
       break;
+    }
+      
+    case MAT_WATER: {
+      // Water - check if being displaced by sand first
+      bool sandFallingFromAbove = !atTop && above == MAT_SAND;
+      if (sandFallingFromAbove) {
+        fragColor = encodeMaterial(MAT_SAND);
+        break;
+      }
+      
+      // Check sand sliding into water from diagonals
+      bool sandFromAboveLeft = !atTop && !atRight && aboveLeft == MAT_SAND;
+      bool sandFromAboveRight = !atTop && !atLeft && aboveRight == MAT_SAND;
+      
+      if (sandFromAboveLeft) {
+        vec4 left = texture(u_texture, v_uv + DIR_LEFT * u_texelSize);
+        bool leftNotEmpty = getMaterial(left) != MAT_EMPTY;
+        bool sandCanSlideIn = leftNotEmpty || atBottom;
+
+        if (sandCanSlideIn) {
+          fragColor = encodeMaterial(MAT_SAND);
+          break;
+        }
+      }
+      
+      if (sandFromAboveRight) {
+        vec4 right = texture(u_texture, v_uv + DIR_RIGHT * u_texelSize);
+        bool rightNotEmpty = getMaterial(right) != MAT_EMPTY;
+        bool sandCanSlideIn = rightNotEmpty || atBottom;
+        
+        if (sandCanSlideIn) {
+          fragColor = encodeMaterial(MAT_SAND);
+          break;
+        }
+      }
+      
+      // Normal water physics - falling
+      bool canFallDown = !atBottom && below == MAT_EMPTY;
+      bool canFlowDownLeft = !atBottom && !atLeft && belowLeft == MAT_EMPTY;
+      bool canFlowDownRight = !atBottom && !atRight && belowRight == MAT_EMPTY;
+
+      if (canFallDown || canFlowDownLeft || canFlowDownRight) {
+        fragColor = encodeMaterial(MAT_EMPTY);
+        break;
+      }
+      
+      // Horizontal spreading
+      vec4 left = texture(u_texture, v_uv + DIR_LEFT * u_texelSize);
+      vec4 right = texture(u_texture, v_uv + DIR_RIGHT * u_texelSize);
+      int matLeft = getMaterial(left);
+      int matRight = getMaterial(right);
+      
+      bool canFlowLeft = !atLeft && matLeft == MAT_EMPTY;
+      bool canFlowRight = !atRight && matRight == MAT_EMPTY;
+      
+      if (!canFlowLeft && !canFlowRight) {
+        break;
+      }
+      
+      // Random horizontal movement for fluid behavior
+      float rand = fract(sin(dot(v_uv * 1000.0, vec2(12.9898, 78.233))) * 43758.5453);
+      bool preferLeft = rand < 0.5;
+      
+      if (
+        canFlowLeft && preferLeft || 
+        canFlowRight && !preferLeft ||
+        canFlowLeft || 
+        canFlowDownRight
+      ) {
+        fragColor = encodeMaterial(MAT_EMPTY);
+        break;
+      }
+    
+    }
       
     case MAT_STONE:
       // Stone doesn't move
@@ -350,21 +543,6 @@ function animate() {
     requestAnimationFrame(animate)
   }
 }
-
-// Add some initial sand for testing
-gl.bindTexture(gl.TEXTURE_2D, read.texture)
-const testData = new Uint8Array([255, 0, 0, 255]) // One sand pixel (MAT_SAND = 1)
-gl.texSubImage2D(
-  gl.TEXTURE_2D,
-  0,
-  WIDTH / 2,
-  HEIGHT - 100,
-  1,
-  1,
-  gl.RGBA,
-  gl.UNSIGNED_BYTE,
-  testData,
-)
 
 // Start animation
 playing = true
