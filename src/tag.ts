@@ -162,9 +162,6 @@ export function compile<TVertex extends GLSL, TFragment extends GLSL>(
   vertex: TVertex,
   fragment: TFragment,
 ) {
-  console.log(vertex.template)
-  console.log(fragment.template)
-
   const program = createProgram(gl, vertex.template, fragment.template)
 
   return {

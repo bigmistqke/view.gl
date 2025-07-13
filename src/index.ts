@@ -62,8 +62,6 @@ export function uniformView<T extends UniformSchema>(
   return mapObject(schema, ({ kind, size }, name) => {
     const location = gl.getUniformLocation(program, name)
 
-    console.log('location', location, name)
-
     if (isSamplerKind(kind)) {
       return {
         set(arg: number) {
