@@ -204,7 +204,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
     const buffer = assertedNotNullish(gl.createBuffer())
 
     // Create VAO to cache attribute state
-    let vao: { bind(): void; dispose(): void } | undefined = undefined
+    let vao: { unbind(): void; bind(): void; dispose(): void } | undefined = undefined
 
     // Get VAO-feature: extension if webgl1, gl if webgl2
     const feature = getVertexArrayObject(gl)
@@ -217,6 +217,9 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       }
       feature.bindVertexArray(null)
       vao = {
+        unbind() {
+          feature.bindVertexArray(null)
+        },
         bind() {
           feature.bindVertexArray(vertexArray)
         },
@@ -228,14 +231,19 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
 
     return {
       bind() {
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
         if (vao) {
           vao.bind()
         } else {
           // Fallback: manual attribute setup
-          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
           for (const handle of handles) {
             handle()
           }
+        }
+      },
+      unbind() {
+        if (vao) {
+          vao.unbind()
         }
       },
       dispose() {
@@ -245,8 +253,15 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
         }
       },
       set(value, usage = 'STATIC_DRAW') {
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+        if (vao) {
+          vao.bind()
+        } else {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+        }
         gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage])
+        if (vao) {
+          vao.unbind()
+        }
       },
     } satisfies InterleavedAttributeMethods
   })

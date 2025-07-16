@@ -42,3 +42,20 @@ export function cursor(event: PointerEvent, callback: (event: CursorEvent) => vo
 
   return promise
 }
+
+export function createElement<T extends keyof HTMLElementTagNameMap>(
+  tag: T,
+  {
+    parentElement,
+    ...options
+  }: Partial<Omit<HTMLElementTagNameMap[T], 'style'> & { style: string }> = {},
+) {
+  const element = document.createElement(tag)
+  for (const key in options) {
+    element[key] = options[key]
+  }
+
+  ;(parentElement ?? document.body).appendChild(element)
+
+  return element
+}

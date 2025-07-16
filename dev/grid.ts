@@ -1,22 +1,60 @@
 import { view } from 'view.gl'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
-import { cursor } from './utils'
+import { createElement, cursor } from './utils'
 
-const canvas = document.createElement('canvas')
+const canvas = createElement('canvas', { width: window.innerWidth, height: window.innerHeight })
 const gl = canvas.getContext('webgl2', { antialias: false })!
 
 if (!gl) {
   throw new Error('WebGL not supported')
 }
 
-document.body.append(canvas)
-
-canvas.width = window.innerWidth
-canvas.height = window.innerHeight
-
 const state = {
   position: { x: 0, y: 0 },
   scale: 1,
+  elements: [] as Array<ReturnType<typeof createGridElement>>,
+}
+
+const container = createElement('div')
+state.elements.push(createGridElement({ x: 100, y: 100 }))
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                     Utils                                    */
+/*                                                                                */
+/**********************************************************************************/
+
+function createGridElement(position = { x: 0, y: 0 }) {
+  position = {
+    x: (position.x - state.position.x) / state.scale,
+    y: (position.y - state.position.y) / state.scale,
+  }
+
+  const element = createElement('div', {
+    innerText: 'HALLO WORLD',
+    style: `position: fixed; 
+z-index: 10; 
+left: 0px; 
+top: 0px; 
+transform-origin: top left; 
+background: white; 
+padding: 2px; 
+border-radius: 2px;`,
+    parentElement: container,
+  })
+
+  function update() {
+    element.style.transform = `translate3d(${state.position.x + position.x * state.scale}px,${
+      state.position.y + position.y * state.scale
+    }px,0) scale(${state.scale})`
+  }
+  update()
+
+  return {
+    element,
+    position,
+    update,
+  }
 }
 
 /**********************************************************************************/
@@ -33,7 +71,16 @@ canvas.addEventListener('pointerdown', event => {
   })
 })
 
-canvas.addEventListener(
+canvas.addEventListener('dblclick', event => {
+  state.elements.push(
+    createGridElement({
+      x: event.clientX,
+      y: event.clientY,
+    }),
+  )
+})
+
+window.addEventListener(
   'wheel',
   event => {
     const rect = canvas.getBoundingClientRect()
@@ -168,6 +215,8 @@ function render() {
   uniforms.u_pos.set(state.position.x, state.position.y)
   uniforms.u_scale.set(state.scale)
   uniforms.u_thickness.set(1)
+
+  state.elements.forEach(element => element.update())
 
   gl.drawArrays(gl.TRIANGLES, 0, 6)
 }

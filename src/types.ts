@@ -461,6 +461,7 @@ export interface InterleavedAttributeMethods<
   T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
 > {
   bind(): void
+  unbind(): void
   set(data: Float32Array, usage?: GLUsage): void
   dispose(): void
 }
