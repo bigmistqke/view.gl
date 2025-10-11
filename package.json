@@ -1,15 +1,15 @@
 {
   "name": "@bigmistqke/view.gl",
   "version": "0.1.0",
-  "description": "",
+  "description": "Minimal library for WebGL shader resource management with type-safe GLSL template literals.",
   "exports": {
     ".": {
-      "import": "./index.mjs",
-      "types": "./index.d.mts"
+      "import": "./dist/index.mjs",
+      "types": "./dist/index.d.mts"
     },
     "./tag": {
-      "import": "./tag.mjs",
-      "types": "./tag.d.mts"
+      "import": "./dist/tag.mjs",
+      "types": "./dist/tag.d.mts"
     }
   },
   "scripts": {
