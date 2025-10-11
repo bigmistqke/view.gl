@@ -14,7 +14,8 @@
   },
   "scripts": {
     "dev": "vite serve dev",
-    "build": "tsup"
+    "build": "tsup",
+    "prepublish": "pnpm build"
   },
   "keywords": [],
   "author": "",
