@@ -76,7 +76,7 @@ export function interleave<
   const TName extends string,
   const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
   const TOptions extends Omit<AttributeOptions, 'kind'>,
->(name: TName, layout: TLayout, { instanced, buffer }?: TOptions = {}) {
+>(name: TName, layout: TLayout, { instanced, buffer }: Partial<TOptions> = {}) {
   return {
     type: 'interleavedAttribute',
     name,
