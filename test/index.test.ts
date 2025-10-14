@@ -71,8 +71,8 @@ describe('view', () => {
       interleavedAttributes: {
         data: {
           layout: [
-            { name: 'a_position', kind: 'vec2' },
-            { name: 'a_color', kind: 'vec4' },
+            { key: 'a_position', kind: 'vec2' },
+            { key: 'a_color', kind: 'vec4' },
           ],
           instanced: false,
         },
@@ -116,7 +116,7 @@ describe('view', () => {
       },
       interleavedAttributes: {
         data: {
-          layout: [{ name: 'a_uv', kind: 'vec2' }],
+          layout: [{ key: 'a_uv', kind: 'vec2' }],
           instanced: false,
         },
       },
@@ -445,8 +445,8 @@ describe('interleavedAttributeView', () => {
     const schema = {
       vertexData: {
         layout: [
-          { name: 'a_position', kind: 'vec2' },
-          { name: 'a_color', kind: 'vec4' },
+          { key: 'a_position', kind: 'vec2' },
+          { key: 'a_color', kind: 'vec4' },
         ],
         instanced: false,
       },
@@ -465,9 +465,9 @@ describe('interleavedAttributeView', () => {
     const schema = {
       vertexData: {
         layout: [
-          { name: 'a_position', kind: 'vec3' }, // 3 * 4 = 12 bytes
-          { name: 'a_normal', kind: 'vec3' }, // 3 * 4 = 12 bytes
-          { name: 'a_uv', kind: 'vec2' }, // 2 * 4 = 8 bytes
+          { key: 'a_position', kind: 'vec3' }, // 3 * 4 = 12 bytes
+          { key: 'a_normal', kind: 'vec3' }, // 3 * 4 = 12 bytes
+          { key: 'a_uv', kind: 'vec2' }, // 2 * 4 = 8 bytes
         ], // Total stride = 32 bytes
         instanced: false,
       },
@@ -503,8 +503,8 @@ describe('interleavedAttributeView', () => {
     const schema = {
       instanceData: {
         layout: [
-          { name: 'a_instancePos', kind: 'vec3' },
-          { name: 'a_instanceScale', kind: 'float' },
+          { key: 'a_instancePos', kind: 'vec3' },
+          { key: 'a_instanceScale', kind: 'float' },
         ],
         instanced: true,
       },
@@ -522,9 +522,9 @@ describe('interleavedAttributeView', () => {
     const schema = {
       data: {
         layout: [
-          { name: 'a_position', kind: 'vec2' },
-          { name: 'a_index', kind: 'int' },
-          { name: 'a_flags', kind: 'ivec2' },
+          { key: 'a_position', kind: 'vec2' },
+          { key: 'a_index', kind: 'int' },
+          { key: 'a_flags', kind: 'ivec2' },
         ],
         instanced: false,
       },
@@ -546,8 +546,8 @@ describe('interleavedAttributeView', () => {
     const schema = {
       vertexData: {
         layout: [
-          { name: 'a_position', kind: 'vec2' },
-          { name: 'a_color', kind: 'vec4' },
+          { key: 'a_position', kind: 'vec2' },
+          { key: 'a_color', kind: 'vec4' },
         ],
         instanced: false,
       },
@@ -592,7 +592,7 @@ describe('interleavedAttributeView', () => {
 
     const schema = {
       vertexData: {
-        layout: [{ name: 'a_position', kind: 'vec2' }],
+        layout: [{ key: 'a_position', kind: 'vec2' }],
         instanced: false,
       },
     } satisfies InterleavedAttributeSchema
@@ -622,11 +622,11 @@ describe('interleavedAttributeView', () => {
   it('should dispose buffers', () => {
     const schema = {
       data1: {
-        layout: [{ name: 'a_pos', kind: 'vec2' }],
+        layout: [{ key: 'a_pos', kind: 'vec2' }],
         instanced: false,
       },
       data2: {
-        layout: [{ name: 'a_color', kind: 'vec4' }],
+        layout: [{ key: 'a_color', kind: 'vec4' }],
         instanced: false,
       },
     } satisfies InterleavedAttributeSchema
@@ -644,11 +644,11 @@ describe('interleavedAttributeView', () => {
     const controller = new AbortController()
     const schema = {
       data1: {
-        layout: [{ name: 'a_position', kind: 'vec2' }],
+        layout: [{ key: 'a_position', kind: 'vec2' }],
         instanced: false,
       },
       data2: {
-        layout: [{ name: 'a_color', kind: 'vec4' }],
+        layout: [{ key: 'a_color', kind: 'vec4' }],
         instanced: false,
       },
     } satisfies InterleavedAttributeSchema
@@ -667,7 +667,7 @@ describe('interleavedAttributeView', () => {
 
     const schema = {
       data: {
-        layout: [{ name: 'a_notFound', kind: 'vec2' }],
+        layout: [{ key: 'a_notFound', kind: 'vec2' }],
         instanced: false,
       },
     } satisfies InterleavedAttributeSchema

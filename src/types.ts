@@ -358,7 +358,7 @@ export interface UniformOptions {
   size?: number
 }
 
-export type UniformSchema = Record<string, UniformOptions>
+export type UniformSchema = Record<string | symbol, UniformOptions>
 
 export type UniformMethods<TOptions extends UniformOptions> = TOptions['size'] extends number
   ? {
@@ -426,7 +426,7 @@ export interface AttributeOptions {
   buffer?: WebGLBuffer
 }
 
-export type AttributeSchema = Record<string, AttributeOptions>
+export type AttributeSchema = Record<string | symbol, AttributeOptions>
 
 export interface AttributeMethods<T = AttributeKind> {
   buffer: WebGLBuffer
@@ -446,7 +446,7 @@ export type AttributeView<T extends AttributeSchema> = {
 /**********************************************************************************/
 
 export interface InterleavedAttributeLayout {
-  name: string
+  key: string | symbol
   kind: AttributeKind
 }
 
@@ -455,7 +455,7 @@ export interface InterleavedAttributeOptions {
   instanced?: boolean
 }
 
-export type InterleavedAttributeSchema = Record<string, InterleavedAttributeOptions>
+export type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeOptions>
 
 export interface InterleavedAttributeMethods<
   T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
@@ -481,7 +481,7 @@ export interface BufferOptions {
   usage?: GLUsage
 }
 
-export type BufferSchema = Record<string, BufferOptions>
+export type BufferSchema = Record<string | symbol, BufferOptions>
 
 export interface BufferMethods {
   set(data: Float32Array | Uint16Array | Uint32Array): void
@@ -537,7 +537,7 @@ export type TextureTarget =
   | 'TEXTURE_3D' // WebGL2 only
   | 'TEXTURE_2D_ARRAY' // WebGL2 only
 
-export type TextureSchema = Record<string, TextureOptions>
+export type TextureSchema = Record<string | symbol, TextureOptions>
 
 export interface TextureMethods {
   texture: WebGLTexture
@@ -662,57 +662,57 @@ export type View<T extends ViewSchema = ViewSchema> = {
 
 export interface GLSL {
   template: string
-  uniforms: Record<string, UniformOptions>
-  attributes: Record<string, AttributeOptions>
-  interleavedAttributes: Record<string, InterleavedAttributeOptions>
+  uniforms: Record<string | symbol, UniformOptions>
+  attributes: Record<string | symbol, AttributeOptions>
+  interleavedAttributes: Record<string | symbol, InterleavedAttributeOptions>
 }
 
 export type UniformTag<
-  TName extends string = string,
+  TKey extends string | symbol = string | symbol,
   TKind extends UniformKind = UniformKind,
   TOptions extends Partial<UniformOptions> = UniformOptions,
 > = TOptions extends { size: infer TSize }
   ? {
       type: 'uniform'
       kind: TKind
-      name: TName
+      key: TKey
       size: TSize
     }
   : {
       type: 'uniform'
       kind: TKind
-      name: TName
+      key: TKey
     }
 
 export interface AttributeTag<
-  TName extends string = string,
+  TKey extends string | symbol = string | symbol,
   TKind extends AttributeKind = AttributeKind,
   TInstanced extends boolean | undefined = boolean | undefined,
 > {
   type: 'attribute'
   kind: TKind
   instanced: TInstanced
-  name: TName
+  key: TKey
 }
 
 export interface AttributeTagFn<TKey extends AttributeKind> {
   <TName extends string, TOptions extends Omit<AttributeOptions, 'kind'>>(
-    name: TName,
+    key: TName,
     options: TOptions,
   ): Prettify<AttributeTag<TName, TKey, TOptions['instanced']>>
   <TName extends string>(name: TName): Prettify<AttributeTag<TName, TKey, undefined>>
 }
 
 export type InterleaveTag<
-  TName extends string = string,
+  TKey extends string | symbol = string | symbol,
   TLayout extends Array<AttributeTag<string, AttributeKind, undefined>> = Array<
     AttributeTag<string, AttributeKind, undefined>
   >,
   TOptions extends Omit<AttributeOptions, 'kind'> = Omit<AttributeOptions, 'kind'>,
 > = TOptions & {
-  name: TName
+  key: TKey
   type: 'interleavedAttribute'
   layout: {
-    [TKey in keyof TLayout]: Prettify<Pick<TLayout[TKey], 'kind' | 'name'>>
+    [TKey in keyof TLayout]: Prettify<Pick<TLayout[TKey], 'kind' | 'key'>>
   }
 }

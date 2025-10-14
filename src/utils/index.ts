@@ -6,16 +6,9 @@ import type {
   KIND_TO_UNIFORM_FN_NAME_MAP,
   TextureOptions,
   UniformKind,
-} from './types'
+} from '../types'
 
-export function mapObject<T extends Record<string, any>, TReturn>(
-  value: T,
-  callback: (value: T[keyof T], key: Extract<keyof T, string>, index: number) => TReturn,
-): { [TKey in keyof T]: TReturn } {
-  return Object.fromEntries(
-    Object.entries(value).map(([key, value], index) => [key, callback(value, key, index)]),
-  )
-}
+export * as ObjectUtils from './object'
 
 export function assertedNotNullish<T>(value: T, message?: string): NonNullable<T> {
   if (value === undefined || value === null) throw new Error(message)
@@ -267,4 +260,29 @@ export function createFramebuffer(gl: GL, { attachment, texture, ...options }: F
     texture,
     framebuffer,
   }
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                   Resolve Key                                  */
+/*                                                                                */
+/**********************************************************************************/
+
+const SYMBOL_MAP = new WeakMap<Symbol, string>()
+const PREFIX = 'VIEW_GL_ALIAS'
+let index = 0
+
+export function resolveKey(key: string | number | symbol) {
+  if (typeof key === 'string') {
+    return key
+  }
+  if (typeof key === 'symbol') {
+    const cached = SYMBOL_MAP.get(key)
+    if (cached) return cached
+    const id = `${PREFIX}_${index}`
+    index++
+    SYMBOL_MAP.set(key, id)
+    return id
+  }
+  return key.toString()
 }

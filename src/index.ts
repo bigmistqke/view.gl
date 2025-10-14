@@ -21,7 +21,8 @@ import {
   isSamplerKind,
   kindToSize,
   kindToUniformFnName,
-  mapObject,
+  ObjectUtils,
+  resolveKey,
 } from './utils'
 
 /**********************************************************************************/
@@ -59,7 +60,9 @@ export function uniformView<T extends UniformSchema>(
   program: WebGLProgram,
   schema: T,
 ): InferUniformView<T> {
-  return mapObject(schema, ({ kind, size }, name) => {
+  return ObjectUtils.map(schema, ({ kind, size }, key) => {
+    const name = resolveKey(key)
+
     const location = gl.getUniformLocation(program, name)
 
     if (isSamplerKind(kind)) {
@@ -123,12 +126,14 @@ export function attributeView<T extends AttributeSchema>(
   schema: T,
   { signal }: ViewOptions = {},
 ): AttributeView<T> {
-  const attributes = mapObject(
+  const attributes = ObjectUtils.map(
     schema,
     (
       { kind, instanced, buffer = assertedNotNullish(gl.createBuffer()) },
-      name,
+      key,
     ): AttributeMethods => {
+      const name = resolveKey(key)
+
       const location = gl.getAttribLocation(program, name)
       if (location < 0) {
         throw new Error(`Attribute '${name}' not found`)
@@ -156,9 +161,7 @@ export function attributeView<T extends AttributeSchema>(
   )
 
   signal?.addEventListener('abort', function dispose() {
-    for (const name in attributes) {
-      attributes[name].dispose()
-    }
+    ObjectUtils.forEach(attributes, value => value.dispose())
   })
 
   return attributes
@@ -177,16 +180,18 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   { signal }: ViewOptions = {},
 ): InterleavedAttributeView<T> {
   // Initialize interleaved attributes
-  const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
+  const interleavedAttributes = ObjectUtils.map(schema, ({ layout, instanced }) => {
     // Increment number to keep track of offset
     let index = 0
 
     // Calculate layout information
     const handles = layout.map(layout => {
-      const location = gl.getAttribLocation(program, layout.name)
+      const name = resolveKey(layout.key)
+
+      const location = gl.getAttribLocation(program, name)
 
       if (location < 0) {
-        throw new Error(`Attribute '${layout.name}' not found`)
+        throw new Error(`Attribute '${name}' not found`)
       }
 
       const size = kindToSize(layout.kind)
@@ -267,9 +272,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   })
 
   signal?.addEventListener('abort', function dispose() {
-    for (const name in interleavedAttributes) {
-      interleavedAttributes[name].dispose()
-    }
+    ObjectUtils.forEach(interleavedAttributes, value => value.dispose())
   })
 
   return interleavedAttributes
@@ -287,7 +290,7 @@ export function bufferView<T extends BufferSchema>(
   { signal }: ViewOptions = {},
 ): BufferView<T> {
   // Initialize buffers
-  const buffers = mapObject(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
+  const buffers = ObjectUtils.map(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
     const buffer = assertedNotNullish(gl.createBuffer())
     return {
       bind() {
@@ -304,9 +307,7 @@ export function bufferView<T extends BufferSchema>(
   })
 
   signal?.addEventListener('abort', function dispose() {
-    for (const name in buffers) {
-      buffers[name].dispose()
-    }
+    ObjectUtils.forEach(buffers, value => value.dispose())
   })
 
   return buffers

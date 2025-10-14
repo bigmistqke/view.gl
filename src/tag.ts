@@ -11,7 +11,7 @@ import type {
   UniformOptions,
   UniformTag,
 } from './types'
-import { createProgram } from './utils'
+import { createProgram, resolveKey } from './utils'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -20,11 +20,11 @@ import { createProgram } from './utils'
 /**********************************************************************************/
 
 interface UniformTagFn<TKind extends UniformKind> {
-  <const TName extends string, const TOptions extends Omit<UniformOptions, 'kind'>>(
-    name: TName,
+  <const TKey extends string | symbol, const TOptions extends Omit<UniformOptions, 'kind'>>(
+    key: TKey,
     TOptions: TOptions,
-  ): Prettify<UniformTag<TName, TKind, TOptions>>
-  <const TName extends string>(name: TName): Prettify<UniformTag<TName, TKind>>
+  ): Prettify<UniformTag<TKey, TKind, TOptions>>
+  <const TName extends string | symbol>(key: TName): Prettify<UniformTag<TName, TKind>>
 }
 
 export const uniform = new Proxy(
@@ -35,9 +35,9 @@ export const uniform = new Proxy(
     get(target, property) {
       // @ts-expect-error
       if (typeof property === 'symbol') return target[property]
-      return (name: string, options?: Omit<UniformOptions, 'kind'>) => ({
+      return (key: string, options?: Omit<UniformOptions, 'kind'>) => ({
         type: 'uniform',
-        name,
+        key,
         kind: property,
         ...options,
       })
@@ -53,9 +53,9 @@ export const attribute = new Proxy(
     get(target, property) {
       // @ts-expect-error
       if (typeof property === 'symbol') return target[property]
-      return (name: string, options?: Omit<AttributeOptions, 'kind'>) => ({
+      return (key: string, options?: Omit<AttributeOptions, 'kind'>) => ({
         type: 'attribute',
-        name,
+        key,
         kind: property,
         ...options,
       })
@@ -64,30 +64,30 @@ export const attribute = new Proxy(
 )
 
 export function interleave<
-  const TName extends string,
+  const TKey extends string | symbol,
   const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
   const TOptions extends Omit<AttributeOptions, 'kind'>,
->(name: TName, layout: TLayout, instanced: TOptions): InterleaveTag<TName, TLayout, TOptions>
+>(key: TKey, layout: TLayout, instanced: TOptions): InterleaveTag<TKey, TLayout, TOptions>
 export function interleave<
-  const TName extends string,
+  const TKey extends string | symbol,
   const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
->(name: TName, layout: TLayout): InterleaveTag<TName, TLayout, { instanced: false }>
+>(key: TKey, layout: TLayout): InterleaveTag<TKey, TLayout, { instanced: false }>
 export function interleave<
-  const TName extends string,
+  const TKey extends string | symbol,
   const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
   const TOptions extends Omit<AttributeOptions, 'kind'>,
->(name: TName, layout: TLayout, { instanced, buffer }: Partial<TOptions> = {}) {
+>(key: TKey, layout: TLayout, { instanced, buffer }: Partial<TOptions> = {}) {
   return {
     type: 'interleavedAttribute',
-    name,
+    key,
     // remove instanced- and type-property
-    layout: layout.map(({ name, kind }) => ({
-      name,
+    layout: layout.map(({ key, kind }) => ({
+      key,
       kind,
     })),
     instanced: !!instanced,
     buffer,
-  } as InterleaveTag<TName, TLayout, TOptions>
+  } as unknown as InterleaveTag<TKey, TLayout, TOptions>
 }
 
 /**********************************************************************************/
@@ -99,34 +99,41 @@ export function interleave<
 export function glsl<
   Elem extends string,
   Template extends ReadonlyArray<Elem>,
-  Hole extends UniformTag | AttributeTag | InterleaveTag | string | number,
+  Hole extends UniformTag | AttributeTag | InterleaveTag | string | number | symbol,
   Holes extends Hole[],
 >([initial, ...rest]: Template, ...holes: [...Holes]) {
   const v300 = initial?.startsWith('#version 300 es')
+
   const template = rest.reduce((out, templatePart, index) => {
     const hole = holes[index]
     const holePart =
-      typeof hole === 'string' || typeof hole === 'number'
-        ? hole
+      typeof hole === 'string' || typeof hole === 'number' || typeof hole === 'symbol'
+        ? resolveKey(hole)
         : hole.type === 'interleavedAttribute'
         ? hole.layout.reduce(
             (a, v) =>
-              v300 ? `${a}in ${v.kind} ${v.name};\n` : `${a}attribute ${v.kind} ${v.name};\n`,
+              v300 ? `${a}in ${v.kind} ${v.key};\n` : `${a}attribute ${v.kind} ${v.key};\n`,
             '',
           )
         : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole
-        ? `${hole.type} ${hole.kind} ${hole.name}[${hole.size}];`
-        : `${hole.type === 'attribute' && v300 ? 'in' : hole.type} ${hole.kind} ${hole.name};`
+        ? `${hole.type} ${hole.kind} ${resolveKey(hole.key)}[${hole.size}];`
+        : `${hole.type === 'attribute' && v300 ? 'in' : hole.type} ${hole.kind} ${resolveKey(
+            hole.key,
+          )};`
     return out + holePart + templatePart
   }, initial || '')
 
   return holes.reduce(
     (resources, resource) => {
-      if (typeof resource === 'string' || typeof resource === 'number') {
+      if (
+        typeof resource === 'string' ||
+        typeof resource === 'number' ||
+        typeof resource === 'symbol'
+      ) {
         return resources
       }
       // @ts-expect-error
-      const { name, type, ...rest } = resource
+      const { key: name, type, ...rest } = resource
       // @ts-expect-error
       resources[`${type}s`][name] = rest
       return resources
@@ -139,15 +146,13 @@ export function glsl<
     } as {
       template: string
       uniforms: {
-        [K in Extract<Holes[number], UniformTag> as K['name']]: Prettify<Omit<K, 'name' | 'type'>>
+        [K in Extract<Holes[number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
       }
       attributes: {
-        [K in Extract<Holes[number], AttributeTag> as K['name']]: Prettify<Omit<K, 'name' | 'type'>>
+        [K in Extract<Holes[number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
       }
       interleavedAttributes: {
-        [K in Extract<Holes[number], InterleaveTag> as K['name']]: Prettify<
-          Omit<K, 'name' | 'type'>
-        >
+        [K in Extract<Holes[number], InterleaveTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
       }
     },
   )
@@ -165,6 +170,8 @@ export function compile<TVertex extends GLSL, TFragment extends GLSL>(
   fragment: TFragment,
 ) {
   const program = createProgram(gl, vertex.template, fragment.template)
+
+  console.log(fragment.uniforms)
 
   return {
     program,

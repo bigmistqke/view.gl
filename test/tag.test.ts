@@ -7,25 +7,25 @@ describe('uniform', () => {
   it('should create uniform tags for basic types', () => {
     expect(uniform.float('u_time')).toEqual({
       type: 'uniform',
-      name: 'u_time',
+      key: 'u_time',
       kind: 'float',
     })
 
     expect(uniform.vec2('u_resolution')).toEqual({
       type: 'uniform',
-      name: 'u_resolution',
+      key: 'u_resolution',
       kind: 'vec2',
     })
 
     expect(uniform.vec3('u_position')).toEqual({
       type: 'uniform',
-      name: 'u_position',
+      key: 'u_position',
       kind: 'vec3',
     })
 
     expect(uniform.vec4('u_color')).toEqual({
       type: 'uniform',
-      name: 'u_color',
+      key: 'u_color',
       kind: 'vec4',
     })
   })
@@ -33,13 +33,13 @@ describe('uniform', () => {
   it('should create uniform tags for integer types', () => {
     expect(uniform.int('u_count')).toEqual({
       type: 'uniform',
-      name: 'u_count',
+      key: 'u_count',
       kind: 'int',
     })
 
     expect(uniform.ivec2('u_indices')).toEqual({
       type: 'uniform',
-      name: 'u_indices',
+      key: 'u_indices',
       kind: 'ivec2',
     })
   })
@@ -47,19 +47,19 @@ describe('uniform', () => {
   it('should create uniform tags for matrix types', () => {
     expect(uniform.mat2('u_mat2')).toEqual({
       type: 'uniform',
-      name: 'u_mat2',
+      key: 'u_mat2',
       kind: 'mat2',
     })
 
     expect(uniform.mat3('u_mat3')).toEqual({
       type: 'uniform',
-      name: 'u_mat3',
+      key: 'u_mat3',
       kind: 'mat3',
     })
 
     expect(uniform.mat4('u_modelMatrix')).toEqual({
       type: 'uniform',
-      name: 'u_modelMatrix',
+      key: 'u_modelMatrix',
       kind: 'mat4',
     })
   })
@@ -67,13 +67,13 @@ describe('uniform', () => {
   it('should create uniform tags for sampler types', () => {
     expect(uniform.sampler2D('u_texture')).toEqual({
       type: 'uniform',
-      name: 'u_texture',
+      key: 'u_texture',
       kind: 'sampler2D',
     })
 
     expect(uniform.samplerCube('u_envMap')).toEqual({
       type: 'uniform',
-      name: 'u_envMap',
+      key: 'u_envMap',
       kind: 'samplerCube',
     })
   })
@@ -81,14 +81,14 @@ describe('uniform', () => {
   it('should create uniform tags with size option for arrays', () => {
     expect(uniform.float('u_values', { size: 10 })).toEqual({
       type: 'uniform',
-      name: 'u_values',
+      key: 'u_values',
       kind: 'float',
       size: 10,
     })
 
     expect(uniform.vec3('u_palette', { size: 5 })).toEqual({
       type: 'uniform',
-      name: 'u_palette',
+      key: 'u_palette',
       kind: 'vec3',
       size: 5,
     })
@@ -105,25 +105,25 @@ describe('attribute', () => {
   it('should create attribute tags for basic types', () => {
     expect(attribute.float('a_t')).toEqual({
       type: 'attribute',
-      name: 'a_t',
+      key: 'a_t',
       kind: 'float',
     })
 
     expect(attribute.vec2('a_position')).toEqual({
       type: 'attribute',
-      name: 'a_position',
+      key: 'a_position',
       kind: 'vec2',
     })
 
     expect(attribute.vec3('a_normal')).toEqual({
       type: 'attribute',
-      name: 'a_normal',
+      key: 'a_normal',
       kind: 'vec3',
     })
 
     expect(attribute.vec4('a_color')).toEqual({
       type: 'attribute',
-      name: 'a_color',
+      key: 'a_color',
       kind: 'vec4',
     })
   })
@@ -131,13 +131,13 @@ describe('attribute', () => {
   it('should create attribute tags for integer types', () => {
     expect(attribute.int('a_index')).toEqual({
       type: 'attribute',
-      name: 'a_index',
+      key: 'a_index',
       kind: 'int',
     })
 
     expect(attribute.ivec2('a_coords')).toEqual({
       type: 'attribute',
-      name: 'a_coords',
+      key: 'a_coords',
       kind: 'ivec2',
     })
   })
@@ -145,14 +145,14 @@ describe('attribute', () => {
   it('should create instanced attributes', () => {
     expect(attribute.vec3('a_instancePos', { instanced: true })).toEqual({
       type: 'attribute',
-      name: 'a_instancePos',
+      key: 'a_instancePos',
       kind: 'vec3',
       instanced: true,
     })
 
     expect(attribute.float('a_instanceScale', { instanced: true })).toEqual({
       type: 'attribute',
-      name: 'a_instanceScale',
+      key: 'a_instanceScale',
       kind: 'float',
       instanced: true,
     })
@@ -162,7 +162,7 @@ describe('attribute', () => {
     const customBuffer = {} as WebGLBuffer
     expect(attribute.vec2('a_position', { buffer: customBuffer })).toEqual({
       type: 'attribute',
-      name: 'a_position',
+      key: 'a_position',
       kind: 'vec2',
       buffer: customBuffer,
     })
@@ -181,10 +181,10 @@ describe('interleave', () => {
       interleave('vertexData', [attribute.vec2('a_position'), attribute.vec4('a_color')]),
     ).toEqual({
       type: 'interleavedAttribute',
-      name: 'vertexData',
+      key: 'vertexData',
       layout: [
-        { name: 'a_position', kind: 'vec2' },
-        { name: 'a_color', kind: 'vec4' },
+        { key: 'a_position', kind: 'vec2' },
+        { key: 'a_color', kind: 'vec4' },
       ],
       instanced: false,
     })
@@ -199,10 +199,10 @@ describe('interleave', () => {
       ),
     ).toEqual({
       type: 'interleavedAttribute',
-      name: 'instanceData',
+      key: 'instanceData',
       layout: [
-        { name: 'a_instancePos', kind: 'vec3' },
-        { name: 'a_instanceScale', kind: 'float' },
+        { key: 'a_instancePos', kind: 'vec3' },
+        { key: 'a_instanceScale', kind: 'float' },
       ],
       instanced: true,
     })
@@ -212,8 +212,8 @@ describe('interleave', () => {
     const customBuffer = {} as WebGLBuffer
     expect(interleave('uvData', [attribute.vec2('a_uv')], { buffer: customBuffer })).toEqual({
       type: 'interleavedAttribute',
-      name: 'uvData',
-      layout: [{ name: 'a_uv', kind: 'vec2' }],
+      key: 'uvData',
+      layout: [{ key: 'a_uv', kind: 'vec2' }],
       instanced: false,
       buffer: customBuffer,
     })
@@ -223,8 +223,8 @@ describe('interleave', () => {
     expect(
       interleave('data', [attribute.vec2('a_position'), attribute.vec4('a_color')]).layout,
     ).toEqual([
-      { name: 'a_position', kind: 'vec2' },
-      { name: 'a_color', kind: 'vec4' },
+      { key: 'a_position', kind: 'vec2' },
+      { key: 'a_color', kind: 'vec4' },
     ])
   })
 })
@@ -284,8 +284,8 @@ describe('glsl', () => {
     expect(result.interleavedAttributes).toEqual({
       vertexData: {
         layout: [
-          { name: 'a_position', kind: 'vec2' },
-          { name: 'a_color', kind: 'vec4' },
+          { key: 'a_position', kind: 'vec2' },
+          { key: 'a_color', kind: 'vec4' },
         ],
         instanced: false,
       },
@@ -502,15 +502,15 @@ describe('compile', () => {
     expect(result.schema.interleavedAttributes).toEqual({
       vertexData: {
         layout: [
-          { name: 'a_position', kind: 'vec2' },
-          { name: 'a_uv', kind: 'vec2' },
+          { key: 'a_position', kind: 'vec2' },
+          { key: 'a_uv', kind: 'vec2' },
         ],
         instanced: false,
       },
       instanceData: {
         layout: [
-          { name: 'a_instancePos', kind: 'vec3' },
-          { name: 'a_instanceScale', kind: 'float' },
+          { key: 'a_instancePos', kind: 'vec3' },
+          { key: 'a_instanceScale', kind: 'float' },
         ],
         instanced: true,
       },
