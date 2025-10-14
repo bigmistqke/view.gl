@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>view.gl</title>
+  <script>
+    // Redirect to index.html with the current path as a query parameter
+    const path = window.location.pathname.slice(1); // Remove leading slash
+    if (path) {
+      window.location.replace(window.location.origin + '/?redirect=' + path);
+    } else {
+      window.location.replace(window.location.origin);
+    }
+  </script>
+</head>
+<body>
+  Redirecting...
+</body>
+</html>

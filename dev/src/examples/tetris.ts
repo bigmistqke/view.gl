@@ -429,6 +429,7 @@ function createTetris() {
     if (checkCollision()) {
       next()
     }
+    render()
     animationTimeout.set(animate, 1_000)
   }
   setTimeout(animate, 1_000)

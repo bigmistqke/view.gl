@@ -2,7 +2,7 @@ import { defineConfig } from 'vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
 export default defineConfig({
-  base: './',
+  base: process.env.GITHUB_ACTIONS ? 'https://bigmistqke.github.io/view.gl/' : undefined,
   assetsInclude: ['assets/**/*'],
   plugins: [
     tsconfigPaths(),
@@ -38,5 +38,13 @@ export default defineConfig({
   build: {
     target: 'esnext',
     minify: false,
+    rollupOptions: {
+      input: {
+        main: './dev/index.html',
+        index: './dev/src/index.ts', // Separate entry for index.ts
+        utils: './dev/src/utils.ts', // Separate entry for utils.ts
+        404: './dev/404.html',
+      },
+    },
   },
 })

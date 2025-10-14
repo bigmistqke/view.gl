@@ -4,8 +4,8 @@ export type Merge<A, B> = {
       ? A[K] | B[K]
       : A[K]
     : K extends keyof B
-    ? B[K]
-    : never
+      ? B[K]
+      : never
 }
 
 export type Prettify<T> = {

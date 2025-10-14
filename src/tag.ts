@@ -111,16 +111,16 @@ export function glsl<
       typeof hole === 'string' || typeof hole === 'number' || typeof hole === 'symbol'
         ? toID(hole)
         : hole.type === 'interleavedAttribute'
-        ? hole.layout.reduce(
-            (a, v) =>
-              v300
-                ? `${a}in ${v.kind} ${toID(v.key)};\n`
-                : `${a}attribute ${v.kind} ${toID(v.key)};\n`,
-            '',
-          )
-        : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole
-        ? `${hole.type} ${hole.kind} ${toID(hole.key)}[${hole.size}];`
-        : `${hole.type === 'attribute' && v300 ? 'in' : hole.type} ${hole.kind} ${toID(hole.key)};`
+          ? hole.layout.reduce(
+              (a, v) =>
+                v300
+                  ? `${a}in ${v.kind} ${toID(v.key)};\n`
+                  : `${a}attribute ${v.kind} ${toID(v.key)};\n`,
+              '',
+            )
+          : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole
+            ? `${hole.type} ${hole.kind} ${toID(hole.key)}[${hole.size}];`
+            : `${hole.type === 'attribute' && v300 ? 'in' : hole.type} ${hole.kind} ${toID(hole.key)};`
     return out + holePart + templatePart
   }, initial || '')
 
