@@ -1,0 +1,48 @@
+<html>
+  <head>
+    <style>
+      body {
+        --color-foreground: #e9e9e9;
+        --color-background: rgb(33, 33, 47);
+        --color-border: rgb(87, 87, 87);
+        --font-family: monospace;
+
+        display: grid;
+        grid-template-columns: 200px 1fr;
+        margin: 0px;
+        background-color: var(--color-background);
+        color: var(--color-foreground);
+        font-family: var(--font-family);
+      }
+      iframe {
+        border: none;
+        width: 100%;
+        height: 100%;
+      }
+      nav {
+        display: flex;
+        flex-direction: column;
+        border-inline-end: 1px solid var(--color-border);
+
+        & > * {
+          border: none;
+          border-block-end: 1px solid var(--color-border);
+          background: none;
+          padding: 5px;
+          color: var(--color-foreground);
+          font-family: var(--font-family);
+          text-align: left;
+
+          &.active {
+            background-color: rgba(255, 255, 255, 0.1);
+          }
+        }
+      }
+    </style>
+    <script type="module" crossorigin src="./assets/index-CLSDHGMA.js"></script>
+  </head>
+  <body>
+    <nav></nav>
+    <iframe></iframe>
+  </body>
+</html>
