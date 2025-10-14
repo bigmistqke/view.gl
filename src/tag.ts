@@ -112,7 +112,9 @@ export function glsl<
         : hole.type === 'interleavedAttribute'
         ? hole.layout.reduce(
             (a, v) =>
-              v300 ? `${a}in ${v.kind} ${resolveKey(v.key)};\n` : `${a}attribute ${v.kind} ${resolveKey(v.key)};\n`,
+              v300
+                ? `${a}in ${v.kind} ${resolveKey(v.key)};\n`
+                : `${a}attribute ${v.kind} ${resolveKey(v.key)};\n`,
             '',
           )
         : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole
@@ -170,8 +172,6 @@ export function compile<TVertex extends GLSL, TFragment extends GLSL>(
   fragment: TFragment,
 ) {
   const program = createProgram(gl, vertex.template, fragment.template)
-
-  console.log(fragment.uniforms)
 
   return {
     program,
