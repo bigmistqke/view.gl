@@ -1,7 +1,7 @@
 {
   "name": "@bigmistqke/view.gl",
-  "version": "0.1.1",
-  "description": "Minimal library for WebGL shader resource management with type-safe GLSL template literals.",
+  "version": "0.1.2",
+  "description": "🪟 Utilities for managing WebGL resources.",
   "exports": {
     ".": {
       "import": "./dist/index.mjs",
@@ -20,7 +20,9 @@
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage"
   },
-  "keywords": [],
+  "keywords": [
+    "WebGL"
+  ],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.5.1",
