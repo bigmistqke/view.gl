@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-CHH1B1ea.js","assets/tag-C_bg62fD.js","assets/game_of_life-D7qHdFcv.js","assets/grid-CRz0h7Cy.js","assets/overview-DAxtMIw5.js","assets/pix_sim-C8eM_ObK.js","assets/symbol-DhRj9Lww.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-wW5YzV-P.js","assets/tag-C_bg62fD.js","assets/game_of_life-D7qHdFcv.js","assets/grid-BN-zN0nM.js","assets/overview-DAxtMIw5.js","assets/pix_sim-Cnwqq71S.js","assets/symbol-C53R7DZc.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
 true              &&(function polyfill() {
 	const relList = document.createElement("link").relList;
 	if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -29,7 +29,7 @@ true              &&(function polyfill() {
 	}
 }());
 
-const scriptRel = 'modulepreload';const assetsURL = function(dep) { return "/"+dep };const seen = {};const __vitePreload = function preload(baseModule, deps, importerUrl) {
+const scriptRel = 'modulepreload';const assetsURL = function(dep) { return "https://bigmistqke.github.io/view.gl/"+dep };const seen = {};const __vitePreload = function preload(baseModule, deps, importerUrl) {
 	let promise = Promise.resolve();
 	if (true               && deps && deps.length > 0) {
 		document.getElementsByTagName("link");
@@ -79,7 +79,7 @@ const scriptRel = 'modulepreload';const assetsURL = function(dep) { return "/"+d
 	});
 };
 
-const css = "/assets/index-C2N3u8wj.css";
+const css = "https://bigmistqke.github.io/view.gl/assets/index-C2N3u8wj.css";
 
 function cursor(event, callback) {
   const { promise, resolve } = Promise.withResolvers();
@@ -132,7 +132,7 @@ function createElement(tag, {
 
 const iframe = document.querySelector("iframe");
 const nav = document.querySelector("nav");
-const modules = /* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-CHH1B1ea.js'),true              ?__vite__mapDeps([0,1]):void 0),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-CRz0h7Cy.js'),true              ?__vite__mapDeps([3,1]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-C8eM_ObK.js'),true              ?__vite__mapDeps([5,1]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-DhRj9Lww.js'),true              ?__vite__mapDeps([6,1]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0)});
+const modules = /* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-wW5YzV-P.js'),true              ?__vite__mapDeps([0,1]):void 0),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-BN-zN0nM.js'),true              ?__vite__mapDeps([3,1]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-Cnwqq71S.js'),true              ?__vite__mapDeps([5,1]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-C53R7DZc.js'),true              ?__vite__mapDeps([6,1]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0)});
 Object.keys(modules).forEach((path2) => {
   const name = path2.split("/").pop().replace(".ts", "");
   createElement("button", {
