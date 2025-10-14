@@ -95,8 +95,8 @@ function load(name, url) {
     new Blob(
       [
         `<head>
-<link rel="stylesheet" href="${origin}${css}"></link>
-<script type="module" src="${origin}${url}"><\/script></head>`
+<link rel="stylesheet" href="${css}"></link>
+<script type="module" src="${url}"><\/script></head>`
       ],
       {
         type: "text/html"
