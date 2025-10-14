@@ -1,6 +1,6 @@
 import { view } from 'view.gl'
 import { attribute, compile, glsl, interleave, uniform } from 'view.gl/tag'
-import { createElement, cursor } from './utils'
+import { createElement, cursor } from '../utils'
 
 // Create canvas and WebGL context
 const canvas = createElement('canvas')

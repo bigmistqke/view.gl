@@ -48,11 +48,17 @@ export function createElement<T extends keyof HTMLElementTagNameMap>(
   {
     parentElement,
     ...options
-  }: Partial<Omit<HTMLElementTagNameMap[T], 'style'> & { style: string }> = {},
+  }: Partial<Omit<HTMLElementTagNameMap[T], 'style'> & { style: string }> &
+    Record<`data-${string}`, string> = {},
 ) {
   const element = document.createElement(tag)
+
   for (const key in options) {
-    element[key] = options[key]
+    if (key.startsWith('data-')) {
+      element.setAttribute(key, options[key])
+    } else {
+      element[key] = options[key]
+    }
   }
 
   ;(parentElement ?? document.body).appendChild(element)

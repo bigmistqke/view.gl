@@ -1,0 +1,12 @@
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0px;
+  height: 100%;
+  overscroll-behavior-y: none;
+}
+canvas {
+  margin: auto;
+  image-rendering: pixelated;
+}

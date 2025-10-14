@@ -2,6 +2,7 @@ import { FramebufferOptions } from 'src/types'
 import { createFramebuffer } from 'src/utils'
 import { view } from 'view.gl'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
+import { createElement } from '../utils'
 
 export const MATERIALS = {
   SAND: {
@@ -21,125 +22,139 @@ export const MATERIALS = {
 const MATERIAL_SIZE = Object.keys(MATERIALS).length
 
 let playing = false
-let currentMaterial = MATERIALS.SAND.id
-
-const canvas = document.createElement('canvas')
-const gl = canvas.getContext('webgl2', { antialias: false })!
-if (!gl) {
-  throw new Error('WebGL not supported')
-}
+let currentMaterial: (typeof MATERIALS)[keyof typeof MATERIALS]['id'] = MATERIALS.SAND.id
 
 // Create UI container
-const container = document.createElement('div')
-container.style.cssText = 'display: flex; flex-direction: column; align-items: center; gap: 10px;'
+const container = createElement('div', {
+  style: 'display: flex; flex-direction: column; align-items: center; gap: 10px;',
+  parentElement: document.body,
+})
 
 // Create material buttons
-const buttonContainer = document.createElement('div')
-buttonContainer.style.cssText = 'display: flex; gap: 10px; margin-bottom: 10px;'
+const buttonContainer = createElement('div', {
+  style: 'display: flex; gap: 10px; margin-bottom: 10px;',
+  parentElement: container,
+})
 
 Object.entries(MATERIALS).forEach(([name, material]) => {
-  const button = document.createElement('button')
-  button.textContent = name.toLowerCase()
-  button.style.cssText = `
-    padding: 5px 10px;
+  createElement('button', {
+    textContent: name.toLowerCase(),
+    'data-name': name,
+    'data-id': material.id.toString(),
+    style: `padding: 5px 10px;
     font-size: 14px;
-    font-family: times new roman;
+    font-family: arial;
     cursor: pointer;
+    color: black;
     background: ${
       currentMaterial === material.id
         ? `rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`
-        : 'transparent'
+        : `rgba(${material.color.map(c => Math.floor(c * 255)).join(',')}, 0.75)`
     };
     border-color: ${name === 'SAND' ? 'black' : 'white'};
     border: 2px solid rgb(${material.color.map(c => Math.floor(c * 255)).join(',')});
     border-radius: 2px;
-  `
-  button.onclick = () => {
-    currentMaterial = material.id
-    // Update all button borders
-    buttonContainer.querySelectorAll('button').forEach((btn, idx) => {
-      btn.style.background =
-        idx === material.id - 1
-          ? `rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`
-          : 'transparent'
-    })
-  }
-  buttonContainer.appendChild(button)
+  `,
+    onclick() {
+      currentMaterial = material.id
+      // Update all button borders
+      buttonContainer.querySelectorAll('button').forEach(btn => {
+        const name = btn.getAttribute('data-name') as keyof typeof MATERIALS
+        const id = btn.getAttribute('data-id')
+        if (id === currentMaterial.toString()) {
+          btn.style.background = `rgb(${MATERIALS[name].color
+            .map(c => Math.floor(c * 255))
+            .join(',')})`
+        } else {
+          btn.style.background = `rgba(${MATERIALS[name].color
+            .map(c => Math.floor(c * 255))
+            .join(',')}, 0.75)`
+        }
+      })
+    },
+    parentElement: buttonContainer,
+  })
 })
-
-container.appendChild(canvas)
-container.appendChild(buttonContainer)
-document.body.append(container)
 
 function spray() {
   return Math.floor(Math.random() * 8) * (Math.random() < 0.5 ? 1 : -1)
 }
 
-canvas.addEventListener('mousedown', event => {
-  const rect = canvas.getBoundingClientRect()
-  const controller = new AbortController()
-  // playing = false
-  window.addEventListener(
-    'mousemove',
-    event => {
-      const x = Math.floor((event.clientX - rect.left + spray()) * (canvas.width / rect.width))
-      const y = Math.floor((rect.bottom - event.clientY + spray()) * (canvas.height / rect.height))
+const canvas = createElement('canvas', {
+  parentElement: container,
+  onmousedown() {
+    const rect = canvas.getBoundingClientRect()
+    const controller = new AbortController()
+    // playing = false
+    window.addEventListener(
+      'mousemove',
+      event => {
+        const x = Math.floor((event.clientX - rect.left + spray()) * (canvas.width / rect.width))
+        const y = Math.floor(
+          (rect.bottom - event.clientY + spray()) * (canvas.height / rect.height),
+        )
 
-      const dimensions = [8, 8] as const
+        const dimensions = [8, 8] as const
 
-      // Encode selected material using bit encoding
-      const data = new Uint8Array(
-        (function* () {
-          for (let i = 0; i < dimensions[0] * dimensions[1]; i++) {
-            yield (currentMaterial & 1) * 255 // Red channel (bit 0)
-            yield ((currentMaterial >> 1) & 1) * 255 // Green channel (bit 1)
-            yield ((currentMaterial >> 2) & 1) * 255 // Blue channel (bit 2)
-            yield 255 // Alpha channel
-          }
-        })(),
-      )
+        // Encode selected material using bit encoding
+        const data = new Uint8Array(
+          (function* () {
+            for (let i = 0; i < dimensions[0] * dimensions[1]; i++) {
+              yield (currentMaterial & 1) * 255 // Red channel (bit 0)
+              yield ((currentMaterial >> 1) & 1) * 255 // Green channel (bit 1)
+              yield ((currentMaterial >> 2) & 1) * 255 // Blue channel (bit 2)
+              yield 255 // Alpha channel
+            }
+          })(),
+        )
 
-      // Update both read and write textures
-      gl.bindTexture(gl.TEXTURE_2D, read.texture)
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        Math.max(0, Math.min(WIDTH - dimensions[0], x)),
-        Math.max(0, Math.min(HEIGHT - dimensions[1], y)),
-        dimensions[0],
-        dimensions[1],
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        data,
-      )
+        // Update both read and write textures
+        gl.bindTexture(gl.TEXTURE_2D, read.texture)
+        gl.texSubImage2D(
+          gl.TEXTURE_2D,
+          0,
+          Math.max(0, Math.min(WIDTH - dimensions[0], x)),
+          Math.max(0, Math.min(HEIGHT - dimensions[1], y)),
+          dimensions[0],
+          dimensions[1],
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          data,
+        )
 
-      gl.bindTexture(gl.TEXTURE_2D, write.texture)
-      gl.texSubImage2D(
-        gl.TEXTURE_2D,
-        0,
-        Math.max(0, Math.min(WIDTH - dimensions[0], x)),
-        Math.max(0, Math.min(HEIGHT - dimensions[1], y)),
-        dimensions[0],
-        dimensions[1],
-        gl.RGBA,
-        gl.UNSIGNED_BYTE,
-        data,
-      )
+        gl.bindTexture(gl.TEXTURE_2D, write.texture)
+        gl.texSubImage2D(
+          gl.TEXTURE_2D,
+          0,
+          Math.max(0, Math.min(WIDTH - dimensions[0], x)),
+          Math.max(0, Math.min(HEIGHT - dimensions[1], y)),
+          dimensions[0],
+          dimensions[1],
+          gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          data,
+        )
 
-      render()
-    },
-    controller,
-  )
-  window.addEventListener(
-    'mouseup',
-    () => {
-      controller.abort()
-      // playing = true
-      // animate()
-    },
-    controller,
-  )
+        render()
+      },
+      controller,
+    )
+    window.addEventListener(
+      'mouseup',
+      () => {
+        controller.abort()
+        // playing = true
+        // animate()
+      },
+      controller,
+    )
+  },
 })
+
+const gl = canvas.getContext('webgl2', { antialias: false })!
+if (!gl) {
+  throw new Error('WebGL not supported')
+}
 
 canvas.width = 256 * 2
 canvas.height = 256 * 2
