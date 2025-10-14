@@ -14,11 +14,11 @@ Minimal library for WebGL shader resource management with type-safe GLSL templat
   - [Drawing Examples](#drawing-examples)
     - [Regular Drawing](#regular-drawing)
     - [Instanced Drawing](#instanced-drawing)
-  - [Features](#features)
 - [Tag](#tag)
   - [Basic Usage](#basic-usage-1)
   - [Template Features](#template-features)
   - [Tag Functions](#tag-functions)
+  - [Symbol Support in Templates](#symbol-support)
   - [Supported Types](#supported-types)
 - [Utils](#utils)
   - [WebGL Utilities](#webgl-utilities)
@@ -235,6 +235,7 @@ The tag system provides GLSL template literal support with embedded resource def
 - **Type Safety**: Automatic schema generation from template literals
 - **WebGL Version Support**: Automatic syntax conversion for WebGL1/2
 - **Interleaved Attributes**: Multi-attribute layout support
+- **Symbol Support**: Use JavaScript symbols as keys (see [View Features](#symbol-support))
 
 ### Tag Functions
 
@@ -274,6 +275,61 @@ const fragmentShader = glsl`
 `
 
 const { program, schema } = compile(gl, vertexShader, fragmentShader)
+```
+
+### Symbol Support
+
+Symbols are supported as keys for uniforms, attributes, and buffers. When interpolated in glsl templates, they're automatically converted to valid GLSL identifiers. This prevents naming collisions between different shader modules and enables private scoping of shader variables.
+
+```typescript
+const u_time = Symbol('time')
+const a_position = Symbol('position')
+
+const shader = glsl`
+  ${attribute.vec3(a_position)}
+  ${uniform.float(u_time)}
+  
+  void main() {
+    gl_Position = vec4(${a_position}, ${u_time});
+  }
+`
+```
+
+When manually constructing GLSL strings, use `toID()` to convert symbols to valid identifiers:
+
+```typescript
+import { createProgram, view, toID } from 'view.gl'
+
+const u_time = Symbol('time')
+const a_position = Symbol('position')
+
+const vertex = `
+  attribute vec3 ${toID(a_position)};
+  uniform float ${toID(u_time)};
+
+  void main() {
+    gl_Position = vec4(${toID(a_position)}, ${toID(u_time)});
+  }
+`
+
+const fragment = `
+  precision mediump float;
+  uniform float ${toID(u_time)};
+
+  void main() {
+    gl_FragColor = vec4(1.0, 1.0, 1.0, sin(${toID(u_time)}));
+  }
+`
+
+const program = createProgram(gl, vertex, fragment)
+
+const { attributes, uniforms } = view(gl, program, {
+  uniforms: { [u_time]: { kind: 'float' } },
+  attributes: { [a_position]: { kind: 'vec3' } },
+})
+
+attributes[a_position].set(vertexData)
+uniforms[u_time].set(performance.now())
 ```
 
 ## Utils
