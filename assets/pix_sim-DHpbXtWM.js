@@ -1,115 +1,91 @@
-import { FramebufferOptions } from 'src/types'
-import { createFramebuffer } from 'src/utils'
-import { view } from 'view.gl'
-import { attribute, compile, glsl, uniform } from 'view.gl/tag'
-import { createElement } from '../utils'
+import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile, v as view } from './tag-C_bg62fD.js';
+import { c as createElement } from './index-s6S1taKU.js';
 
-export const MATERIALS = {
+const MATERIALS = {
   SAND: {
-    color: [1, 0.8, 0], // Yellow sand
-    id: 1,
+    color: [1, 0.8, 0],
+    // Yellow sand
+    id: 1
   },
   WATER: {
-    color: [0, 0.5, 1], // Blue water
-    id: 2,
+    color: [0, 0.5, 1],
+    // Blue water
+    id: 2
   },
   STONE: {
-    color: [0.5, 0.5, 0.5], // Gray stone
-    id: 3,
-  },
-} as const
-
-const MATERIAL_SIZE = Object.keys(MATERIALS).length
-
-let playing = false
-let currentMaterial: (typeof MATERIALS)[keyof typeof MATERIALS]['id'] = MATERIALS.SAND.id
-
-// Create UI container
-const container = createElement('div', {
-  style: 'display: flex; flex-direction: column; align-items: center; gap: 10px;',
-  parentElement: document.body,
-})
-
-// Create material buttons
-const buttonContainer = createElement('div', {
-  style: 'display: flex; gap: 10px; margin-bottom: 10px;',
-  parentElement: container,
-})
-
+    color: [0.5, 0.5, 0.5],
+    // Gray stone
+    id: 3
+  }
+};
+const MATERIAL_SIZE = Object.keys(MATERIALS).length;
+let playing = false;
+let currentMaterial = MATERIALS.SAND.id;
+const container = createElement("div", {
+  style: "display: flex; flex-direction: column; align-items: center; gap: 10px;",
+  parentElement: document.body
+});
+const buttonContainer = createElement("div", {
+  style: "display: flex; gap: 10px; margin-bottom: 10px;",
+  parentElement: container
+});
 Object.entries(MATERIALS).forEach(([name, material]) => {
-  createElement('button', {
+  createElement("button", {
     textContent: name.toLowerCase(),
-    'data-name': name,
-    'data-id': material.id.toString(),
+    "data-name": name,
+    "data-id": material.id.toString(),
     style: `padding: 5px 10px;
     font-size: 14px;
     font-family: arial;
     cursor: pointer;
     color: black;
-    background: ${
-      currentMaterial === material.id
-        ? `rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`
-        : `rgba(${material.color.map(c => Math.floor(c * 255)).join(',')}, 0.75)`
-    };
-    border-color: ${name === 'SAND' ? 'black' : 'white'};
-    border: 2px solid rgb(${material.color.map(c => Math.floor(c * 255)).join(',')});
+    background: ${currentMaterial === material.id ? `rgb(${material.color.map((c) => Math.floor(c * 255)).join(",")})` : `rgba(${material.color.map((c) => Math.floor(c * 255)).join(",")}, 0.75)`};
+    border-color: ${name === "SAND" ? "black" : "white"};
+    border: 2px solid rgb(${material.color.map((c) => Math.floor(c * 255)).join(",")});
     border-radius: 2px;
   `,
     onclick() {
-      currentMaterial = material.id
-      // Update all button borders
-      buttonContainer.querySelectorAll('button').forEach(btn => {
-        const name = btn.getAttribute('data-name') as keyof typeof MATERIALS
-        const id = btn.getAttribute('data-id')
+      currentMaterial = material.id;
+      buttonContainer.querySelectorAll("button").forEach((btn) => {
+        const name2 = btn.getAttribute("data-name");
+        const id = btn.getAttribute("data-id");
         if (id === currentMaterial.toString()) {
-          btn.style.background = `rgb(${MATERIALS[name].color
-            .map(c => Math.floor(c * 255))
-            .join(',')})`
+          btn.style.background = `rgb(${MATERIALS[name2].color.map((c) => Math.floor(c * 255)).join(",")})`;
         } else {
-          btn.style.background = `rgba(${MATERIALS[name].color
-            .map(c => Math.floor(c * 255))
-            .join(',')}, 0.75)`
+          btn.style.background = `rgba(${MATERIALS[name2].color.map((c) => Math.floor(c * 255)).join(",")}, 0.75)`;
         }
-      })
+      });
     },
-    parentElement: buttonContainer,
-  })
-})
-
+    parentElement: buttonContainer
+  });
+});
 function spray() {
-  return Math.floor(Math.random() * 8) * (Math.random() < 0.5 ? 1 : -1)
+  return Math.floor(Math.random() * 8) * (Math.random() < 0.5 ? 1 : -1);
 }
-
-const canvas = createElement('canvas', {
+const canvas = createElement("canvas", {
   parentElement: container,
   onmousedown() {
-    const rect = canvas.getBoundingClientRect()
-    const controller = new AbortController()
-    // playing = false
+    const rect = canvas.getBoundingClientRect();
+    const controller = new AbortController();
     window.addEventListener(
-      'mousemove',
-      event => {
-        const x = Math.floor((event.clientX - rect.left + spray()) * (canvas.width / rect.width))
+      "mousemove",
+      (event) => {
+        const x = Math.floor((event.clientX - rect.left + spray()) * (canvas.width / rect.width));
         const y = Math.floor(
-          (rect.bottom - event.clientY + spray()) * (canvas.height / rect.height),
-        )
-
-        const dimensions = [8, 8] as const
-
-        // Encode selected material using bit encoding
+          (rect.bottom - event.clientY + spray()) * (canvas.height / rect.height)
+        );
+        const dimensions = [8, 8];
         const data = new Uint8Array(
-          (function* () {
+          function* () {
             for (let i = 0; i < dimensions[0] * dimensions[1]; i++) {
-              yield (currentMaterial & 1) * 255 // Red channel (bit 0)
-              yield ((currentMaterial >> 1) & 1) * 255 // Green channel (bit 1)
-              yield ((currentMaterial >> 2) & 1) * 255 // Blue channel (bit 2)
-              yield 255 // Alpha channel
+              yield (currentMaterial & 1) * 255;
+              yield (currentMaterial >> 1 & 1) * 255;
+              yield (currentMaterial >> 2 & 1) * 255;
+              yield 255;
             }
-          })(),
-        )
-
-        // Update both read and write textures
-        gl.bindTexture(gl.TEXTURE_2D, read.texture)
+          }()
+        );
+        gl.bindTexture(gl.TEXTURE_2D, read.texture);
         gl.texSubImage2D(
           gl.TEXTURE_2D,
           0,
@@ -119,10 +95,9 @@ const canvas = createElement('canvas', {
           dimensions[1],
           gl.RGBA,
           gl.UNSIGNED_BYTE,
-          data,
-        )
-
-        gl.bindTexture(gl.TEXTURE_2D, write.texture)
+          data
+        );
+        gl.bindTexture(gl.TEXTURE_2D, write.texture);
         gl.texSubImage2D(
           gl.TEXTURE_2D,
           0,
@@ -132,52 +107,41 @@ const canvas = createElement('canvas', {
           dimensions[1],
           gl.RGBA,
           gl.UNSIGNED_BYTE,
-          data,
-        )
-
-        render()
+          data
+        );
+        render();
       },
-      controller,
-    )
+      controller
+    );
     window.addEventListener(
-      'mouseup',
+      "mouseup",
       () => {
-        controller.abort()
-        // playing = true
-        // animate()
+        controller.abort();
       },
-      controller,
-    )
-  },
-})
-
-const gl = canvas.getContext('webgl2', { antialias: false })!
+      controller
+    );
+  }
+});
+const gl = canvas.getContext("webgl2", { antialias: false });
 if (!gl) {
-  throw new Error('WebGL not supported')
+  throw new Error("WebGL not supported");
 }
-
-canvas.width = 256 * 2
-canvas.height = 256 * 2
-const WIDTH = canvas.width
-const HEIGHT = canvas.height
-
-// --- Shaders ---
-
-// Vertex shader (simple fullscreen quad)
+canvas.width = 256 * 2;
+canvas.height = 256 * 2;
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
 const vertex = glsl`#version 300 es
-${attribute.vec2('a_vertex')}
+${attribute.vec2("a_vertex")}
 out vec2 v_uv;
 void main() {
   v_uv = a_vertex * 0.5 + 0.5;
   gl_Position = vec4(a_vertex, 0, 1);
-}`
-
-// Fragment shader for sand simulation step
+}`;
 const stepFragment = glsl`#version 300 es
 precision highp float;
 in vec2 v_uv;
-${uniform.sampler2D('u_texture')}
-${uniform.vec2('u_texelSize')}
+${uniform.sampler2D("u_texture")}
+${uniform.vec2("u_texelSize")}
 out vec4 fragColor;
 
 // Material constants (like enums)
@@ -426,14 +390,12 @@ void main() {
       // Unknown material - keep as is
       break;
   }
-}`
-
-// Fragment shader for rendering the state texture to screen
+}`;
 const renderFragment = glsl`#version 300 es
 precision mediump float;
 in vec2 v_uv;
-${uniform.sampler2D('u_texture')}
-${uniform.vec3('u_palette', { size: MATERIAL_SIZE })}
+${uniform.sampler2D("u_texture")}
+${uniform.vec3("u_palette", { size: MATERIAL_SIZE })}
 out vec4 fragColor;
 
 // Material constants (must match stepFragment)
@@ -458,107 +420,82 @@ void main() {
   } else {
     fragColor = vec4(1.0, 0.0, 1.0, 1.0); // Magenta for unknown materials
   }
-}`
-
-// --- Create programs ---
-const { program: stepProgram, schema: stepSchema } = compile(gl, vertex, stepFragment)
-const stepView = view(gl, stepProgram, stepSchema)
-
-const { program: renderProgram, schema: renderSchema } = compile(gl, vertex, renderFragment)
+}`;
+const { program: stepProgram, schema: stepSchema } = compile(gl, vertex, stepFragment);
+const stepView = view(gl, stepProgram, stepSchema);
+const { program: renderProgram, schema: renderSchema } = compile(gl, vertex, renderFragment);
 const renderView = view(gl, renderProgram, {
   ...renderSchema,
   attributes: {
     ...renderSchema.attributes,
     a_vertex: {
       ...renderSchema.attributes.a_vertex,
-      buffer: stepView.attributes.a_vertex.buffer,
-    },
-  },
-})
-
-gl.useProgram(renderProgram)
+      buffer: stepView.attributes.a_vertex.buffer
+    }
+  }
+});
+gl.useProgram(renderProgram);
 renderView.uniforms.u_palette.set(
-  new Float32Array(Object.values(MATERIALS).flatMap(({ color }) => color)),
-)
-
-gl.useProgram(stepProgram)
-// Setup quad
-stepView.attributes.a_vertex.set(new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]))
-
-// Initialize two framebuffers (with their respective texture) for ping-pong
+  new Float32Array(Object.values(MATERIALS).flatMap(({ color }) => color))
+);
+gl.useProgram(stepProgram);
+stepView.attributes.a_vertex.set(new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]));
 const framebufferOptions = {
-  attachment: 'color',
+  attachment: "color",
   width: WIDTH,
   height: HEIGHT,
-  type: 'UNSIGNED_BYTE',
-  magFilter: 'NEAREST',
-  minFilter: 'NEAREST',
-  internalFormat: 'RGBA',
-  format: 'RGBA',
-} satisfies FramebufferOptions
-
-let read = createFramebuffer(gl, framebufferOptions)
-let write = createFramebuffer(gl, framebufferOptions)
-
-// Initialize state texture (empty)
+  type: "UNSIGNED_BYTE",
+  magFilter: "NEAREST",
+  minFilter: "NEAREST",
+  internalFormat: "RGBA",
+  format: "RGBA"
+};
+let read = createFramebuffer(gl, framebufferOptions);
+let write = createFramebuffer(gl, framebufferOptions);
 const initData = new Uint8Array(
-  (function* () {
+  function* () {
     for (let i = 0; i < WIDTH * HEIGHT; i++) {
-      yield 0 // Red channel (material ID)
-      yield 0 // Green channel
-      yield 0 // Blue channel
-      yield 255 // Alpha channel
+      yield 0;
+      yield 0;
+      yield 0;
+      yield 255;
     }
-  })(),
-)
-
-gl.bindTexture(gl.TEXTURE_2D, read.texture)
-gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, initData)
-
-gl.bindTexture(gl.TEXTURE_2D, write.texture)
-gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, initData)
-
+  }()
+);
+gl.bindTexture(gl.TEXTURE_2D, read.texture);
+gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, initData);
+gl.bindTexture(gl.TEXTURE_2D, write.texture);
+gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, WIDTH, HEIGHT, gl.RGBA, gl.UNSIGNED_BYTE, initData);
 function step() {
-  // Run sand simulation step: render to write-framebuffer using read-texture as input
-  gl.bindFramebuffer(gl.FRAMEBUFFER, write.framebuffer)
-  gl.viewport(0, 0, WIDTH, HEIGHT)
-  gl.useProgram(stepProgram)
-
-  gl.activeTexture(gl.TEXTURE0)
-  gl.bindTexture(gl.TEXTURE_2D, read.texture)
-
-  stepView.uniforms.u_texture.set(0)
-  stepView.uniforms.u_texelSize.set(1 / WIDTH, 1 / HEIGHT)
-
-  stepView.attributes.a_vertex.bind()
-  gl.drawArrays(gl.TRIANGLES, 0, 6)
+  gl.bindFramebuffer(gl.FRAMEBUFFER, write.framebuffer);
+  gl.viewport(0, 0, WIDTH, HEIGHT);
+  gl.useProgram(stepProgram);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, read.texture);
+  stepView.uniforms.u_texture.set(0);
+  stepView.uniforms.u_texelSize.set(1 / WIDTH, 1 / HEIGHT);
+  stepView.attributes.a_vertex.bind();
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
-
 function render() {
-  // Render to screen
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
-  gl.useProgram(renderProgram)
-
-  gl.activeTexture(gl.TEXTURE0)
-  gl.bindTexture(gl.TEXTURE_2D, write.texture)
-
-  renderView.uniforms.u_texture.set(0)
-  renderView.attributes.a_vertex.bind()
-
-  gl.drawArrays(gl.TRIANGLES, 0, 6)
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+  gl.useProgram(renderProgram);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, write.texture);
+  renderView.uniforms.u_texture.set(0);
+  renderView.attributes.a_vertex.bind();
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
-
 function animate() {
   if (playing) {
-    step()
-    render()
-    // Swap read and write buffers
-    ;[read, write] = [write, read]
-    requestAnimationFrame(animate)
+    step();
+    render();
+    [read, write] = [write, read];
+    requestAnimationFrame(animate);
   }
 }
+playing = true;
+animate();
 
-// Start animation
-playing = true
-animate()
+export { MATERIALS };
