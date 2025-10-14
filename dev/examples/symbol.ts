@@ -36,29 +36,26 @@ void main() {
   gl_Position = vec4(position, 0.0,  1.0);
 }`
 
-const u_color_symbol = Symbol('a_color')
+const u_color = Symbol('color')
 
 const fragment = glsl`
 precision mediump float;
 
-${uniform.vec3(u_color_symbol)}
+${uniform.vec3(u_color)}
 
 void main() {
-  gl_FragColor = vec4(${u_color_symbol}, 1.0);
+  gl_FragColor = vec4(${u_color}, 1.0);
 }`
 
 const { program, schema } = compile(gl, vertex, fragment)
-const {
-  attributes: { a_vertex },
-  uniforms: { [u_color_symbol]: u_color, u_time },
-} = view(gl, program, schema)
+const { attributes, uniforms } = view(gl, program, schema)
 
 gl.useProgram(program)
 
-u_color.set(0, 255, 0)
+uniforms[u_color].set(0, 255, 0)
 
 // Create triangle vertex buffer
-a_vertex
+attributes.a_vertex
   .set(
     new Float32Array([
       // top
@@ -75,7 +72,7 @@ function draw(delta: number) {
   requestAnimationFrame(draw)
 
   // Set uniform
-  u_time.set(delta / 1_000)
+  uniforms.u_time.set(delta / 1_000)
 
   gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 }

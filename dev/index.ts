@@ -13,7 +13,7 @@ const urls = Object.fromEntries(
 )
 
 Object.entries(urls).forEach(([name, localUrl]) => {
-  createElement('a', {
+  createElement('button', {
     onclick(event) {
       event.preventDefault()
       load(name, localUrl)
