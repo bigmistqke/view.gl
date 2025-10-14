@@ -104,7 +104,7 @@ function load(name, url) {
     )
   );
 }
-const path = window.location.pathname.split("/").pop();
+const [, path, ...rest] = window.location.pathname.split("/");
 if (path && path in urls) {
   load(path, urls[path]);
 }
