@@ -111,12 +111,16 @@ export const kindToUniformFnName = <T extends UniformKind>(
 export const kindToSize = <T extends UniformKind>(kind: T): KIND_TO_SIZE_MAP[T] => {
   switch (kind[0]) {
     case 'm':
-      const [a, b] = kind.match(/\d+/g)!.map(Number)
-      return a * (b || a)
+      const [a, b] = kind.match(/\d+/g)!.map(Number) as [number, number?]
+      return (a * (b ?? a)) as KIND_TO_SIZE_MAP[T]
     case 'v':
-      return +kind.match(/\d/)![0]
+    case 'i':
+    case 'b':
+    case 'u':
+      const match = kind.match(/\d/) as [string] | undefined
+      return (match ? +match[0] : 1) as KIND_TO_SIZE_MAP[T]
     default:
-      return 1
+      return 1 as KIND_TO_SIZE_MAP[T]
   }
 }
 

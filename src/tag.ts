@@ -126,7 +126,9 @@ export function glsl<
         return resources
       }
       // @ts-expect-error
-      resources[`${resource.type}s`][resource.name] = resource
+      const { name, type, ...rest } = resource
+      // @ts-expect-error
+      resources[`${type}s`][name] = rest
       return resources
     },
     {
