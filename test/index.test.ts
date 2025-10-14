@@ -132,6 +132,71 @@ describe('view', () => {
     expect(result.interleavedAttributes).toBeDefined()
     expect(result.buffers).toBeDefined()
   })
+
+  it('should create a view with symbols for all component types', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_position_symbol = Symbol('a_position')
+    const data_symbol = Symbol('data')
+    const vertices_symbol = Symbol('vertices')
+    
+    const schema = {
+      uniforms: {
+        [u_time_symbol]: { kind: 'float' },
+      },
+      attributes: {
+        [a_position_symbol]: { kind: 'vec2' },
+      },
+      interleavedAttributes: {
+        [data_symbol]: {
+          layout: [{ key: 'a_uv', kind: 'vec2' }],
+          instanced: false,
+        },
+      },
+      buffers: {
+        [vertices_symbol]: {},
+      },
+    } satisfies ViewSchema
+
+    const result = view(gl, program, schema)
+
+    expect(result.uniforms![u_time_symbol]).toBeDefined()
+    expect(result.uniforms![u_time_symbol].set).toBeInstanceOf(Function)
+    
+    expect(result.attributes![a_position_symbol]).toBeDefined()
+    expect(result.attributes![a_position_symbol].bind).toBeInstanceOf(Function)
+    
+    expect(result.interleavedAttributes![data_symbol]).toBeDefined()
+    expect(result.interleavedAttributes![data_symbol].bind).toBeInstanceOf(Function)
+    
+    expect(result.buffers![vertices_symbol]).toBeDefined()
+    expect(result.buffers![vertices_symbol].bind).toBeInstanceOf(Function)
+  })
+
+  it('should create a view with mixed string and symbol keys', () => {
+    const u_color_symbol = Symbol('u_color')
+    const a_normal_symbol = Symbol('a_normal')
+    
+    const schema = {
+      uniforms: {
+        u_time: { kind: 'float' },
+        [u_color_symbol]: { kind: 'vec3' },
+      },
+      attributes: {
+        a_position: { kind: 'vec3' },
+        [a_normal_symbol]: { kind: 'vec3' },
+      },
+    } satisfies ViewSchema
+
+    const result = view(gl, program, schema)
+
+    // String keys
+    expect(result.uniforms!.u_time).toBeDefined()
+    expect(result.attributes!.a_position).toBeDefined()
+    
+    // Symbol keys
+    expect(result.uniforms![u_color_symbol]).toBeDefined()
+    expect(result.attributes![a_normal_symbol]).toBeDefined()
+  })
 })
 
 describe('uniformView', () => {
@@ -256,6 +321,45 @@ describe('uniformView', () => {
     // Test ivec4 uniform
     uniforms.u_ivec4.set(1, 2, 3, 4)
     expect(gl.uniform4i).toHaveBeenCalledWith(expect.any(Object), 1, 2, 3, 4)
+  })
+
+  it('should support symbols as uniform keys', () => {
+    const u_time_symbol = Symbol('u_time')
+    const u_color_symbol = Symbol('u_color')
+    
+    const schema = {
+      [u_time_symbol]: { kind: 'float' },
+      [u_color_symbol]: { kind: 'vec3' },
+    } satisfies UniformSchema
+
+    const uniforms = uniformView(gl, program, schema)
+
+    expect(uniforms[u_time_symbol]).toBeDefined()
+    expect(uniforms[u_time_symbol].set).toBeInstanceOf(Function)
+    expect(uniforms[u_color_symbol]).toBeDefined()
+    expect(uniforms[u_color_symbol].set).toBeInstanceOf(Function)
+
+    // Test that we can call the methods
+    uniforms[u_time_symbol].set(1.5)
+    expect(gl.uniform1f).toHaveBeenCalledWith(expect.any(Object), 1.5)
+
+    uniforms[u_color_symbol].set(1.0, 0.0, 0.5)
+    expect(gl.uniform3f).toHaveBeenCalledWith(expect.any(Object), 1.0, 0.0, 0.5)
+  })
+
+  it('should support symbols in uniform arrays', () => {
+    const u_positions_symbol = Symbol('u_positions')
+    
+    const schema = {
+      [u_positions_symbol]: { kind: 'vec3', size: 10 },
+    } satisfies UniformSchema
+
+    const uniforms = uniformView(gl, program, schema)
+
+    expect(uniforms[u_positions_symbol]).toBeDefined()
+    const data = new Float32Array(30)
+    uniforms[u_positions_symbol].set(data)
+    expect(gl.uniform3fv).toHaveBeenCalledWith(expect.any(Object), data)
   })
 })
 
@@ -429,6 +533,55 @@ describe('attributeView', () => {
     } satisfies AttributeSchema
 
     expect(() => attributeView(gl, program, schema)).toThrow("Attribute 'a_notFound' not found")
+  })
+
+  it('should support symbols as attribute keys', () => {
+    const a_position_symbol = Symbol('a_position')
+    const a_color_symbol = Symbol('a_color')
+    
+    const schema = {
+      [a_position_symbol]: { kind: 'vec2' },
+      [a_color_symbol]: { kind: 'vec4', instanced: true },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    expect(attributes[a_position_symbol]).toBeDefined()
+    expect(attributes[a_position_symbol].buffer).toBeDefined()
+    expect(attributes[a_position_symbol].bind).toBeInstanceOf(Function)
+    expect(attributes[a_position_symbol].set).toBeInstanceOf(Function)
+    expect(attributes[a_position_symbol].dispose).toBeInstanceOf(Function)
+
+    expect(attributes[a_color_symbol]).toBeDefined()
+    
+    // Test binding
+    attributes[a_position_symbol].bind()
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, attributes[a_position_symbol].buffer)
+    expect(gl.vertexAttribPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      2, // size for vec2
+      gl.FLOAT,
+      false,
+      0,
+      0,
+    )
+
+    // Test instanced attribute
+    attributes[a_color_symbol].bind()
+    expect(gl.vertexAttribDivisor).toHaveBeenCalledWith(expect.any(Number), 1)
+  })
+
+  it('should support symbols with custom buffers', () => {
+    const a_vertex_symbol = Symbol('a_vertex')
+    const customBuffer = gl.createBuffer()!
+    
+    const schema = {
+      [a_vertex_symbol]: { kind: 'vec3', buffer: customBuffer },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    expect(attributes[a_vertex_symbol].buffer).toBe(customBuffer)
   })
 })
 
@@ -676,6 +829,67 @@ describe('interleavedAttributeView', () => {
       "Attribute 'a_notFound' not found",
     )
   })
+
+  it('should support symbols as interleaved attribute keys', () => {
+    const data_symbol = Symbol('data')
+    const a_pos_symbol = Symbol('a_pos')
+    const a_col_symbol = Symbol('a_col')
+    
+    const schema = {
+      [data_symbol]: {
+        layout: [
+          { key: a_pos_symbol, kind: 'vec3' },
+          { key: a_col_symbol, kind: 'vec4' },
+        ],
+        instanced: false,
+      },
+    } satisfies InterleavedAttributeSchema
+
+    const interleavedAttributes = interleavedAttributeView(gl, program, schema)
+
+    expect(interleavedAttributes[data_symbol]).toBeDefined()
+    expect(interleavedAttributes[data_symbol].bind).toBeInstanceOf(Function)
+    expect(interleavedAttributes[data_symbol].unbind).toBeInstanceOf(Function)
+    expect(interleavedAttributes[data_symbol].dispose).toBeInstanceOf(Function)
+    expect(interleavedAttributes[data_symbol].set).toBeInstanceOf(Function)
+
+    // Test binding
+    interleavedAttributes[data_symbol].bind()
+    
+    // Should bind buffer and set up attributes
+    expect(gl.bindBuffer).toHaveBeenCalled()
+    expect(gl.enableVertexAttribArray).toHaveBeenCalledTimes(2)
+    expect(gl.vertexAttribPointer).toHaveBeenCalledTimes(2)
+  })
+
+  it('should support mixed string and symbol keys in interleaved layout', () => {
+    const vertexData = Symbol('vertexData')
+    const a_normal_symbol = Symbol('a_normal')
+    
+    const schema = {
+      [vertexData]: {
+        layout: [
+          { key: 'a_position', kind: 'vec3' },
+          { key: a_normal_symbol, kind: 'vec3' },
+          { key: 'a_uv', kind: 'vec2' },
+        ],
+        instanced: false,
+      },
+    } satisfies InterleavedAttributeSchema
+
+    const interleavedAttributes = interleavedAttributeView(gl, program, schema)
+
+    expect(interleavedAttributes[vertexData]).toBeDefined()
+    
+    // Test that it correctly calculates stride
+    interleavedAttributes[vertexData].bind()
+    
+    const calls = (gl.vertexAttribPointer as any).mock.calls
+    // All calls should have the same stride (3+3+2)*4 = 32 bytes
+    expect(calls[0][4]).toBe(32)
+    expect(calls[1][4]).toBe(32)
+    expect(calls[2][4]).toBe(32)
+  })
 })
 
 describe('bufferView', () => {
@@ -759,5 +973,45 @@ describe('bufferView', () => {
     controller.abort()
 
     expect(gl.deleteBuffer).toHaveBeenCalledTimes(3)
+  })
+
+  it('should support symbols as buffer keys', () => {
+    const vertices_symbol = Symbol('vertices')
+    const indices_symbol = Symbol('indices')
+    
+    const schema = {
+      [vertices_symbol]: { target: 'ARRAY_BUFFER' },
+      [indices_symbol]: { target: 'ELEMENT_ARRAY_BUFFER' },
+    } satisfies BufferSchema
+
+    const buffers = bufferView(gl, schema)
+
+    expect(buffers[vertices_symbol]).toBeDefined()
+    expect(buffers[vertices_symbol].bind).toBeInstanceOf(Function)
+    expect(buffers[vertices_symbol].dispose).toBeInstanceOf(Function)
+    expect(buffers[vertices_symbol].set).toBeInstanceOf(Function)
+
+    expect(buffers[indices_symbol]).toBeDefined()
+
+    // Test binding
+    buffers[vertices_symbol].bind()
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ARRAY_BUFFER, expect.any(Object))
+
+    buffers[indices_symbol].bind()
+    expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, expect.any(Object))
+  })
+
+  it('should support setting data with symbol keys', () => {
+    const data_symbol = Symbol('data')
+    
+    const schema = {
+      [data_symbol]: { target: 'ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
+    } satisfies BufferSchema
+
+    const buffers = bufferView(gl, schema)
+    const data = new Float32Array([1, 2, 3, 4, 5, 6])
+
+    buffers[data_symbol].set(data)
+    expect(gl.bufferData).toHaveBeenCalledWith(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
   })
 })

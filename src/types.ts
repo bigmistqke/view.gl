@@ -696,17 +696,17 @@ export interface AttributeTag<
 }
 
 export interface AttributeTagFn<TKey extends AttributeKind> {
-  <TName extends string, TOptions extends Omit<AttributeOptions, 'kind'>>(
+  <TName extends string | symbol, TOptions extends Omit<AttributeOptions, 'kind'>>(
     key: TName,
     options: TOptions,
   ): Prettify<AttributeTag<TName, TKey, TOptions['instanced']>>
-  <TName extends string>(name: TName): Prettify<AttributeTag<TName, TKey, undefined>>
+  <TName extends string | symbol>(key: TName): Prettify<AttributeTag<TName, TKey, undefined>>
 }
 
 export type InterleaveTag<
   TKey extends string | symbol = string | symbol,
-  TLayout extends Array<AttributeTag<string, AttributeKind, undefined>> = Array<
-    AttributeTag<string, AttributeKind, undefined>
+  TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>> = Array<
+    AttributeTag<string | symbol, AttributeKind, undefined>
   >,
   TOptions extends Omit<AttributeOptions, 'kind'> = Omit<AttributeOptions, 'kind'>,
 > = TOptions & {

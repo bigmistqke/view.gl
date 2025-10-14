@@ -65,16 +65,16 @@ export const attribute = new Proxy(
 
 export function interleave<
   const TKey extends string | symbol,
-  const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
+  const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
   const TOptions extends Omit<AttributeOptions, 'kind'>,
 >(key: TKey, layout: TLayout, instanced: TOptions): InterleaveTag<TKey, TLayout, TOptions>
 export function interleave<
   const TKey extends string | symbol,
-  const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
+  const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
 >(key: TKey, layout: TLayout): InterleaveTag<TKey, TLayout, { instanced: false }>
 export function interleave<
   const TKey extends string | symbol,
-  const TLayout extends Array<AttributeTag<string, AttributeKind, undefined>>,
+  const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
   const TOptions extends Omit<AttributeOptions, 'kind'>,
 >(key: TKey, layout: TLayout, { instanced, buffer }: Partial<TOptions> = {}) {
   return {
@@ -112,7 +112,7 @@ export function glsl<
         : hole.type === 'interleavedAttribute'
         ? hole.layout.reduce(
             (a, v) =>
-              v300 ? `${a}in ${v.kind} ${v.key};\n` : `${a}attribute ${v.kind} ${v.key};\n`,
+              v300 ? `${a}in ${v.kind} ${resolveKey(v.key)};\n` : `${a}attribute ${v.kind} ${resolveKey(v.key)};\n`,
             '',
           )
         : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole

@@ -391,6 +391,233 @@ describe('glsl', () => {
   })
 })
 
+describe('glsl with symbols', () => {
+  it('should support symbols in uniform tags', () => {
+    const u_time_symbol = Symbol('u_time')
+    const u_color_symbol = Symbol('u_color')
+
+    const shader = glsl`
+      precision mediump float;
+      
+      ${uniform.float(u_time_symbol)}
+      ${uniform.vec3(u_color_symbol)}
+      
+      void main() {
+        gl_FragColor = vec4(${u_color_symbol} * ${u_time_symbol}, 1.0);
+      }`
+
+    expect(shader.uniforms[u_time_symbol]).toEqual({ kind: 'float' })
+    expect(shader.uniforms[u_color_symbol]).toEqual({ kind: 'vec3' })
+    expect(shader.template).toContain('uniform float VIEW_GL_ALIAS_')
+    expect(shader.template).toContain('uniform vec3 VIEW_GL_ALIAS_')
+  })
+
+  it('should support symbols in attribute tags', () => {
+    const a_position_symbol = Symbol('a_position')
+    const a_color_symbol = Symbol('a_color')
+
+    const shader = glsl`
+      ${attribute.vec2(a_position_symbol)}
+      ${attribute.vec4(a_color_symbol, { instanced: true })}
+      
+      void main() {
+        gl_Position = vec4(${a_position_symbol}, 0.0, 1.0);
+      }`
+
+    expect(shader.attributes[a_position_symbol]).toEqual({ kind: 'vec2' })
+    expect(shader.attributes[a_color_symbol]).toEqual({ kind: 'vec4', instanced: true })
+    expect(shader.template).toContain('attribute vec2 VIEW_GL_ALIAS_')
+    expect(shader.template).toContain('attribute vec4 VIEW_GL_ALIAS_')
+  })
+
+  it('should support symbols in interleaved attribute tags', () => {
+    const data_symbol = Symbol('data')
+    const a_pos_symbol = Symbol('a_pos')
+    const a_col_symbol = Symbol('a_col')
+
+    const shader = glsl`
+      ${interleave(data_symbol, [attribute.vec3(a_pos_symbol), attribute.vec4(a_col_symbol)])}
+      
+      void main() {
+        gl_Position = vec4(${a_pos_symbol}, 1.0);
+      }`
+
+    expect(shader.interleavedAttributes[data_symbol]).toEqual({
+      layout: [
+        { key: a_pos_symbol, kind: 'vec3' },
+        { key: a_col_symbol, kind: 'vec4' },
+      ],
+      instanced: false,
+    })
+    expect(shader.template).toContain('attribute vec3 VIEW_GL_ALIAS_')
+    expect(shader.template).toContain('attribute vec4 VIEW_GL_ALIAS_')
+  })
+
+  it('should support mixed string and symbol keys', () => {
+    const u_color_symbol = Symbol('u_color')
+    const a_normal_symbol = Symbol('a_normal')
+
+    const shader = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec3(u_color_symbol)}
+      ${attribute.vec3('a_position')}
+      ${attribute.vec3(a_normal_symbol)}
+      
+      void main() {
+        gl_Position = vec4(a_position + ${a_normal_symbol}, u_time);
+        gl_FragColor = vec4(${u_color_symbol}, 1.0);
+      }`
+
+    expect(shader.uniforms.u_time).toEqual({ kind: 'float' })
+    expect(shader.uniforms[u_color_symbol]).toEqual({ kind: 'vec3' })
+    expect(shader.attributes.a_position).toEqual({ kind: 'vec3' })
+    expect(shader.attributes[a_normal_symbol]).toEqual({ kind: 'vec3' })
+
+    expect(shader.template).toContain('uniform float u_time')
+    expect(shader.template).toContain('uniform vec3 VIEW_GL_ALIAS_')
+    expect(shader.template).toContain('attribute vec3 a_position')
+    expect(shader.template).toContain('attribute vec3 VIEW_GL_ALIAS_')
+  })
+
+  it('should support symbols in array uniforms', () => {
+    const u_positions_symbol = Symbol('u_positions')
+
+    const shader = glsl`
+      ${uniform.vec3(u_positions_symbol, { size: 10 })}
+      
+      void main() {
+        gl_FragColor = vec4(${u_positions_symbol}[0], 1.0);
+      }`
+
+    expect(shader.uniforms[u_positions_symbol]).toEqual({ kind: 'vec3', size: 10 })
+    expect(shader.template).toContain('uniform vec3 VIEW_GL_ALIAS_')
+    expect(shader.template).toContain('[10];')
+  })
+
+  it('should preserve symbol identity across multiple uses', () => {
+    const u_shared_symbol = Symbol('u_shared')
+
+    const shader1 = glsl`${uniform.float(u_shared_symbol)}`
+    const shader2 = glsl`${uniform.float(u_shared_symbol)}`
+
+    // Both should generate the same alias
+    const alias1 = shader1.template.match(/VIEW_GL_ALIAS_\d+/)?.[0]
+    const alias2 = shader2.template.match(/VIEW_GL_ALIAS_\d+/)?.[0]
+
+    expect(alias1).toBe(alias2)
+  })
+
+  it('should support symbols in WebGL 2.0 shaders', () => {
+    const u_matrix_symbol = Symbol('u_matrix')
+    const a_vertex_symbol = Symbol('a_vertex')
+
+    const shader = glsl`#version 300 es
+      precision mediump float;
+      
+      ${uniform.mat4(u_matrix_symbol)}
+      ${attribute.vec3(a_vertex_symbol)}
+      
+      void main() {
+        gl_Position = ${u_matrix_symbol} * vec4(${a_vertex_symbol}, 1.0);
+      }`
+
+    expect(shader.template).toContain('uniform mat4 VIEW_GL_ALIAS_')
+    expect(shader.template).toContain('in vec3 VIEW_GL_ALIAS_') // WebGL2 uses 'in' instead of 'attribute'
+  })
+
+  it('should handle symbol interpolation in template', () => {
+    const color_symbol = Symbol('color')
+
+    const shader = glsl`
+      void main() {
+        vec3 ${color_symbol} = vec3(1.0, 0.0, 0.0);
+        gl_FragColor = vec4(${color_symbol}, 1.0);
+      }`
+
+    // Symbol used directly in template should be converted to alias
+    expect(shader.template).toMatch(/vec3 VIEW_GL_ALIAS_\d+ = vec3/)
+    expect(shader.template).toMatch(/vec4\(VIEW_GL_ALIAS_\d+, 1\.0\)/)
+  })
+})
+
+describe('compile with symbols', () => {
+  let gl: GL
+  let mockProgram: WebGLProgram
+
+  beforeEach(() => {
+    gl = createMockGL()
+    mockProgram = gl.createProgram()!
+
+    // Mock shader creation and compilation
+    gl.createShader = vi.fn(type => ({ type } as WebGLShader))
+    gl.shaderSource = vi.fn()
+    gl.compileShader = vi.fn()
+    gl.getShaderParameter = vi.fn(() => true)
+    gl.attachShader = vi.fn()
+    gl.linkProgram = vi.fn()
+    gl.getProgramParameter = vi.fn(() => true)
+    gl.createProgram = vi.fn(() => mockProgram)
+  })
+
+  it('should compile shaders with symbol keys', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_position_symbol = Symbol('a_position')
+
+    const vertex = glsl`
+      ${attribute.vec2(a_position_symbol)}
+      ${uniform.float(u_time_symbol)}
+      
+      void main() {
+        gl_Position = vec4(${a_position_symbol}, 0.0, 1.0);
+      }`
+
+    const fragment = glsl`
+      precision mediump float;
+      
+      ${uniform.float(u_time_symbol)}
+      
+      void main() {
+        gl_FragColor = vec4(${u_time_symbol}, 0.0, 0.0, 1.0);
+      }`
+
+    const { program, schema } = compile(gl, vertex, fragment)
+
+    expect(program).toBe(mockProgram)
+    expect(schema.uniforms[u_time_symbol]).toEqual({ kind: 'float' })
+    expect(schema.attributes[a_position_symbol]).toEqual({ kind: 'vec2' })
+  })
+
+  it('should merge symbols from vertex and fragment shaders', () => {
+    const u_shared_symbol = Symbol('u_shared')
+    const u_vertex_only = Symbol('u_vertex_only')
+    const u_fragment_only = Symbol('u_fragment_only')
+
+    const vertex = glsl`
+      ${uniform.float(u_shared_symbol)}
+      ${uniform.vec2(u_vertex_only)}
+      
+      void main() {
+        gl_Position = vec4(${u_vertex_only}, ${u_shared_symbol}, 1.0);
+      }`
+
+    const fragment = glsl`
+      precision mediump float;
+      
+      ${uniform.float(u_shared_symbol)}
+      ${uniform.vec3(u_fragment_only)}
+      
+      void main() {
+        gl_FragColor = vec4(${u_fragment_only}, ${u_shared_symbol});
+      }`
+
+    const { schema } = compile(gl, vertex, fragment)
+
+    expect(schema.uniforms[u_shared_symbol]).toEqual({ kind: 'float' })
+    expect(schema.uniforms[u_vertex_only]).toEqual({ kind: 'vec2' })
+    expect(schema.uniforms[u_fragment_only]).toEqual({ kind: 'vec3' })
+  })
+})
+
 describe('compile', () => {
   let gl: GL
   let mockProgram: WebGLProgram
