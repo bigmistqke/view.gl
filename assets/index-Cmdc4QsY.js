@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["./bezier-A-yLw3Pf.js","./tag-C_bg62fD.js","./game_of_life-D7qHdFcv.js","./grid-Bns-X0mM.js","./overview-DAxtMIw5.js","./pix_sim-DHpbXtWM.js","./symbol-BAp8qKxF.js","./tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-CHH1B1ea.js","assets/tag-C_bg62fD.js","assets/game_of_life-D7qHdFcv.js","assets/grid-CRz0h7Cy.js","assets/overview-DAxtMIw5.js","assets/pix_sim-C8eM_ObK.js","assets/symbol-DhRj9Lww.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
 true              &&(function polyfill() {
 	const relList = document.createElement("link").relList;
 	if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -29,10 +29,10 @@ true              &&(function polyfill() {
 	}
 }());
 
-const scriptRel = 'modulepreload';const assetsURL = function(dep, importerUrl) { return new URL(dep, importerUrl).href };const seen = {};const __vitePreload = function preload(baseModule, deps, importerUrl) {
+const scriptRel = 'modulepreload';const assetsURL = function(dep) { return "/"+dep };const seen = {};const __vitePreload = function preload(baseModule, deps, importerUrl) {
 	let promise = Promise.resolve();
 	if (true               && deps && deps.length > 0) {
-		const links = document.getElementsByTagName("link");
+		document.getElementsByTagName("link");
 		const cspNonceMeta = document.querySelector("meta[property=csp-nonce]");
 		const cspNonce = cspNonceMeta?.nonce || cspNonceMeta?.getAttribute("nonce");
 		function allSettled(promises$2) {
@@ -45,17 +45,12 @@ const scriptRel = 'modulepreload';const assetsURL = function(dep, importerUrl) {
 			}))));
 		}
 		promise = allSettled(deps.map((dep) => {
-			dep = assetsURL(dep, importerUrl);
+			dep = assetsURL(dep);
 			if (dep in seen) return;
 			seen[dep] = true;
 			const isCss = dep.endsWith(".css");
 			const cssSelector = isCss ? "[rel=\"stylesheet\"]" : "";
-			const isBaseRelative = !!importerUrl;
-			if (isBaseRelative) for (let i$1 = links.length - 1; i$1 >= 0; i$1--) {
-				const link$1 = links[i$1];
-				if (link$1.href === dep && (!isCss || link$1.rel === "stylesheet")) return;
-			}
-			else if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
+			if (document.querySelector(`link[href="${dep}"]${cssSelector}`)) return;
 			const link = document.createElement("link");
 			link.rel = isCss ? "stylesheet" : scriptRel;
 			if (!isCss) link.as = "script";
@@ -84,7 +79,7 @@ const scriptRel = 'modulepreload';const assetsURL = function(dep, importerUrl) {
 	});
 };
 
-const css = ""+new URL('index-C2N3u8wj.css', import.meta.url).href+"";
+const css = "/assets/index-C2N3u8wj.css";
 
 function cursor(event, callback) {
   const { promise, resolve } = Promise.withResolvers();
@@ -137,7 +132,7 @@ function createElement(tag, {
 
 const iframe = document.querySelector("iframe");
 const nav = document.querySelector("nav");
-const modules = /* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-A-yLw3Pf.js'),true              ?__vite__mapDeps([0,1]):void 0,import.meta.url),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0,import.meta.url),"./examples/grid.ts": () => __vitePreload(() => import('./grid-Bns-X0mM.js'),true              ?__vite__mapDeps([3,1]):void 0,import.meta.url),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0,import.meta.url),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-DHpbXtWM.js'),true              ?__vite__mapDeps([5,1]):void 0,import.meta.url),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-BAp8qKxF.js'),true              ?__vite__mapDeps([6,1]):void 0,import.meta.url),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0,import.meta.url)});
+const modules = /* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-CHH1B1ea.js'),true              ?__vite__mapDeps([0,1]):void 0),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-CRz0h7Cy.js'),true              ?__vite__mapDeps([3,1]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-C8eM_ObK.js'),true              ?__vite__mapDeps([5,1]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-DhRj9Lww.js'),true              ?__vite__mapDeps([6,1]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0)});
 Object.keys(modules).forEach((path2) => {
   const name = path2.split("/").pop().replace(".ts", "");
   createElement("button", {
@@ -150,9 +145,8 @@ Object.keys(modules).forEach((path2) => {
     "data-route": name
   });
 });
-async function load(name, modulePath) {
+function load(name, modulePath) {
   history.pushState(name, "", name);
-  URL.revokeObjectURL(iframe.src);
   nav.querySelectorAll("button").forEach((button) => {
     if (button.getAttribute("data-route") === name) {
       button.classList.add("active");
@@ -160,14 +154,21 @@ async function load(name, modulePath) {
       button.classList.remove("active");
     }
   });
-  await modules[modulePath]?.();
-  const script = `import('${modulePath}')`;
+  const baseUrl = new URL("./", window.location.href).href;
+  const moduleUrl = new URL(modulePath.slice(2), baseUrl).href;
   iframe.src = URL.createObjectURL(
     new Blob(
       [
-        `<head>
+        `<!DOCTYPE html>
+<html>
+<head>
 <link rel="stylesheet" href="${css}"></link>
-<script type="module">${script}<\/script></head>`
+<script type="module">
+import('${moduleUrl}')
+<\/script>
+</head>
+<body></body>
+</html>`
       ],
       {
         type: "text/html"

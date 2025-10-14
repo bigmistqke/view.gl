@@ -1,5 +1,5 @@
 import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile, v as view } from './tag-C_bg62fD.js';
-import { c as createElement } from './index-s6S1taKU.js';
+import { c as createElement } from './index-Cmdc4QsY.js';
 
 const MATERIALS = {
   SAND: {
