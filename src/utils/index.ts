@@ -264,25 +264,28 @@ export function createFramebuffer(gl: GL, { attachment, texture, ...options }: F
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                   Resolve Key                                  */
+/*                                  Create Upsert                                 */
 /*                                                                                */
 /**********************************************************************************/
 
-const SYMBOL_MAP = new WeakMap<Symbol, string>()
-const PREFIX = 'VIEW_GL_ALIAS'
-let index = 0
+type UpsertMapKind<T, U> = Map<T, U> | WeakMap<T, U>
 
-export function resolveKey(key: string | number | symbol) {
-  if (typeof key === 'string') {
-    return key
-  }
-  if (typeof key === 'symbol') {
-    const cached = SYMBOL_MAP.get(key)
-    if (cached) return cached
-    const id = `${PREFIX}_${index}`
-    index++
-    SYMBOL_MAP.set(key, id)
-    return id
-  }
-  return key.toString()
+export function createUpsertMap<T extends UpsertMapKind<any, any> = Map<any, any>>(
+  constructor?: new () => T,
+) {
+  const map = new (constructor ?? Map)() as T
+  return Object.assign(map, {
+    getOrInsert(
+      key: T extends UpsertMapKind<infer U, any> ? U : never,
+      value: T extends UpsertMapKind<any, infer U> ? () => U : never,
+    ) {
+      let result = map.get(key)
+      if (result) {
+        return result
+      }
+      result = value()
+      map.set(key, result)
+      return result
+    },
+  })
 }

@@ -17,13 +17,34 @@ import type {
 } from './types'
 import {
   assertedNotNullish,
+  createUpsertMap,
   isMatKind,
   isSamplerKind,
   kindToSize,
   kindToUniformFnName,
   ObjectUtils,
-  resolveKey,
 } from './utils'
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                      To ID                                     */
+/*                                                                                */
+/**********************************************************************************/
+
+let index = 0
+const PREFIX = 'VIEW_GL_ALIAS'
+
+const SYMBOL_MAP = createUpsertMap(WeakMap<symbol, string>)
+
+export function toID(key: string | number | symbol) {
+  if (typeof key === 'string') {
+    return key
+  }
+  if (typeof key === 'symbol') {
+    return SYMBOL_MAP.getOrInsert(key, () => `${PREFIX}_${index++}`)
+  }
+  return key.toString()
+}
 
 /**********************************************************************************/
 /*                                                                                */
@@ -61,7 +82,7 @@ export function uniformView<T extends UniformSchema>(
   schema: T,
 ): InferUniformView<T> {
   return ObjectUtils.map(schema, ({ kind, size }, key) => {
-    const name = resolveKey(key)
+    const name = toID(key)
 
     const location = gl.getUniformLocation(program, name)
 
@@ -132,7 +153,7 @@ export function attributeView<T extends AttributeSchema>(
       { kind, instanced, buffer = assertedNotNullish(gl.createBuffer()) },
       key,
     ): AttributeMethods => {
-      const name = resolveKey(key)
+      const name = toID(key)
 
       const location = gl.getAttribLocation(program, name)
       if (location < 0) {
@@ -186,7 +207,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
 
     // Calculate layout information
     const handles = layout.map(layout => {
-      const name = resolveKey(layout.key)
+      const name = toID(layout.key)
 
       const location = gl.getAttribLocation(program, name)
 
