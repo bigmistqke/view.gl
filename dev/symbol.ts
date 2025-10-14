@@ -40,7 +40,7 @@ void main() {
 const { program, schema } = compile(gl, vertex, fragment)
 const {
   attributes: { a_vertex },
-  uniforms: { [u_color_symbol]: u_color },
+  uniforms: { [u_color_symbol]: u_color, u_time },
 } = view(gl, program, schema)
 
 gl.useProgram(program)
@@ -65,7 +65,7 @@ requestAnimationFrame(function draw(delta: number) {
   requestAnimationFrame(draw)
 
   // Set uniform
-  uniforms.u_time.set(delta / 1_000)
+  u_time.set(delta / 1_000)
 
   gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 })
