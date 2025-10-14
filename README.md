@@ -33,7 +33,7 @@ The view system provides type-safe WebGL resource management for uniforms, attri
 ### Basic Usage
 
 ```typescript
-import { view } from 'view.gl'
+import { view } from '@bigmistqke/view.gl'
 
 const resources = view(gl, program, {
   uniforms: {
@@ -63,7 +63,12 @@ resources.attributes.position.bind()
 Each view type can be imported individually too.
 
 ```typescript
-import { uniformView, attributeView, interleavedAttributeView, bufferView } from 'view.gl'
+import {
+  uniformView,
+  attributeView,
+  interleavedAttributeView,
+  bufferView,
+} from '@bigmistqke/view.gl'
 ```
 
 #### uniformView
@@ -71,7 +76,7 @@ import { uniformView, attributeView, interleavedAttributeView, bufferView } from
 Manages shader uniform variables.
 
 ```typescript
-import { uniformView } from 'view.gl'
+import { uniformView } from '@bigmistqke/view.gl'
 
 const uniforms = uniformView(gl, program, {
   time: { kind: 'float' },
@@ -94,7 +99,7 @@ uniforms.transform.set(transformMatrix)
 Manages vertex attributes with buffer creation, binding, and data management.
 
 ```typescript
-import { attributeView } from 'view.gl'
+import { attributeView } from '@bigmistqke/view.gl'
 
 const attributes = attributeView(gl, program, {
   position: { kind: 'vec3' },
@@ -125,20 +130,20 @@ gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 Manages interleaved vertex data with automatic stride/offset calculation and VAO optimization.
 
 ```typescript
-import { interleavedAttributeView } from 'view.gl'
+import { interleavedAttributeView } from '@bigmistqke/view.gl'
 
 const interleavedAttributes = interleavedAttributeView(gl, program, {
   vertexData: {
     layout: [
-      { name: 'position', kind: 'vec3' },
-      { name: 'normal', kind: 'vec3' },
-      { name: 'uv', kind: 'vec2' },
+      { key: 'position', kind: 'vec3' },
+      { key: 'normal', kind: 'vec3' },
+      { key: 'uv', kind: 'vec2' },
     ],
   },
   instanceData: {
     layout: [
-      { name: 'instancePos', kind: 'vec2' },
-      { name: 'instanceColor', kind: 'vec3' },
+      { key: 'instancePos', kind: 'vec2' },
+      { key: 'instanceColor', kind: 'vec3' },
     ],
     instanced: true,
   },
@@ -163,7 +168,7 @@ interleavedAttributes.instanceData.bind()
 Manages generic WebGL buffers for various uses.
 
 ```typescript
-import { bufferView } from 'view.gl'
+import { bufferView } from '@bigmistqke/view.gl'
 
 const buffers = bufferView(gl, {
   indices: { target: 'ELEMENT_ARRAY_BUFFER' },
@@ -248,7 +253,7 @@ The tag system provides GLSL template literal support with embedded resource def
 ### Basic Usage
 
 ```typescript
-import { glsl, uniform, attribute, compile } from 'view.gl/tag'
+import { glsl, uniform, attribute, compile } from '@bigmistqke/view.gl/tag'
 
 const vertexShader = glsl`
   ${attribute.vec3('position')}
@@ -343,7 +348,7 @@ WebGL utilities and helper functions.
 Creates and links a WebGL program from vertex and fragment shader sources.
 
 ```typescript
-import { createProgram } from 'view.gl/utils'
+import { createProgram } from '@bigmistqke/view.gl/utils'
 
 const program = createProgram(gl, vertexShaderSource, fragmentShaderSource)
 ```
@@ -353,7 +358,7 @@ const program = createProgram(gl, vertexShaderSource, fragmentShaderSource)
 Creates a WebGL texture with specified parameters.
 
 ```typescript
-import { createTexture } from 'view.gl/utils'
+import { createTexture } from '@bigmistqke/view.gl/utils'
 
 const texture = createTexture(
   gl,
@@ -379,7 +384,7 @@ Automatically validates WebGL2-only formats and provides fallbacks for WebGL1.
 Creates a framebuffer with attached texture for render-to-texture operations.
 
 ```typescript
-import { createFramebuffer } from 'view.gl/utils'
+import { createFramebuffer } from '@bigmistqke/view.gl/utils'
 
 const { framebuffer, texture } = createFramebuffer(gl, {
   width: 512,
