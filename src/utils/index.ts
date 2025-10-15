@@ -71,26 +71,26 @@ export const kindToUniformFnName = <T extends UniformKind>(
   switch (kind[0]) {
     // mat
     case 'm':
-      return 'Matrix' + kind.slice(3) + 'fv'
+      return ('Matrix' + kind.slice(3) + 'fv') as KIND_TO_UNIFORM_FN_NAME_MAP[T]
     // sampler/booleans/integer
     case 's':
     case 'b':
     case 'i':
-      return (kind.match(/\d/)?.[0] ?? '1') + 'i'
+      return ((kind.match(/\d/)?.[0] ?? '1') + 'i') as KIND_TO_UNIFORM_FN_NAME_MAP[T]
     // unsigned integers
     case 'u':
-      return (kind[4] || '1') + 'ui'
+      return ((kind[4] || '1') + 'ui') as KIND_TO_UNIFORM_FN_NAME_MAP[T]
     // vec
     case 'v':
-      return kind[3] + 'f'
+      return (kind[3] + 'f') as KIND_TO_UNIFORM_FN_NAME_MAP[T]
     default:
       switch (kind) {
         case 'float':
-          return '1f'
+          return '1f' as KIND_TO_UNIFORM_FN_NAME_MAP[T]
         case 'uint':
-          return '1ui'
+          return '1ui' as KIND_TO_UNIFORM_FN_NAME_MAP[T]
         default:
-          return '1i'
+          return '1i' as KIND_TO_UNIFORM_FN_NAME_MAP[T]
       }
   }
 }
@@ -167,7 +167,7 @@ export function createTexture(
     if (!(name in gl)) {
       throw new Error(`Attempted to create webgl2-only texture (${name}) in webgl1`)
     }
-    return gl[name]
+    return gl[name as keyof typeof gl] as any
   }
 
   gl.bindTexture(gl[target], texture)
@@ -268,7 +268,7 @@ export function createFramebuffer(gl: GL, { attachment, texture, ...options }: F
 /*                                                                                */
 /**********************************************************************************/
 
-type UpsertMapKind<T, U> = Map<T, U> | WeakMap<T, U>
+type UpsertMapKind<T, U> = Map<T, U> | (T extends WeakKey ? WeakMap<T, U> : never)
 
 export function createUpsertMap<T extends UpsertMapKind<any, any> = Map<any, any>>(
   constructor?: new () => T,

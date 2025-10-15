@@ -22,7 +22,8 @@
     "prepublish": "pnpm build",
     "test": "vitest --run",
     "test:coverage": "vitest run --coverage",
-    "test:ui": "vitest --ui"
+    "test:ui": "vitest --ui",
+    "lint:types": "tsc --noEmit"
   },
   "keywords": [
     "WebGL"
