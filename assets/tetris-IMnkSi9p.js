@@ -333,6 +333,7 @@ function createTetris() {
     if (checkCollision()) {
       next();
     }
+    render();
     animationTimeout.set(animate, 1e3);
   }
   setTimeout(animate, 1e3);

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-DuLTb2d1.js","assets/tag-C_bg62fD.js","assets/utils-CvCgsM08.js","assets/game_of_life-D7qHdFcv.js","assets/grid-Ie22U_9K.js","assets/overview-DAxtMIw5.js","assets/pix_sim-DIhzM_vu.js","assets/symbol-BouRL-Ni.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-DuLTb2d1.js","assets/tag-C_bg62fD.js","assets/utils-CvCgsM08.js","assets/game_of_life-D7qHdFcv.js","assets/grid-Ie22U_9K.js","assets/overview-DAxtMIw5.js","assets/pix_sim-DIhzM_vu.js","assets/symbol-BouRL-Ni.js","assets/tetris-IMnkSi9p.js"])))=>i.map(i=>d[i]);
 import { c as createElement } from './utils-CvCgsM08.js';
 
 const scriptRel = 'modulepreload';const assetsURL = function(dep) { return "https://bigmistqke.github.io/view.gl/"+dep };const seen = {};const __vitePreload = function preload(baseModule, deps, importerUrl) {
@@ -57,7 +57,7 @@ const iframe = document.querySelector("iframe");
 const nav = document.querySelector("nav");
 createElement("h3", { innerText: "Examples", parentElement: nav });
 const urls = Object.fromEntries(
-  Object.entries(/* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-DuLTb2d1.js'),true              ?__vite__mapDeps([0,1,2]):void 0),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([3,1]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-Ie22U_9K.js'),true              ?__vite__mapDeps([4,1,2]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([5,1]):void 0),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-DIhzM_vu.js'),true              ?__vite__mapDeps([6,1,2]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-BouRL-Ni.js'),true              ?__vite__mapDeps([7,1,2]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([8,1]):void 0)})).map(([key, entry]) => {
+  Object.entries(/* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-DuLTb2d1.js'),true              ?__vite__mapDeps([0,1,2]):void 0),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([3,1]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-Ie22U_9K.js'),true              ?__vite__mapDeps([4,1,2]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([5,1]):void 0),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-DIhzM_vu.js'),true              ?__vite__mapDeps([6,1,2]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-BouRL-Ni.js'),true              ?__vite__mapDeps([7,1,2]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-IMnkSi9p.js'),true              ?__vite__mapDeps([8,1]):void 0)})).map(([key, entry]) => {
     const name = key.split("/").pop().replace(".ts", "");
     const chunk = entry.toString().match(/import\(['"]([^'"]+)['"]/)[1];
     return [name, chunk];
@@ -88,7 +88,7 @@ function load(name, url) {
     new Blob(
       [
         `<head>
-<link rel="stylesheet" href="${css}"></link>
+<link rel="stylesheet" href="${new URL(css, import.meta.url).href}"></link>
 <script type="module" src="${new URL(url, import.meta.url).href}"><\/script></head>`
       ],
       {
