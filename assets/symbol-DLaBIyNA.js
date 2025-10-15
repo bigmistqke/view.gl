@@ -1,5 +1,5 @@
 import { a as attribute, u as uniform, g as glsl, c as compile, v as view } from './tag-C_bg62fD.js';
-import { c as createElement } from './index-zW-4Qd1o.js';
+import { c as createElement } from './index-C1PtUQeR.js';
 
 const canvas = createElement("canvas", {
   width: window.innerWidth,

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-wW5YzV-P.js","assets/tag-C_bg62fD.js","assets/game_of_life-D7qHdFcv.js","assets/grid-BN-zN0nM.js","assets/overview-DAxtMIw5.js","assets/pix_sim-Cnwqq71S.js","assets/symbol-C53R7DZc.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-DyGwmUxE.js","assets/tag-C_bg62fD.js","assets/game_of_life-D7qHdFcv.js","assets/grid-CQuVnmzJ.js","assets/overview-DAxtMIw5.js","assets/pix_sim-BWjGEv0s.js","assets/symbol-DLaBIyNA.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
 true              &&(function polyfill() {
 	const relList = document.createElement("link").relList;
 	if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -130,45 +130,46 @@ function createElement(tag, {
   return element;
 }
 
+const BASE = location.origin;
 const iframe = document.querySelector("iframe");
 const nav = document.querySelector("nav");
-const modules = /* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-wW5YzV-P.js'),true              ?__vite__mapDeps([0,1]):void 0),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-BN-zN0nM.js'),true              ?__vite__mapDeps([3,1]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-Cnwqq71S.js'),true              ?__vite__mapDeps([5,1]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-C53R7DZc.js'),true              ?__vite__mapDeps([6,1]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0)});
-Object.keys(modules).forEach((path2) => {
-  const name = path2.split("/").pop().replace(".ts", "");
+const urls = Object.fromEntries(
+  Object.entries(/* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-DyGwmUxE.js'),true              ?__vite__mapDeps([0,1]):void 0).then(m => m["default"]),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0).then(m => m["default"]),"./examples/grid.ts": () => __vitePreload(() => import('./grid-CQuVnmzJ.js'),true              ?__vite__mapDeps([3,1]):void 0).then(m => m["default"]),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0).then(m => m["default"]),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-BWjGEv0s.js'),true              ?__vite__mapDeps([5,1]):void 0).then(m => m["default"]),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-DLaBIyNA.js'),true              ?__vite__mapDeps([6,1]):void 0).then(m => m["default"]),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0).then(m => m["default"])})).map(
+    ([key, entry]) => {
+      const name = key.split("/").pop().replace(".ts", "");
+      const chunk = entry.toString().match(/import\(['"]([^'"]+)['"]/)[1];
+      return [name, chunk];
+    }
+  )
+);
+Object.entries(urls).forEach(([name, localUrl]) => {
   createElement("button", {
     onclick(event) {
       event.preventDefault();
-      load(name, path2);
+      load(name, localUrl);
     },
     innerHTML: name,
     parentElement: nav,
     "data-route": name
   });
 });
-function load(name, modulePath) {
-  history.pushState(name, "", name);
-  nav.querySelectorAll("button").forEach((button) => {
+function load(name, url) {
+  history.pushState(url, "", name);
+  URL.revokeObjectURL(iframe.src);
+  nav.querySelectorAll("a").forEach((button) => {
+    console.log(button);
     if (button.getAttribute("data-route") === name) {
       button.classList.add("active");
     } else {
       button.classList.remove("active");
     }
   });
-  const baseUrl = new URL("./", window.location.href).href;
-  const moduleUrl = new URL(modulePath.slice(2), baseUrl).href;
   iframe.src = URL.createObjectURL(
     new Blob(
       [
-        `<!DOCTYPE html>
-<html>
-<head>
-<link rel="stylesheet" href="${css}"></link>
-<script type="module">
-import('${moduleUrl}')
-<\/script>
-</head>
-<body></body>
-</html>`
+        `<head>
+<link rel="stylesheet" href="${BASE}${css}"></link>
+<script type="module" src="${BASE}${url}"></script></head>`
       ],
       {
         type: "text/html"
@@ -176,11 +177,9 @@ import('${moduleUrl}')
     )
   );
 }
-const [, path] = window.location.pathname.split("/");
-const examples = Object.keys(modules).map((p) => p.split("/").pop().replace(".ts", ""));
-if (path && examples.includes(path)) {
-  const modulePath = Object.keys(modules).find((p) => p.includes(path));
-  load(path, modulePath);
+const [, path, ...rest] = window.location.pathname.split("/");
+if (path && path in urls) {
+  load(path, urls[path]);
 }
 
 export { cursor as a, createElement as c };
