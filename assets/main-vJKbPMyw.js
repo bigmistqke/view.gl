@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-DyGwmUxE.js","assets/tag-C_bg62fD.js","assets/game_of_life-D7qHdFcv.js","assets/grid-CQuVnmzJ.js","assets/overview-DAxtMIw5.js","assets/pix_sim-BWjGEv0s.js","assets/symbol-DLaBIyNA.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-QKENPMHV.js","assets/tag-C_bg62fD.js","assets/game_of_life-D7qHdFcv.js","assets/grid-D3zEtOrA.js","assets/overview-DAxtMIw5.js","assets/pix_sim-5fQ_of5e.js","assets/symbol-BXIjfFtT.js","assets/tetris-BUgook-1.js"])))=>i.map(i=>d[i]);
 true              &&(function polyfill() {
 	const relList = document.createElement("link").relList;
 	if (relList && relList.supports && relList.supports("modulepreload")) return;
@@ -130,11 +130,10 @@ function createElement(tag, {
   return element;
 }
 
-const BASE = location.origin;
 const iframe = document.querySelector("iframe");
 const nav = document.querySelector("nav");
 const urls = Object.fromEntries(
-  Object.entries(/* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-DyGwmUxE.js'),true              ?__vite__mapDeps([0,1]):void 0).then(m => m["default"]),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0).then(m => m["default"]),"./examples/grid.ts": () => __vitePreload(() => import('./grid-CQuVnmzJ.js'),true              ?__vite__mapDeps([3,1]):void 0).then(m => m["default"]),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0).then(m => m["default"]),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-BWjGEv0s.js'),true              ?__vite__mapDeps([5,1]):void 0).then(m => m["default"]),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-DLaBIyNA.js'),true              ?__vite__mapDeps([6,1]):void 0).then(m => m["default"]),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0).then(m => m["default"])})).map(
+  Object.entries(/* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-QKENPMHV.js'),true              ?__vite__mapDeps([0,1]):void 0).then(m => m["default"]),"./examples/game_of_life.ts": () => __vitePreload(() => import('./game_of_life-D7qHdFcv.js'),true              ?__vite__mapDeps([2,1]):void 0).then(m => m["default"]),"./examples/grid.ts": () => __vitePreload(() => import('./grid-D3zEtOrA.js'),true              ?__vite__mapDeps([3,1]):void 0).then(m => m["default"]),"./examples/overview.ts": () => __vitePreload(() => import('./overview-DAxtMIw5.js'),true              ?__vite__mapDeps([4,1]):void 0).then(m => m["default"]),"./examples/pix_sim.ts": () => __vitePreload(() => import('./pix_sim-5fQ_of5e.js'),true              ?__vite__mapDeps([5,1]):void 0).then(m => m["default"]),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-BXIjfFtT.js'),true              ?__vite__mapDeps([6,1]):void 0).then(m => m["default"]),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-BUgook-1.js'),true              ?__vite__mapDeps([7,1]):void 0).then(m => m["default"])})).map(
     ([key, entry]) => {
       const name = key.split("/").pop().replace(".ts", "");
       const chunk = entry.toString().match(/import\(['"]([^'"]+)['"]/)[1];
@@ -154,7 +153,7 @@ Object.entries(urls).forEach(([name, localUrl]) => {
   });
 });
 function load(name, url) {
-  history.pushState(url, "", name);
+  window.location.hash = name;
   URL.revokeObjectURL(iframe.src);
   nav.querySelectorAll("a").forEach((button) => {
     console.log(button);
@@ -168,8 +167,8 @@ function load(name, url) {
     new Blob(
       [
         `<head>
-<link rel="stylesheet" href="${BASE}${css}"></link>
-<script type="module" src="${BASE}${url}"></script></head>`
+<link rel="stylesheet" href="${css}"></link>
+<script type="module" src="${new URL(url, import.meta.url).href}"></script></head>`
       ],
       {
         type: "text/html"
@@ -177,9 +176,15 @@ function load(name, url) {
     )
   );
 }
-const [, path, ...rest] = window.location.pathname.split("/");
-if (path && path in urls) {
-  load(path, urls[path]);
+const hash = window.location.hash.slice(1);
+if (hash && hash in urls) {
+  load(hash, urls[hash]);
 }
+window.addEventListener("hashchange", () => {
+  const hash2 = window.location.hash.slice(1);
+  if (hash2 && hash2 in urls) {
+    load(hash2, urls[hash2]);
+  }
+});
 
 export { cursor as a, createElement as c };

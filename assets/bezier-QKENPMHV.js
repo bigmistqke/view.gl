@@ -1,5 +1,5 @@
 import { i as interleave, u as uniform, a as attribute, g as glsl, c as compile, v as view } from './tag-C_bg62fD.js';
-import { c as createElement, a as cursor } from './index-C1PtUQeR.js';
+import { c as createElement, a as cursor } from './main-vJKbPMyw.js';
 
 const canvas = createElement("canvas");
 canvas.width = window.innerWidth;
