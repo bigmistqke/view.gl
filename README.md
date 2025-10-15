@@ -19,12 +19,10 @@ Minimal library for WebGL shader resource management with type-safe GLSL templat
   - [Template Features](#template-features)
   - [Tag Functions](#tag-functions)
   - [Symbol Support in Templates](#symbol-support)
-  - [Supported Types](#supported-types)
 - [Utils](#utils)
-  - [WebGL Utilities](#webgl-utilities)
-  - [Type Utilities](#type-utilities)
-  - [Type Guards](#type-guards)
-  - [Resource Creation](#resource-creation)
+  - [Create Program](#createprogram)
+  - [Create Texture](#createtexture)
+  - [Create Frame Buffer](#createframebuffer)
 
 ## View
 
@@ -35,7 +33,7 @@ The view system provides type-safe WebGL resource management for uniforms, attri
 ```typescript
 import { view } from '@bigmistqke/view.gl'
 
-const resources = view(gl, program, {
+const { uniforms, attributes } = view(gl, program, {
   uniforms: {
     time: { kind: 'float' },
     resolution: { kind: 'vec2' },
@@ -50,12 +48,12 @@ const resources = view(gl, program, {
 })
 
 // Type-safe uniform setting
-resources.uniforms.time.set(performance.now())
-resources.uniforms.resolution.set(canvas.width, canvas.height)
+uniforms.time.set(performance.now())
+uniforms.resolution.set(canvas.width, canvas.height)
 
 // Attribute management
-resources.attributes.position.set(positionData)
-resources.attributes.position.bind()
+attributes.position.set(positionData)
+attributes.position.bind()
 ```
 
 ### View Types
@@ -226,13 +224,13 @@ gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, instanceCount)
 ### Features
 
 - **Automatic Resource Management**: Buffer creation, disposal, and cleanup
-- **Type Safety**: Compile-time type checking for uniform and attribute operations
+- **Type Safety**: type checking for uniform and attribute operations
 - **WebGL Extensions**: Automatic fallback for instanced arrays and vertex array objects
-- **Memory Management**: AbortSignal support for resource cleanup
+- **Memory Management**: AbortSignal support for scheduling cleanup of resources
 
 ## Tag
 
-The tag system provides GLSL template literal support with embedded resource definitions.
+The tag system provides GLSL template literal support with embedded schema definitions.
 
 ### Template Features
 
@@ -339,11 +337,9 @@ uniforms[u_time].set(performance.now())
 
 ## Utils
 
-WebGL utilities and helper functions.
+WebGL utilities.
 
-### WebGL Utilities
-
-#### createProgram
+### createProgram
 
 Creates and links a WebGL program from vertex and fragment shader sources.
 
@@ -353,7 +349,7 @@ import { createProgram } from '@bigmistqke/view.gl/utils'
 const program = createProgram(gl, vertexShaderSource, fragmentShaderSource)
 ```
 
-#### createTexture
+### createTexture
 
 Creates a WebGL texture with specified parameters.
 
@@ -379,7 +375,7 @@ const texture = createTexture(
 
 Automatically validates WebGL2-only formats and provides fallbacks for WebGL1.
 
-#### createFramebuffer
+### createFramebuffer
 
 Creates a framebuffer with attached texture for render-to-texture operations.
 
