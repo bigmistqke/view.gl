@@ -1,34 +1,61 @@
-# view.gl
+# 👁️ @bigmistqke/view.gl
 
-Minimal library for WebGL shader resource management with type-safe GLSL template literals.
+🔧 Minimal library for managing WebGL uniforms / (interleaved) attributes / buffers / ...
+
+- schema-based resource management [`view-gl`](#️-viewgl)
+- type-safe GLSL template literals to compose schemas [`view-gl/tag`](#️-viewgltag)
 
 ## Table of Contents
 
-- [View](#view)
-  - [Basic Usage](#basic-usage)
-  - [View Types](#view-types)
-    - [uniformView](#uniformview)
-    - [attributeView](#attributeview)
-    - [interleavedAttributeView](#interleavedattributeview)
-    - [bufferView](#bufferview)
-  - [Drawing Examples](#drawing-examples)
-    - [Regular Drawing](#regular-drawing)
-    - [Instanced Drawing](#instanced-drawing)
-- [Tag](#tag)
-  - [Basic Usage](#basic-usage-1)
-  - [Template Features](#template-features)
-  - [Tag Functions](#tag-functions)
-  - [Symbol Support in Templates](#symbol-support)
-- [Utils](#utils)
-  - [Create Program](#createprogram)
-  - [Create Texture](#createtexture)
-  - [Create Frame Buffer](#createframebuffer)
+- [📦 Install](#-install)
+- [👁️ view.gl](#️-viewgl)
+  - [🚀 Basic Usage](#-basic-usage)
+  - [👀 View Types](#-view-types)
+    - [🎯 uniformView](#-uniformview)
+    - [📝 attributeView](#-attributeview)
+    - [🔗 interleavedAttributeView](#-interleavedattributeview)
+    - [🗂️ bufferView](#-bufferview)
+  - [🎨 Drawing Examples](#-drawing-examples)
+    - [🖼️ Regular Drawing](#-regular-drawing)
+    - [📱 Instanced Drawing](#-instanced-drawing)
+- [🏷️ view.gl/tag](#️-viewgltag)
+  - [🚀 Basic Usage](#-basic-usage-1)
+  - [📝 Template Features](#-template-features)
+  - [⚙️ Tag Functions](#️-tag-functions)
+    - [🎯 uniform[kind](name, options?)](#-uniformkindname-options)
+    - [📝 attribute[kind](name, options?)](#-attributekindname-options)
+    - [🔗 interleave(name, layout, options?)](#-interleavename-layout-options)
+    - [📝 glsl](#-glsl)
+    - [⚙️ compile(gl, vertex, fragment)](#️-compilegl-vertex-fragment)
+  - [🔣 Symbol Support](#-symbol-support)
+- [🛠️ Utils](#️-utils)
+  - [🏗️ createProgram](#️-createprogram)
+  - [🖼️ createTexture](#️-createtexture)
+  - [🖥️ createFramebuffer](#️-createframebuffer)
 
-## View
+## 📦 Install
+
+```shell
+npm install @bigmistqke/view.gl
+```
+
+```shell
+pnpm add @bigmistqke/view.gl
+```
+
+```shell
+yarn add @bigmistqke/view.gl
+```
+
+```shell
+bun add @bigmistqke/view.gl
+```
+
+## 👁️ view.gl
 
 The view system provides type-safe WebGL resource management for uniforms, attributes, and buffers.
 
-### Basic Usage
+### 🚀 Basic Usage
 
 ```typescript
 import { view } from '@bigmistqke/view.gl'
@@ -56,7 +83,7 @@ attributes.position.set(positionData)
 attributes.position.bind()
 ```
 
-### View Types
+### 👀 View Types
 
 Each view type can be imported individually too.
 
@@ -69,7 +96,7 @@ import {
 } from '@bigmistqke/view.gl'
 ```
 
-#### uniformView
+#### 🎯 uniformView
 
 Manages shader uniform variables.
 
@@ -92,7 +119,7 @@ uniforms.transform.set(transformMatrix)
 - `kind`: GLSL type (`'float'`, `'vec2'`, `'mat4'`, `'sampler2D'`, etc.)
 - `size`: Array size (optional) - converts uniform to array type with Float32Array setter
 
-#### attributeView
+#### 📝 attributeView
 
 Manages vertex attributes with buffer creation, binding, and data management.
 
@@ -123,7 +150,7 @@ gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 - `instanced`: Boolean - enables instanced rendering with `vertexAttribDivisor`
 - `buffer`: Custom WebGLBuffer (optional) - uses auto-created buffer if not provided
 
-#### interleavedAttributeView
+#### 🔗 interleavedAttributeView
 
 Manages interleaved vertex data with automatic stride/offset calculation and VAO optimization.
 
@@ -161,7 +188,7 @@ interleavedAttributes.instanceData.bind()
 - `layout`: Array of attribute definitions with `name` and `kind`
 - `instanced`: Boolean - applies `vertexAttribDivisor` to all attributes in layout
 
-#### bufferView
+#### 🗂️ bufferView
 
 Manages generic WebGL buffers for various uses.
 
@@ -185,9 +212,9 @@ buffers.data.bind()
 - `target`: Buffer target (`'ARRAY_BUFFER'`, `'ELEMENT_ARRAY_BUFFER'`)
 - `usage`: Usage pattern (`'STATIC_DRAW'`, `'DYNAMIC_DRAW'`, `'STREAM_DRAW'`)
 
-### Drawing Examples
+### 🎨 Drawing Examples
 
-#### Regular Drawing
+#### 🖼️ Regular Drawing
 
 ```typescript
 const { attributes } = view(gl, program, {
@@ -203,7 +230,7 @@ attributes.uv.set(uvData).bind()
 gl.drawArrays(gl.TRIANGLES, 0, vertexCount)
 ```
 
-#### Instanced Drawing
+#### 📱 Instanced Drawing
 
 ```typescript
 const { attributes } = view(gl, program, {
@@ -221,34 +248,11 @@ attributes.instanceColor.set(instanceColors).bind()
 gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, instanceCount)
 ```
 
-### Features
-
-- **Automatic Resource Management**: Buffer creation, disposal, and cleanup
-- **Type Safety**: type checking for uniform and attribute operations
-- **WebGL Extensions**: Automatic fallback for instanced arrays and vertex array objects
-- **Memory Management**: AbortSignal support for scheduling cleanup of resources
-
-## Tag
+## 🏷️ view.gl/tag
 
 The tag system provides GLSL template literal support with embedded schema definitions.
 
-### Template Features
-
-- **Embedded Resources**: Define uniforms and attributes directly in GLSL
-- **Type Safety**: Automatic schema generation from template literals
-- **WebGL Version Support**: Automatic syntax conversion for WebGL1/2
-- **Interleaved Attributes**: Multi-attribute layout support
-- **Symbol Support**: Use JavaScript symbols as keys (see [View Features](#symbol-support))
-
-### Tag Functions
-
-- `uniform[kind](name, options?)`: Define uniform variables
-- `attribute[kind](name, options?)`: Define vertex attributes
-- `interleave(name, layout, options?)`: Define interleaved attribute layouts
-- `glsl`: Template literal processor for GLSL code
-- `compile(gl, vertex, fragment)`: Compile shaders and extract schema
-
-### Basic Usage
+### 🚀 Basic Usage
 
 ```typescript
 import { glsl, uniform, attribute, compile } from '@bigmistqke/view.gl/tag'
@@ -280,7 +284,145 @@ const fragmentShader = glsl`
 const { program, schema } = compile(gl, vertexShader, fragmentShader)
 ```
 
-### Symbol Support
+### 📝 Template Features
+
+- **Embedded Resources**: Define uniforms and attributes directly in GLSL
+- **Type Safety**: Automatic schema generation from template literals
+- **WebGL Version Support**: Automatic syntax conversion for WebGL1/2
+- **Interleaved Attributes**: Multi-attribute layout support
+- **Symbol Support**: Use JavaScript symbols as keys (see [Symbol Support](#-symbol-support))
+
+### ⚙️ Tag Functions
+
+#### 🎯 uniform[kind](name, options?)
+
+Define uniform variables in GLSL templates. Supports all GLSL uniform types.
+
+```typescript
+import { uniform, glsl } from '@bigmistqke/view.gl/tag'
+
+const shader = glsl`
+  ${uniform.float('time')}
+  ${uniform.vec2('resolution')}
+  ${uniform.mat4('projection')}
+  ${uniform.sampler2D('texture')}
+  ${uniform.vec3('lights', { size: 8 })} // Array uniform: vec3[8]
+  
+  void main() {
+    // Use uniforms in shader code
+  }
+`
+```
+
+**Available types**: `float`, `int`, `bool`, `vec2`, `vec3`, `vec4`, `ivec2`, `ivec3`, `ivec4`, `bvec2`, `bvec3`, `bvec4`, `mat2`, `mat3`, `mat4`, `sampler2D`, `samplerCube`
+
+**Options**:
+
+- `size`: Array size (creates array uniform with Float32Array setter)
+
+#### 📝 attribute[kind](name, options?)
+
+Define vertex attributes in GLSL templates.
+
+```typescript
+import { attribute, glsl } from '@bigmistqke/view.gl/tag'
+
+const vertexShader = glsl`
+  ${attribute.vec3('position')}
+  ${attribute.vec2('uv')}
+  ${attribute.vec3('normal')}
+  ${attribute.vec2('instanceOffset', { instanced: true })}
+  
+  void main() {
+    gl_Position = vec4(position + vec3(instanceOffset, 0.0), 1.0);
+  }
+`
+```
+
+**Available types**: `float`, `vec2`, `vec3`, `vec4`, `mat2`, `mat3`, `mat4`, `int`, `ivec2`, `ivec3`, `ivec4`
+
+**Options**:
+
+- `instanced`: Boolean - enables instanced rendering with `vertexAttribDivisor`
+- `buffer`: Custom WebGLBuffer (optional)
+
+#### 🔗 interleave(name, layout, options?)
+
+Define interleaved attribute layouts for efficient vertex data.
+
+```typescript
+import { interleave, glsl } from '@bigmistqke/view.gl/tag'
+
+const vertexShader = glsl`
+  ${interleave('vertexData', [
+    { key: 'position', kind: 'vec3' },
+    { key: 'normal', kind: 'vec3' },
+    { key: 'uv', kind: 'vec2' },
+  ])}
+  
+  ${interleave(
+    'instanceData',
+    [
+      { key: 'instancePos', kind: 'vec2' },
+      { key: 'instanceColor', kind: 'vec3' },
+    ],
+    { instanced: true },
+  )}
+  
+  void main() {
+    gl_Position = vec4(position + vec3(instancePos, 0.0), 1.0);
+  }
+`
+```
+
+**Layout format**:
+
+- `key`: Attribute name
+- `kind`: GLSL type
+
+**Options**:
+
+- `instanced`: Boolean - applies `vertexAttribDivisor` to all attributes
+
+#### 📝 glsl
+
+Template literal processor that handles GLSL code and embedded resources.
+
+```typescript
+import { glsl } from '@bigmistqke/view.gl/tag'
+
+const shader = glsl`
+  precision mediump float;
+  
+  ${uniform.vec2('resolution')}
+  
+  void main() {
+    vec2 uv = gl_FragCoord.xy / resolution;
+    gl_FragColor = vec4(uv, 0.0, 1.0);
+  }
+`
+```
+
+#### ⚙️ compile(gl, vertex, fragment)
+
+Compiles shaders and extracts schema from embedded resources.
+
+```typescript
+import { compile } from '@bigmistqke/view.gl/tag'
+
+const { program, schema } = compile(gl, vertexShader, fragmentShader)
+
+// Schema contains extracted uniforms, attributes, and buffers
+console.log(schema.uniforms) // { time: { kind: 'float' }, ... }
+console.log(schema.attributes) // { position: { kind: 'vec3' }, ... }
+```
+
+**Returns**:
+
+- `program`: Compiled WebGL program
+- `schema`: Extracted resource definitions for use with `view()`
+
+### 🔣 Symbol Support
 
 Symbols are supported as keys for uniforms, attributes, and buffers. When interpolated in glsl templates, they're automatically converted to valid GLSL identifiers. This prevents naming collisions between different shader modules and enables private scoping of shader variables.
 
@@ -297,6 +439,9 @@ const shader = glsl`
   }
 `
 ```
+
+<details>
+<summary>Usage with vanilla view.gl</summary>
 
 When manually constructing GLSL strings, use `toID()` to convert symbols to valid identifiers:
 
@@ -335,11 +480,11 @@ attributes[a_position].set(vertexData)
 uniforms[u_time].set(performance.now())
 ```
 
-## Utils
+</details>
 
-WebGL utilities.
+## 🛠️ Utils
 
-### createProgram
+### 🏗️ createProgram
 
 Creates and links a WebGL program from vertex and fragment shader sources.
 
@@ -349,7 +494,7 @@ import { createProgram } from '@bigmistqke/view.gl/utils'
 const program = createProgram(gl, vertexShaderSource, fragmentShaderSource)
 ```
 
-### createTexture
+### 🖼️ createTexture
 
 Creates a WebGL texture with specified parameters.
 
@@ -375,7 +520,7 @@ const texture = createTexture(
 
 Automatically validates WebGL2-only formats and provides fallbacks for WebGL1.
 
-### createFramebuffer
+### 🖥️ createFramebuffer
 
 Creates a framebuffer with attached texture for render-to-texture operations.
 
