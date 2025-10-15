@@ -10,6 +10,7 @@
 - [📦 Install](#-install)
 - [👁️ view.gl](#️-viewgl)
   - [🚀 Basic Usage](#-basic-usage)
+  - [👁️ view](#️-view)
   - [👀 View Types](#-view-types)
     - [🎯 uniformView](#-uniformview)
     - [📝 attributeView](#-attributeview)
@@ -53,7 +54,7 @@ bun add @bigmistqke/view.gl
 
 ## 👁️ view.gl
 
-The view system provides type-safe WebGL resource management for uniforms, attributes, and buffers.
+The view system provides type-safe WebGL resource management for uniforms, attributes, and buffers
 
 ### 🚀 Basic Usage
 
@@ -82,6 +83,51 @@ uniforms.resolution.set(canvas.width, canvas.height)
 attributes.position.set(positionData)
 attributes.position.bind()
 ```
+
+### 👁️ view
+
+The `view()` function is the main entry point for managing WebGL resources. It takes a WebGL context, program, and schema to create type-safe resource managers.
+
+```typescript
+import { view } from '@bigmistqke/view.gl'
+
+const { uniforms, attributes, buffers } = view(gl, program, schema)
+```
+
+**Parameters:**
+
+- `gl`: WebGL rendering context (`WebGLRenderingContext` or `WebGL2RenderingContext`)
+- `program`: Compiled WebGL program
+- `schema`: Resource definitions object
+
+**Schema Structure:**
+
+```typescript
+const schema = {
+  uniforms: {
+    // Uniform definitions
+    time: { kind: 'float' },
+    transform: { kind: 'mat4' },
+    lights: { kind: 'vec3', size: 8 }, // Array uniform
+  },
+  attributes: {
+    // Attribute definitions
+    position: { kind: 'vec3' },
+    instanceOffset: { kind: 'vec2', instanced: true },
+  },
+  buffers: {
+    // Buffer definitions
+    indices: { target: 'ELEMENT_ARRAY_BUFFER' },
+    data: { target: 'ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
+  },
+}
+```
+
+**Returns:**
+
+- `uniforms`: Object with uniform setters (e.g., `uniforms.time.set(value)`)
+- `attributes`: Object with attribute managers (e.g., `attributes.position.set(data).bind()`)
+- `buffers`: Object with buffer managers (e.g., `buffers.indices.set(data).bind()`)
 
 ### 👀 View Types
 
