@@ -660,11 +660,16 @@ export type View<T extends ViewSchema = ViewSchema> = {
 /*                                                                                */
 /**********************************************************************************/
 
-export interface GLSL {
-  template: string
-  uniforms: Record<string | symbol, UniformOptions>
-  attributes: Record<string | symbol, AttributeOptions>
-  interleavedAttributes: Record<string | symbol, InterleavedAttributeOptions>
+export interface GLSLResult {
+  program: WebGLProgram
+  schema: ViewSchema
+}
+
+export type GLSLSlot = UniformTag | AttributeTag | InterleaveTag | string | number | symbol
+
+export interface GLSLTag<TSlots extends GLSLSlot[] = GLSLSlot[]> {
+  template: TemplateStringsArray
+  slots: TSlots
 }
 
 export type UniformTag<
@@ -683,6 +688,14 @@ export type UniformTag<
       kind: TKind
       key: TKey
     }
+
+export interface UniformTagFn<TKind extends UniformKind> {
+  <const TKey extends string | symbol, const TOptions extends Omit<UniformOptions, 'kind'>>(
+    key: TKey,
+    TOptions: TOptions,
+  ): Prettify<UniformTag<TKey, TKind, TOptions>>
+  <const TName extends string | symbol>(key: TName): Prettify<UniformTag<TName, TKind>>
+}
 
 export interface AttributeTag<
   TKey extends string | symbol = string | symbol,

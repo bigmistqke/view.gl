@@ -3,34 +3,29 @@ import type {
   AttributeKind,
   AttributeOptions,
   AttributeTag,
-  AttributeTagFn,
-  GLSL,
+  AttributeTagFn as AttributeTagMethod,
+  GLSLResult,
+  GLSLSlot,
+  GLSLTag,
   InterleaveTag,
-  Merge,
   Prettify,
   UniformKind,
   UniformOptions,
   UniformTag,
+  UniformTagFn as UniformTagMethod,
 } from './types'
 import { createProgram } from './utils'
 
-/**********************************************************************************/
-/*                                                                                */
-/*                                  Tag Utilities                                 */
-/*                                                                                */
-/**********************************************************************************/
-
-interface UniformTagFn<TKind extends UniformKind> {
-  <const TKey extends string | symbol, const TOptions extends Omit<UniformOptions, 'kind'>>(
-    key: TKey,
-    TOptions: TOptions,
-  ): Prettify<UniformTag<TKey, TKind, TOptions>>
-  <const TName extends string | symbol>(key: TName): Prettify<UniformTag<TName, TKind>>
+export function glsl<TSlot extends GLSLSlot, TSlots extends TSlot[]>(
+  template: TemplateStringsArray,
+  ...slots: [...TSlots]
+): GLSLTag<TSlots> {
+  return { template, slots }
 }
 
 export const uniform = new Proxy(
   {} as {
-    [TKey in UniformKind]: UniformTagFn<TKey>
+    [TKey in UniformKind]: UniformTagMethod<TKey>
   },
   {
     get(target, property) {
@@ -48,7 +43,7 @@ export const uniform = new Proxy(
 
 export const attribute = new Proxy(
   {} as {
-    [TKey in AttributeKind]: AttributeTagFn<TKey>
+    [TKey in AttributeKind]: AttributeTagMethod<TKey>
   },
   {
     get(target, property) {
@@ -93,109 +88,102 @@ export function interleave<
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                       GLSL                                     */
-/*                                                                                */
-/**********************************************************************************/
-
-export function glsl<
-  Elem extends string,
-  Template extends ReadonlyArray<Elem>,
-  Hole extends UniformTag | AttributeTag | InterleaveTag | string | number | symbol,
-  Holes extends Hole[],
->([initial, ...rest]: Template, ...holes: [...Holes]) {
-  const v300 = initial?.startsWith('#version 300 es')
-
-  const template = rest.reduce((out, templatePart, index) => {
-    const hole = holes[index]
-    const holePart =
-      typeof hole === 'string' || typeof hole === 'number' || typeof hole === 'symbol'
-        ? toID(hole)
-        : hole.type === 'interleavedAttribute'
-          ? hole.layout.reduce(
-              (a, v) =>
-                v300
-                  ? `${a}in ${v.kind} ${toID(v.key)};\n`
-                  : `${a}attribute ${v.kind} ${toID(v.key)};\n`,
-              '',
-            )
-          : typeof hole === 'object' && hole.type === 'uniform' && 'size' in hole
-            ? `${hole.type} ${hole.kind} ${toID(hole.key)}[${hole.size}];`
-            : `${hole.type === 'attribute' && v300 ? 'in' : hole.type} ${hole.kind} ${toID(hole.key)};`
-    return out + holePart + templatePart
-  }, initial || '')
-
-  return holes.reduce(
-    (resources, resource) => {
-      if (
-        typeof resource === 'string' ||
-        typeof resource === 'number' ||
-        typeof resource === 'symbol'
-      ) {
-        return resources
-      }
-      // @ts-expect-error
-      const { key: name, type, ...rest } = resource
-      // @ts-expect-error
-      resources[`${type}s`][name] = rest
-      return resources
-    },
-    {
-      template,
-      uniforms: {},
-      attributes: {},
-      interleavedAttributes: {},
-    } as {
-      template: string
-      uniforms: {
-        [K in Extract<Holes[number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-      }
-      attributes: {
-        [K in Extract<Holes[number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-      }
-      interleavedAttributes: {
-        [K in Extract<Holes[number], InterleaveTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-      }
-    },
-  )
-}
-
-/**********************************************************************************/
-/*                                                                                */
 /*                                     Compile                                    */
 /*                                                                                */
 /**********************************************************************************/
 
-export function compile<TVertex extends GLSL, TFragment extends GLSL>(
-  gl: WebGLRenderingContext,
-  vertex: TVertex,
-  fragment: TFragment,
-) {
-  const program = createProgram(gl, vertex.template, fragment.template)
+export function compile<
+  TVertex extends ReturnType<typeof glsl>,
+  TFragment extends ReturnType<typeof glsl>,
+>(gl: WebGLRenderingContext, vertex: TVertex, fragment: TFragment) {
+  const _vertex = resolveGLSLTag(vertex)
+  const _fragment = resolveGLSLTag(fragment)
+
+  const program = createProgram(gl, _vertex.template, _fragment.template)
 
   return {
     program,
     schema: {
       uniforms: {
-        ...vertex.uniforms,
-        ...fragment.uniforms,
+        ..._vertex.uniforms,
+        ..._fragment.uniforms,
       },
       attributes: {
-        ...vertex.attributes,
-        ...fragment.attributes,
+        ..._vertex.attributes,
+        ..._fragment.attributes,
       },
       interleavedAttributes: {
-        ...vertex.interleavedAttributes,
-        ...fragment.interleavedAttributes,
+        ..._vertex.interleavedAttributes,
+        ..._fragment.interleavedAttributes,
       },
     },
-  } as {
-    program: WebGLProgram
-    schema: {
-      uniforms: Prettify<Merge<TVertex['uniforms'], TFragment['uniforms']>>
-      attributes: Prettify<Merge<TVertex['attributes'], TFragment['attributes']>>
-      interleavedAttributes: Prettify<
-        Merge<TVertex['interleavedAttributes'], TFragment['interleavedAttributes']>
-      >
-    }
+  } satisfies GLSLResult
+}
+
+interface ResolveGLSLTag<T extends GLSLTag> {
+  template: string
+  uniforms: {
+    [K in Extract<T['slots'][number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
   }
+  attributes: {
+    [K in Extract<T['slots'][number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+  }
+  interleavedAttributes: {
+    [K in Extract<T['slots'][number], InterleaveTag> as K['key']]: Prettify<
+      Omit<K, 'name' | 'type'>
+    >
+  }
+}
+
+function resolveGLSLTag<TTag extends ReturnType<typeof glsl>>({
+  template: [initial, ...rest],
+  slots,
+}: TTag) {
+  const v300 = !!initial?.startsWith('#version 300 es')
+
+  let template = initial ?? ''
+
+  for (let i = 0; i < rest.length; i++) {
+    template += `${resolveGLSLSlot(slots[i]!, v300)}${rest[i]}`
+  }
+
+  const result = {
+    template,
+    uniforms: {},
+    attributes: {},
+    interleavedAttributes: {},
+  } as ResolveGLSLTag<TTag>
+
+  for (const slot of slots) {
+    if (typeof slot === 'string' || typeof slot === 'number' || typeof slot === 'symbol') {
+      continue
+    }
+
+    const { key: name, type, ...rest } = slot
+
+    // @ts-expect-error
+    result[`${type}s`][name] = rest
+  }
+
+  return result
+}
+
+function resolveGLSLSlot(slot: GLSLSlot, v300: boolean) {
+  if (typeof slot === 'string' || typeof slot === 'number' || typeof slot === 'symbol') {
+    return toID(slot)
+  }
+
+  if (slot.type === 'interleavedAttribute') {
+    return slot.layout.reduce(
+      (a, v) =>
+        v300 ? `${a}in ${v.kind} ${toID(v.key)};\n` : `${a}attribute ${v.kind} ${toID(v.key)};\n`,
+      '',
+    )
+  }
+
+  if (typeof slot === 'object' && slot.type === 'uniform' && 'size' in slot) {
+    return `${slot.type} ${slot.kind} ${toID(slot.key)}[${slot.size}];`
+  }
+
+  return `${slot.type === 'attribute' && v300 ? 'in' : slot.type} ${slot.kind} ${toID(slot.key)};`
 }
