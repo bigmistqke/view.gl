@@ -230,8 +230,14 @@ describe('interleave', () => {
 })
 
 describe('glsl', () => {
+  let gl: GL
+
+  beforeEach(() => {
+    gl = createMockGL()
+  })
+
   it('should create GLSL template with uniforms and attributes', () => {
-    const result = glsl`
+    const vertex = glsl`
       ${uniform.vec2('u_resolution')}
       ${attribute.vec2('a_position')}
       
@@ -240,23 +246,21 @@ describe('glsl', () => {
       }
     `
 
-    expect(result.template).toContain('uniform vec2 u_resolution;')
-    expect(result.template).toContain('attribute vec2 a_position;')
-    expect(result.template).toContain('void main()')
+    const { schema } = compile(gl, vertex, glsl``)
 
-    expect(result.uniforms).toEqual({
+    expect(schema.uniforms).toEqual({
       u_resolution: { kind: 'vec2' },
     })
 
-    expect(result.attributes).toEqual({
+    expect(schema.attributes).toEqual({
       a_position: { kind: 'vec2' },
     })
 
-    expect(result.interleavedAttributes).toEqual({})
+    expect(schema.interleavedAttributes).toEqual({})
   })
 
   it('should handle WebGL2 syntax with #version 300 es', () => {
-    const result = glsl`#version 300 es
+    const vertex = glsl`#version 300 es
       ${uniform.vec2('u_resolution')}
       ${attribute.vec2('a_position')}
       
@@ -265,12 +269,18 @@ describe('glsl', () => {
       }
     `
 
-    expect(result.template).toContain('uniform vec2 u_resolution;')
-    expect(result.template).toContain('in vec2 a_position;') // 'in' instead of 'attribute'
+    // For this test, we need to check the shader compilation calls
+    compile(gl, vertex, glsl``)
+
+    // Check that shaderSource was called with WebGL2 syntax
+    const vertexShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('in vec2 a_position')
+    )
+    expect(vertexShaderSource).toBeTruthy()
   })
 
   it('should handle interleaved attributes', () => {
-    const result = glsl`
+    const vertex = glsl`
       ${interleave('vertexData', [attribute.vec2('a_position'), attribute.vec4('a_color')])}
       
       void main() {
@@ -278,10 +288,9 @@ describe('glsl', () => {
       }
     `
 
-    expect(result.template).toContain('attribute vec2 a_position;')
-    expect(result.template).toContain('attribute vec4 a_color;')
+    const { schema } = compile(gl, vertex, glsl``)
 
-    expect(result.interleavedAttributes).toEqual({
+    expect(schema.interleavedAttributes).toEqual({
       vertexData: {
         layout: [
           { key: 'a_position', kind: 'vec2' },
@@ -293,7 +302,7 @@ describe('glsl', () => {
   })
 
   it('should handle interleaved attributes in WebGL2', () => {
-    const result = glsl`#version 300 es
+    const vertex = glsl`#version 300 es
       ${interleave('vertexData', [attribute.vec2('a_position'), attribute.vec4('a_color')])}
       
       void main() {
@@ -301,12 +310,17 @@ describe('glsl', () => {
       }
     `
 
-    expect(result.template).toContain('in vec2 a_position;')
-    expect(result.template).toContain('in vec4 a_color;')
+    compile(gl, vertex, glsl``)
+
+    // Check that shaderSource was called with WebGL2 syntax
+    const vertexShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('in vec2 a_position') && call[1].includes('in vec4 a_color')
+    )
+    expect(vertexShaderSource).toBeTruthy()
   })
 
   it('should handle uniform arrays', () => {
-    const result = glsl`
+    const fragment = glsl`
       ${uniform.vec3('u_palette', { size: 7 })}
       
       void main() {
@@ -314,9 +328,9 @@ describe('glsl', () => {
       }
     `
 
-    expect(result.template).toContain('uniform vec3 u_palette[7];')
+    const { schema } = compile(gl, glsl``, fragment)
 
-    expect(result.uniforms).toEqual({
+    expect(schema.uniforms).toEqual({
       u_palette: { kind: 'vec3', size: 7 },
     })
   })
@@ -325,7 +339,7 @@ describe('glsl', () => {
     const maxLights = 8
     const shaderName = 'MyShader'
 
-    const result = glsl`
+    const fragment = glsl`
       // ${shaderName}
       #define MAX_LIGHTS ${maxLights}
       ${uniform.float('u_time')}
@@ -335,13 +349,19 @@ describe('glsl', () => {
       }
     `
 
-    expect(result.template).toContain('// MyShader')
-    expect(result.template).toContain('#define MAX_LIGHTS 8')
-    expect(result.template).toContain('uniform float u_time;')
+    compile(gl, glsl``, fragment)
+
+    // Check that shaderSource was called with the interpolated values
+    const fragmentShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('// MyShader') && 
+                       call[1].includes('#define MAX_LIGHTS 8') &&
+                       call[1].includes('uniform float u_time;')
+    )
+    expect(fragmentShaderSource).toBeTruthy()
   })
 
   it('should handle multiple attributes and uniforms', () => {
-    const result = glsl`
+    const vertex = glsl`
       ${uniform.mat4('u_mvpMatrix')}
       ${uniform.sampler2D('u_texture')}
       ${attribute.vec3('a_position')}
@@ -353,12 +373,14 @@ describe('glsl', () => {
       }
     `
 
-    expect(result.uniforms).toEqual({
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.uniforms).toEqual({
       u_mvpMatrix: { kind: 'mat4' },
       u_texture: { kind: 'sampler2D' },
     })
 
-    expect(result.attributes).toEqual({
+    expect(schema.attributes).toEqual({
       a_position: { kind: 'vec3' },
       a_uv: { kind: 'vec2' },
       a_color: { kind: 'vec4', instanced: true },
@@ -366,16 +388,15 @@ describe('glsl', () => {
   })
 
   it('should handle empty template', () => {
-    const result = glsl``
+    const { schema } = compile(gl, glsl``, glsl``)
 
-    expect(result.template).toBe('')
-    expect(result.uniforms).toEqual({})
-    expect(result.attributes).toEqual({})
-    expect(result.interleavedAttributes).toEqual({})
+    expect(schema.uniforms).toEqual({})
+    expect(schema.attributes).toEqual({})
+    expect(schema.interleavedAttributes).toEqual({})
   })
 
   it('should skip string resources when collecting schema', () => {
-    const result = glsl`
+    const fragment = glsl`
       ${'// This is a comment'}
       ${42}
       ${uniform.float('u_time')}
@@ -384,19 +405,27 @@ describe('glsl', () => {
       void main() {}
     `
 
-    expect(result.uniforms).toEqual({
+    const { schema } = compile(gl, glsl``, fragment)
+
+    expect(schema.uniforms).toEqual({
       u_time: { kind: 'float' },
     })
-    expect(Object.keys(result.uniforms).length).toBe(1)
+    expect(Object.keys(schema.uniforms).length).toBe(1)
   })
 })
 
 describe('glsl with symbols', () => {
+  let gl: GL
+
+  beforeEach(() => {
+    gl = createMockGL()
+  })
+
   it('should support symbols in uniform tags', () => {
     const u_time_symbol = Symbol('u_time')
     const u_color_symbol = Symbol('u_color')
 
-    const shader = glsl`
+    const fragment = glsl`
       precision mediump float;
       
       ${uniform.float(u_time_symbol)}
@@ -406,17 +435,24 @@ describe('glsl with symbols', () => {
         gl_FragColor = vec4(${u_color_symbol} * ${u_time_symbol}, 1.0);
       }`
 
-    expect(shader.uniforms[u_time_symbol]).toEqual({ kind: 'float' })
-    expect(shader.uniforms[u_color_symbol]).toEqual({ kind: 'vec3' })
-    expect(shader.template).toContain('uniform float VIEW_GL_ALIAS_')
-    expect(shader.template).toContain('uniform vec3 VIEW_GL_ALIAS_')
+    const { schema } = compile(gl, glsl``, fragment)
+
+    expect(schema.uniforms[u_time_symbol]).toEqual({ kind: 'float' })
+    expect(schema.uniforms[u_color_symbol]).toEqual({ kind: 'vec3' })
+
+    // Check that shaderSource was called with symbol aliases
+    const fragmentShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('uniform float VIEW_GL_ALIAS_') && 
+                       call[1].includes('uniform vec3 VIEW_GL_ALIAS_')
+    )
+    expect(fragmentShaderSource).toBeTruthy()
   })
 
   it('should support symbols in attribute tags', () => {
     const a_position_symbol = Symbol('a_position')
     const a_color_symbol = Symbol('a_color')
 
-    const shader = glsl`
+    const vertex = glsl`
       ${attribute.vec2(a_position_symbol)}
       ${attribute.vec4(a_color_symbol, { instanced: true })}
       
@@ -424,10 +460,17 @@ describe('glsl with symbols', () => {
         gl_Position = vec4(${a_position_symbol}, 0.0, 1.0);
       }`
 
-    expect(shader.attributes[a_position_symbol]).toEqual({ kind: 'vec2' })
-    expect(shader.attributes[a_color_symbol]).toEqual({ kind: 'vec4', instanced: true })
-    expect(shader.template).toContain('attribute vec2 VIEW_GL_ALIAS_')
-    expect(shader.template).toContain('attribute vec4 VIEW_GL_ALIAS_')
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.attributes[a_position_symbol]).toEqual({ kind: 'vec2' })
+    expect(schema.attributes[a_color_symbol]).toEqual({ kind: 'vec4', instanced: true })
+
+    // Check that shaderSource was called with symbol aliases
+    const vertexShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('attribute vec2 VIEW_GL_ALIAS_') && 
+                       call[1].includes('attribute vec4 VIEW_GL_ALIAS_')
+    )
+    expect(vertexShaderSource).toBeTruthy()
   })
 
   it('should support symbols in interleaved attribute tags', () => {
@@ -435,74 +478,117 @@ describe('glsl with symbols', () => {
     const a_pos_symbol = Symbol('a_pos')
     const a_col_symbol = Symbol('a_col')
 
-    const shader = glsl`
+    const vertex = glsl`
       ${interleave(data_symbol, [attribute.vec3(a_pos_symbol), attribute.vec4(a_col_symbol)])}
       
       void main() {
         gl_Position = vec4(${a_pos_symbol}, 1.0);
       }`
 
-    expect(shader.interleavedAttributes[data_symbol]).toEqual({
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.interleavedAttributes[data_symbol]).toEqual({
       layout: [
         { key: a_pos_symbol, kind: 'vec3' },
         { key: a_col_symbol, kind: 'vec4' },
       ],
       instanced: false,
     })
-    expect(shader.template).toContain('attribute vec3 VIEW_GL_ALIAS_')
-    expect(shader.template).toContain('attribute vec4 VIEW_GL_ALIAS_')
+
+    // Check that shaderSource was called with symbol aliases
+    const vertexShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('attribute vec3 VIEW_GL_ALIAS_') && 
+                       call[1].includes('attribute vec4 VIEW_GL_ALIAS_')
+    )
+    expect(vertexShaderSource).toBeTruthy()
   })
 
   it('should support mixed string and symbol keys', () => {
     const u_color_symbol = Symbol('u_color')
     const a_normal_symbol = Symbol('a_normal')
 
-    const shader = glsl`
-      ${uniform.float('u_time')}
-      ${uniform.vec3(u_color_symbol)}
+    const vertex = glsl`
       ${attribute.vec3('a_position')}
       ${attribute.vec3(a_normal_symbol)}
+      ${uniform.float('u_time')}
       
       void main() {
         gl_Position = vec4(a_position + ${a_normal_symbol}, u_time);
+      }`
+
+    const fragment = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec3(u_color_symbol)}
+      
+      void main() {
         gl_FragColor = vec4(${u_color_symbol}, 1.0);
       }`
 
-    expect(shader.uniforms.u_time).toEqual({ kind: 'float' })
-    expect(shader.uniforms[u_color_symbol]).toEqual({ kind: 'vec3' })
-    expect(shader.attributes.a_position).toEqual({ kind: 'vec3' })
-    expect(shader.attributes[a_normal_symbol]).toEqual({ kind: 'vec3' })
+    const { schema } = compile(gl, vertex, fragment)
 
-    expect(shader.template).toContain('uniform float u_time')
-    expect(shader.template).toContain('uniform vec3 VIEW_GL_ALIAS_')
-    expect(shader.template).toContain('attribute vec3 a_position')
-    expect(shader.template).toContain('attribute vec3 VIEW_GL_ALIAS_')
+    expect(schema.uniforms.u_time).toEqual({ kind: 'float' })
+    expect(schema.uniforms[u_color_symbol]).toEqual({ kind: 'vec3' })
+    expect(schema.attributes.a_position).toEqual({ kind: 'vec3' })
+    expect(schema.attributes[a_normal_symbol]).toEqual({ kind: 'vec3' })
+
+    // Check vertex shader source
+    const vertexShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('attribute vec3 a_position') && 
+                       call[1].includes('attribute vec3 VIEW_GL_ALIAS_')
+    )
+    expect(vertexShaderSource).toBeTruthy()
+
+    // Check fragment shader source
+    const fragmentShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('uniform float u_time') && 
+                       call[1].includes('uniform vec3 VIEW_GL_ALIAS_')
+    )
+    expect(fragmentShaderSource).toBeTruthy()
   })
 
   it('should support symbols in array uniforms', () => {
     const u_positions_symbol = Symbol('u_positions')
 
-    const shader = glsl`
+    const fragment = glsl`
       ${uniform.vec3(u_positions_symbol, { size: 10 })}
       
       void main() {
         gl_FragColor = vec4(${u_positions_symbol}[0], 1.0);
       }`
 
-    expect(shader.uniforms[u_positions_symbol]).toEqual({ kind: 'vec3', size: 10 })
-    expect(shader.template).toContain('uniform vec3 VIEW_GL_ALIAS_')
-    expect(shader.template).toContain('[10];')
+    const { schema } = compile(gl, glsl``, fragment)
+
+    expect(schema.uniforms[u_positions_symbol]).toEqual({ kind: 'vec3', size: 10 })
+
+    // Check that shaderSource was called with array syntax
+    const fragmentShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('uniform vec3 VIEW_GL_ALIAS_') && 
+                       call[1].includes('[10];')
+    )
+    expect(fragmentShaderSource).toBeTruthy()
   })
 
   it('should preserve symbol identity across multiple uses', () => {
     const u_shared_symbol = Symbol('u_shared')
 
-    const shader1 = glsl`${uniform.float(u_shared_symbol)}`
-    const shader2 = glsl`${uniform.float(u_shared_symbol)}`
+    const fragment1 = glsl`${uniform.float(u_shared_symbol)}
+void main() { gl_FragColor = vec4(1.0); }`
+    const fragment2 = glsl`${uniform.float(u_shared_symbol)}
+void main() { gl_FragColor = vec4(0.5); }`
+
+    compile(gl, glsl``, fragment1)
+    compile(gl, glsl``, fragment2)
 
     // Both should generate the same alias
-    const alias1 = shader1.template.match(/VIEW_GL_ALIAS_\d+/)?.[0]
-    const alias2 = shader2.template.match(/VIEW_GL_ALIAS_\d+/)?.[0]
+    const shader1Source = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('gl_FragColor = vec4(1.0)')
+    )?.[1]
+    const shader2Source = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('gl_FragColor = vec4(0.5)')
+    )?.[1]
+
+    const alias1 = shader1Source?.match(/VIEW_GL_ALIAS_\d+/)?.[0]
+    const alias2 = shader2Source?.match(/VIEW_GL_ALIAS_\d+/)?.[0]
 
     expect(alias1).toBe(alias2)
   })
@@ -511,7 +597,7 @@ describe('glsl with symbols', () => {
     const u_matrix_symbol = Symbol('u_matrix')
     const a_vertex_symbol = Symbol('a_vertex')
 
-    const shader = glsl`#version 300 es
+    const vertex = glsl`#version 300 es
       precision mediump float;
       
       ${uniform.mat4(u_matrix_symbol)}
@@ -521,22 +607,34 @@ describe('glsl with symbols', () => {
         gl_Position = ${u_matrix_symbol} * vec4(${a_vertex_symbol}, 1.0);
       }`
 
-    expect(shader.template).toContain('uniform mat4 VIEW_GL_ALIAS_')
-    expect(shader.template).toContain('in vec3 VIEW_GL_ALIAS_') // WebGL2 uses 'in' instead of 'attribute'
+    compile(gl, vertex, glsl``)
+
+    // Check that shaderSource was called with WebGL2 syntax and symbol aliases
+    const vertexShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('uniform mat4 VIEW_GL_ALIAS_') && 
+                       call[1].includes('in vec3 VIEW_GL_ALIAS_')
+    )
+    expect(vertexShaderSource).toBeTruthy()
   })
 
   it('should handle symbol interpolation in template', () => {
     const color_symbol = Symbol('color')
 
-    const shader = glsl`
+    const fragment = glsl`
       void main() {
         vec3 ${color_symbol} = vec3(1.0, 0.0, 0.0);
         gl_FragColor = vec4(${color_symbol}, 1.0);
       }`
 
-    // Symbol used directly in template should be converted to alias
-    expect(shader.template).toMatch(/vec3 VIEW_GL_ALIAS_\d+ = vec3/)
-    expect(shader.template).toMatch(/vec4\(VIEW_GL_ALIAS_\d+, 1\.0\)/)
+    compile(gl, glsl``, fragment)
+
+    // Check that shaderSource was called with symbol aliases in template
+    const fragmentShaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('vec3') && call[1].includes('VIEW_GL_ALIAS_')
+    )?.[1]
+
+    expect(fragmentShaderSource).toMatch(/vec3 VIEW_GL_ALIAS_\d+ = vec3/)
+    expect(fragmentShaderSource).toMatch(/vec4\(VIEW_GL_ALIAS_\d+, 1\.0\)/)
   })
 })
 
@@ -697,6 +795,87 @@ describe('compile', () => {
     })
   })
 
+  it('should merge attributes and interleaved attributes from vertex and fragment', () => {
+    const vertex = glsl`
+      ${attribute.vec3('a_position')}
+      ${interleave('vertexData', [attribute.vec2('a_uv'), attribute.vec3('a_normal')])}
+      
+      void main() {}
+    `
+
+    const fragment = glsl`
+      ${attribute.vec4('a_color')} // Fragment attributes (rare but valid)
+      ${interleave('materialData', [attribute.float('a_roughness'), attribute.float('a_metallic')])}
+      
+      void main() {}
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    expect(result.schema.attributes).toEqual({
+      a_position: { kind: 'vec3' },
+      a_color: { kind: 'vec4' },
+    })
+
+    expect(result.schema.interleavedAttributes).toEqual({
+      vertexData: {
+        layout: [
+          { key: 'a_uv', kind: 'vec2' },
+          { key: 'a_normal', kind: 'vec3' },
+        ],
+        instanced: false,
+      },
+      materialData: {
+        layout: [
+          { key: 'a_roughness', kind: 'float' },
+          { key: 'a_metallic', kind: 'float' },
+        ],
+        instanced: false,
+      },
+    })
+  })
+
+  it('should merge schemas with symbol keys', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_pos_symbol = Symbol('a_pos')
+    const data_symbol = Symbol('data')
+
+    const vertex = glsl`
+      ${uniform.float(u_time_symbol)}
+      ${attribute.vec2(a_pos_symbol)}
+      ${interleave(data_symbol, [attribute.vec3('a_normal')])}
+      
+      void main() {}
+    `
+
+    const fragment = glsl`
+      ${uniform.float(u_time_symbol)} // Same symbol in both shaders
+      ${uniform.vec3('u_color')}
+      
+      void main() {}
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    expect(result.schema.uniforms).toEqual({
+      [u_time_symbol]: { kind: 'float' },
+      u_color: { kind: 'vec3' },
+    })
+
+    expect(result.schema.attributes).toEqual({
+      [a_pos_symbol]: { kind: 'vec2' },
+    })
+
+    expect(result.schema.interleavedAttributes).toEqual({
+      [data_symbol]: {
+        layout: [
+          { key: 'a_normal', kind: 'vec3' },
+        ],
+        instanced: false,
+      },
+    })
+  })
+
   it('should handle interleaved attributes in schema', () => {
     const vertexData = interleave('vertexData', [
       attribute.vec2('a_position'),
@@ -718,13 +897,7 @@ describe('compile', () => {
       }
     `
 
-    const fragment = glsl`
-      void main() {
-        gl_FragColor = vec4(1.0);
-      }
-    `
-
-    const result = compile(gl, vertex, fragment)
+    const result = compile(gl, vertex, glsl``)
 
     expect(result.schema.interleavedAttributes).toEqual({
       vertexData: {
