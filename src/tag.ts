@@ -226,9 +226,14 @@ function glslTagToSchema<TTag extends GLSLTag>(tag: TTag) {
     interleavedAttributes: {},
   }
 
-  for (const slot of tag.slots) {
+  function handleSlot(slot: GLSLSlot) {
+    if (Array.isArray(slot)) {
+      slot.forEach(handleSlot)
+      return
+    }
+
     if (typeof slot !== 'object') {
-      continue
+      return
     }
 
     if (slot.type === 'glsl') {
@@ -247,7 +252,7 @@ function glslTagToSchema<TTag extends GLSLTag>(tag: TTag) {
         ...interleavedAttributes,
       }
 
-      continue
+      return
     }
 
     const { key: name, type, ...rest } = slot
@@ -256,8 +261,45 @@ function glslTagToSchema<TTag extends GLSLTag>(tag: TTag) {
     result[`${type}s`][name] = rest
   }
 
+  tag.slots.forEach(handleSlot)
+
   return result
 }
+
+// function glslSlotToSchema(slot: GLSLSlot){
+//   if(Array.isArray(slot)){
+
+//     return
+//   }
+
+//   if (typeof slot !== 'object') {
+//       return
+//     }
+
+//   if (slot.type === 'glsl') {
+//       return glslTagToSchema(slot)
+
+//       // result.uniforms = {
+//       //   ...result.uniforms,
+//       //   ...uniforms,
+//       // }
+//       // result.attributes = {
+//       //   ...result.attributes,
+//       //   ...attributes,
+//       // }
+//       // result.interleavedAttributes = {
+//       //   ...result.interleavedAttributes,
+//       //   ...interleavedAttributes,
+//       // }
+
+//       // continue
+//     }
+
+//     const { key: name, type, ...rest } = slot
+
+//     // @ts-expect-error
+//     result[`${type}s`][name] = rest
+// }
 
 function glslTagToString<TTag extends GLSLTag>({ template: [initial, ...rest], slots }: TTag) {
   const v300 = !!initial?.startsWith('#version 300 es')
@@ -271,9 +313,13 @@ function glslTagToString<TTag extends GLSLTag>({ template: [initial, ...rest], s
   return template
 }
 
-function glslSlotToString(slot: GLSLSlot, v300: boolean) {
+function glslSlotToString(slot: GLSLSlot, v300: boolean): string {
   if (typeof slot !== 'object') {
     return toID(slot)
+  }
+
+  if (Array.isArray(slot)) {
+    return slot.map(slot => glslSlotToString(slot, v300)).join('')
   }
 
   if (slot.type === 'glsl') {

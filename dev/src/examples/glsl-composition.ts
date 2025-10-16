@@ -78,7 +78,7 @@ const fragment = glsl`
   precision highp float;
   
   ${colors}
-  ${uniform.float('u_time')}
+  ${[uniform.float('u_time')]}
   
   void main() {
     // Animated rainbow color

@@ -709,14 +709,9 @@ export interface GLSLResult {
   schema: ViewSchema
 }
 
-export type GLSLSlot =
-  | GLSLTag
-  | UniformTag
-  | AttributeTag
-  | InterleaveTag
-  | string
-  | number
-  | symbol
+type GLSLSlotItem = GLSLTag | UniformTag | AttributeTag | InterleaveTag | string | number | symbol
+
+export type GLSLSlot = GLSLSlotItem | Array<GLSLSlotItem>
 
 export interface GLSLTag<TSlots extends GLSLSlot[] = GLSLSlot[]> {
   type: 'glsl'
