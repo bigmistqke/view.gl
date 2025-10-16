@@ -432,22 +432,45 @@ const vertexShader = glsl`
 
 #### 📝 glsl
 
-Template literal processor that handles GLSL code and embedded resources.
+Template literal processor that handles GLSL code and embedded resources. Supports interpolation of resource tags, composed GLSL fragments, and symbols.
 
 ```typescript
-import { glsl } from '@bigmistqke/view.gl/tag'
+import { glsl, uniform, attribute } from '@bigmistqke/view.gl/tag'
 
+// Basic usage with resource tags
 const shader = glsl`
-  precision mediump float;
-  
   ${uniform.vec2('resolution')}
+  ${attribute.vec3('position')}
   
   void main() {
-    vec2 uv = gl_FragCoord.xy / resolution;
-    gl_FragColor = vec4(uv, 0.0, 1.0);
+    gl_Position = vec4(position, 1.0);
+  }
+`
+
+// GLSL composition with reusable components
+const mathUtils = glsl`
+  float wave(float x, float speed, float frequency) {
+    return sin(x * frequency + u_time * speed);
+  }
+`
+
+const vertex = glsl`
+  ${uniform.float('u_time')}
+  ${attribute.vec2('a_position')}
+  ${mathUtils}  // Compose GLSL fragments
+  
+  void main() {
+    vec2 pos = a_position;
+    pos.y += wave(pos.x, 2.0, 5.0) * 0.1;
+    gl_Position = vec4(pos, 0.0, 1.0);
   }
 `
 ```
+
+**Interpolation types:**
+- **Resource tags**: `uniform.*()`, `attribute.*()`, `interleave()` generate declarations and collect schema
+- **GLSL fragments**: Composed template literals include code and merge schemas
+- **Strings/Symbols**: Direct interpolation (symbols converted to unique identifiers)
 
 #### ⚙️ compile(gl, vertex, fragment)
 
@@ -467,24 +490,6 @@ console.log(schema.attributes) // { position: { kind: 'vec3' }, ... }
 
 - `program`: Compiled WebGL program
 - `schema`: Extracted resource definitions for use with `view()`
-
-### 🔣 Symbol Support
-
-Symbols are supported as keys for uniforms, attributes, and buffers. When interpolated in glsl templates, they're automatically converted to valid GLSL identifiers. This prevents naming collisions between different shader modules and enables private scoping of shader variables.
-
-```typescript
-const u_time = Symbol('time')
-const a_position = Symbol('position')
-
-const shader = glsl`
-  ${attribute.vec3(a_position)}
-  ${uniform.float(u_time)}
-  
-  void main() {
-    gl_Position = vec4(${a_position}, ${u_time});
-  }
-`
-```
 
 <details>
 <summary>Usage with vanilla view.gl</summary>
