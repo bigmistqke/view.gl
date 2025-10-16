@@ -992,6 +992,275 @@ describe('compile with symbols', () => {
   })
 })
 
+describe('glsl array interpolation', () => {
+  let gl: GL
+
+  beforeEach(() => {
+    gl = createMockGL()
+  })
+
+  it('should interpolate arrays of resource tags', () => {
+    const shader = glsl`
+      ${[uniform.float('u_time'), uniform.vec2('u_resolution')]}
+      ${[attribute.vec3('a_position'), attribute.vec2('a_uv')]}
+      
+      void main() {
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, shader, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+    })
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec3' },
+      a_uv: { kind: 'vec2' },
+    })
+  })
+
+  it('should interpolate arrays with mixed types', () => {
+    const sharedUniforms = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+    `
+
+    const shader = glsl`
+      ${[sharedUniforms, uniform.vec3('u_color')]}
+      ${[attribute.vec3('a_position'), 'precision mediump float;']}
+      
+      void main() {
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, shader, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_color: { kind: 'vec3' },
+    })
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec3' },
+    })
+
+    // Check that the string was interpolated in the shader source
+    const shaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('precision mediump float;')
+    )
+    expect(shaderSource).toBeTruthy()
+  })
+
+  it('should interpolate arrays with symbols', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_pos_symbol = Symbol('a_position')
+
+    const shader = glsl`
+      ${[uniform.float(u_time_symbol), uniform.vec3('u_color')]}
+      ${[attribute.vec3(a_pos_symbol), attribute.vec2('a_uv')]}
+      
+      void main() {
+        gl_Position = vec4(${a_pos_symbol}, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, shader, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      [u_time_symbol]: { kind: 'float' },
+      u_color: { kind: 'vec3' },
+    })
+
+    expect(schema.attributes).toEqual({
+      [a_pos_symbol]: { kind: 'vec3' },
+      a_uv: { kind: 'vec2' },
+    })
+
+    // Check that symbol was interpolated in the shader source
+    const shaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('attribute vec3 VIEW_GL_ALIAS_') && 
+                       call[1].includes('uniform float VIEW_GL_ALIAS_')
+    )
+    expect(shaderSource).toBeTruthy()
+  })
+
+  it('should interpolate nested arrays', () => {
+    const shader = glsl`
+      ${[[uniform.float('u_time'), uniform.vec2('u_resolution')], uniform.vec3('u_color')]}
+      ${[[attribute.vec3('a_position')], [attribute.vec2('a_uv'), attribute.vec3('a_normal')]]}
+      
+      void main() {
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, shader, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_color: { kind: 'vec3' },
+    })
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec3' },
+      a_uv: { kind: 'vec2' },
+      a_normal: { kind: 'vec3' },
+    })
+  })
+
+  it('should interpolate arrays with interleaved attributes', () => {
+    const vertexData = interleave('vertexData', [
+      attribute.vec2('a_position'),
+      attribute.vec2('a_uv'),
+    ])
+
+    const shader = glsl`
+      ${[vertexData, uniform.mat4('u_mvpMatrix')]}
+      
+      void main() {
+        gl_Position = u_mvpMatrix * vec4(a_position, 0.0, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, shader, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_mvpMatrix: { kind: 'mat4' },
+    })
+
+    expect(schema.interleavedAttributes).toEqual({
+      vertexData: {
+        layout: [
+          { key: 'a_position', kind: 'vec2' },
+          { key: 'a_uv', kind: 'vec2' },
+        ],
+        instanced: false,
+      },
+    })
+  })
+
+  it('should interpolate arrays with composed glsl templates', () => {
+    const sharedUniforms = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+    `
+
+    const lightingCode = glsl`
+      ${uniform.vec3('u_lightPos')}
+      
+      vec3 calculateLighting(vec3 pos) {
+        return normalize(u_lightPos - pos);
+      }
+    `
+
+    const shader = glsl`
+      ${[sharedUniforms, lightingCode]}
+      ${[attribute.vec3('a_position'), attribute.vec3('a_normal')]}
+      
+      void main() {
+        vec3 lighting = calculateLighting(a_position);
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, shader, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_lightPos: { kind: 'vec3' },
+    })
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec3' },
+      a_normal: { kind: 'vec3' },
+    })
+
+    // Check that both templates and the function were interpolated
+    const shaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('calculateLighting') && 
+                       call[1].includes('uniform float u_time') &&
+                       call[1].includes('uniform vec3 u_lightPos')
+    )
+    expect(shaderSource).toBeTruthy()
+  })
+
+  it('should handle empty arrays', () => {
+    const shader = glsl`
+      ${[]}
+      ${uniform.float('u_time')}
+      ${[]}
+      
+      void main() {
+        gl_Position = vec4(1.0);
+      }
+    `
+
+    const { schema } = compile(gl, shader, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+    })
+
+    expect(schema.attributes).toEqual({})
+    expect(schema.interleavedAttributes).toEqual({})
+  })
+
+  it('should interpolate arrays with WebGL2 syntax', () => {
+    const shader = glsl`#version 300 es
+      ${[uniform.float('u_time'), attribute.vec3('a_position')]}
+      
+      void main() {
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    compile(gl, shader, glsl``)
+
+    // Check that shaderSource was called with WebGL2 syntax
+    const shaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('uniform float u_time') && 
+                       call[1].includes('in vec3 a_position')
+    )
+    expect(shaderSource).toBeTruthy()
+  })
+
+  it('should preserve order when interpolating arrays', () => {
+    const shader = glsl`
+      ${['// First comment', uniform.float('u_time'), '// Second comment']}
+      
+      void main() {
+        gl_Position = vec4(1.0);
+      }
+    `
+
+    compile(gl, shader, glsl``)
+
+    // Check that order is preserved in the shader source
+    const shaderSource = (gl.shaderSource as any).mock.calls.find(
+      (call: any[]) => call[1].includes('// First comment') && 
+                       call[1].includes('uniform float u_time') &&
+                       call[1].includes('// Second comment')
+    )?.[1]
+
+    expect(shaderSource).toBeTruthy()
+    
+    // Verify order
+    const firstIndex = shaderSource.indexOf('// First comment')
+    const uniformIndex = shaderSource.indexOf('uniform float u_time')
+    const secondIndex = shaderSource.indexOf('// Second comment')
+    
+    expect(firstIndex).toBeLessThan(uniformIndex)
+    expect(uniformIndex).toBeLessThan(secondIndex)
+  })
+})
+
 describe('compile', () => {
   let gl: GL
   let mockProgram: WebGLProgram

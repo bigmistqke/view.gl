@@ -364,15 +364,16 @@ Template literal processor that handles GLSL code and embedded resources. Suppor
 - **[GLSL fragments](#-glsl-fragment)**: Reusable shader code snippets
 - **[Symbol Variables](#-symbol-variables)**: Unique variable names to prevent collisions
 - **Strings**: Interpolated as-is into the shader code
+- **Arrays**: Arrays of any supported interpolation types
 
 ```typescript
 const precision = 'precision mediump float;'
 const functionName = Symbol('function')
 
 const shader = glsl`
-  ${uniform.vec2('resolution')}
-  ${attribute.vec3('position')}
   ${precision}                                // String interpolated as-is
+  ${uniform.vec2('resolution')}
+  ${[attribute.vec3('position'), attribute.vec2('uv')]}  // Array interpolation
   
   vec3 ${functionName}(vec2 uv) {             // Symbol interpolated to unique identifier
     return vec3(uv, 0.5);
