@@ -513,9 +513,13 @@ function glslTagToSchema(tag) {
     attributes: {},
     interleavedAttributes: {}
   };
-  for (const slot of tag.slots) {
+  function handleSlot(slot) {
+    if (Array.isArray(slot)) {
+      slot.forEach(handleSlot);
+      return;
+    }
     if (typeof slot !== "object") {
-      continue;
+      return;
     }
     if (slot.type === "glsl") {
       const { uniforms, attributes, interleavedAttributes } = glslTagToSchema(slot);
@@ -531,11 +535,12 @@ function glslTagToSchema(tag) {
         ...result.interleavedAttributes,
         ...interleavedAttributes
       };
-      continue;
+      return;
     }
     const { key: name, type, ...rest } = slot;
     result[`${type}s`][name] = rest;
   }
+  tag.slots.forEach(handleSlot);
   return result;
 }
 function glslTagToString({ template: [initial, ...rest], slots }) {
@@ -549,6 +554,9 @@ function glslTagToString({ template: [initial, ...rest], slots }) {
 function glslSlotToString(slot, v300) {
   if (typeof slot !== "object") {
     return toID(slot);
+  }
+  if (Array.isArray(slot)) {
+    return slot.map((slot2) => glslSlotToString(slot2, v300)).join("");
   }
   if (slot.type === "glsl") {
     return glslTagToString(slot);

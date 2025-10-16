@@ -1,4 +1,4 @@
-import { i as interleave, a as attribute, u as uniform, g as glsl, c as compile } from './tag-B8cKWkxB.js';
+import { i as interleave, a as attribute, u as uniform, g as glsl, c as compile } from './tag-D1ni5Zei.js';
 
 const canvas = document.createElement("canvas");
 canvas.width = 800;

@@ -1,4 +1,4 @@
-import { a as attribute, u as uniform, g as glsl, c as compile } from './tag-B8cKWkxB.js';
+import { a as attribute, u as uniform, g as glsl, c as compile } from './tag-D1ni5Zei.js';
 import { c as createElement, a as cursor } from './utils-CvCgsM08.js';
 
 const canvas = createElement("canvas", { width: window.innerWidth, height: window.innerHeight });
