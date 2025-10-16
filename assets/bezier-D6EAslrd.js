@@ -1,4 +1,4 @@
-import { i as interleave, u as uniform, a as attribute, g as glsl, c as compile, v as view } from './tag-Ahw-5sKJ.js';
+import { i as interleave, u as uniform, a as attribute, g as glsl, c as compile } from './tag-CpVTFYUu.js';
 import { c as createElement, a as cursor } from './utils-CvCgsM08.js';
 
 const canvas = createElement("canvas");
@@ -192,12 +192,9 @@ void main() {
   // Semi-transparent gray for control polygon
   fragColor = vec4(0.5, 0.5, 0.5, 0.5);
 }`;
-const { program: curveProgram, schema: curveSchema } = compile(gl, curveVertex, curveFragment);
-const curveView = view(gl, curveProgram, curveSchema);
-const { program: pointProgram, schema: pointSchema } = compile(gl, pointVertex, pointFragment);
-const pointView = view(gl, pointProgram, pointSchema);
-const { program: lineProgram, schema: lineSchema } = compile(gl, lineVertex, lineFragment);
-const lineView = view(gl, lineProgram, lineSchema);
+const { program: curveProgram, view: curveView } = compile(gl, curveVertex, curveFragment);
+const { program: pointProgram, view: pointView } = compile(gl, pointVertex, pointFragment);
+const { program: lineProgram, view: lineView } = compile(gl, lineVertex, lineFragment);
 const curveSegments = 100;
 function generateTriangleStrip() {
   return new Float32Array(

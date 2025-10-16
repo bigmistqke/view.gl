@@ -1,4 +1,4 @@
-import { a as attribute, u as uniform, g as glsl, c as compile, v as view } from './tag-Ahw-5sKJ.js';
+import { a as attribute, u as uniform, g as glsl, c as compile } from './tag-CpVTFYUu.js';
 import { c as createElement } from './utils-CvCgsM08.js';
 
 const canvas = createElement("canvas", {
@@ -40,8 +40,10 @@ ${uniform.vec3(u_color)}
 void main() {
   gl_FragColor = vec4(${u_color}, 1.0);
 }`;
-const { program, schema } = compile(gl, vertex, fragment);
-const { attributes, uniforms } = view(gl, program, schema);
+const {
+  program,
+  view: { attributes, uniforms }
+} = compile(gl, vertex, fragment);
 gl.useProgram(program);
 uniforms[u_color].set(0, 255, 0);
 attributes.a_vertex.set(

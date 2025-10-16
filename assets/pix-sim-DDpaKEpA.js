@@ -1,4 +1,4 @@
-import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile, v as view } from './tag-Ahw-5sKJ.js';
+import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile, v as view } from './tag-CpVTFYUu.js';
 import { c as createElement } from './utils-CvCgsM08.js';
 
 const MATERIALS = {
@@ -421,8 +421,7 @@ void main() {
     fragColor = vec4(1.0, 0.0, 1.0, 1.0); // Magenta for unknown materials
   }
 }`;
-const { program: stepProgram, schema: stepSchema } = compile(gl, vertex, stepFragment);
-const stepView = view(gl, stepProgram, stepSchema);
+const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment);
 const { program: renderProgram, schema: renderSchema } = compile(gl, vertex, renderFragment);
 const renderView = view(gl, renderProgram, {
   ...renderSchema,

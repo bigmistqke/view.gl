@@ -469,43 +469,45 @@ function interleave(key, layout, { instanced, buffer } = {}) {
 function compile(gl, vertex, fragment) {
   const _vertex = resolveGLSLTag(vertex);
   const _fragment = resolveGLSLTag(fragment);
+  const schema = {
+    uniforms: {
+      ..._vertex.schema.uniforms,
+      ..._fragment.schema.uniforms
+    },
+    attributes: {
+      ..._vertex.schema.attributes,
+      ..._fragment.schema.attributes
+    },
+    interleavedAttributes: {
+      ..._vertex.schema.interleavedAttributes,
+      ..._fragment.schema.interleavedAttributes
+    }
+  };
   const program = createProgram(gl, _vertex.template, _fragment.template);
   return {
     program,
-    schema: {
-      uniforms: {
-        ..._vertex.schema.uniforms,
-        ..._fragment.schema.uniforms
-      },
-      attributes: {
-        ..._vertex.schema.attributes,
-        ..._fragment.schema.attributes
-      },
-      interleavedAttributes: {
-        ..._vertex.schema.interleavedAttributes,
-        ..._fragment.schema.interleavedAttributes
-      }
-    }
+    schema,
+    view: view(gl, program, schema)
   };
 }
 function resolveGLSLTag(tag) {
   return {
-    template: resolveGLSLTagToString(tag),
-    schema: resolveGLSLTagToSchema(tag)
+    template: glslTagToString(tag),
+    schema: glslTagToSchema(tag)
   };
 }
-function resolveGLSLTagToSchema(tag) {
+function glslTagToSchema(tag) {
   const result = {
     uniforms: {},
     attributes: {},
     interleavedAttributes: {}
   };
   for (const slot of tag.slots) {
-    if (typeof slot === "string" || typeof slot === "number" || typeof slot === "symbol") {
+    if (typeof slot !== "object") {
       continue;
     }
     if (slot.type === "glsl") {
-      const { uniforms, attributes, interleavedAttributes } = resolveGLSLTagToSchema(slot);
+      const { uniforms, attributes, interleavedAttributes } = glslTagToSchema(slot);
       result.uniforms = {
         ...result.uniforms,
         ...uniforms
@@ -525,23 +527,20 @@ function resolveGLSLTagToSchema(tag) {
   }
   return result;
 }
-function resolveGLSLTagToString({
-  template: [initial, ...rest],
-  slots
-}) {
+function glslTagToString({ template: [initial, ...rest], slots }) {
   const v300 = !!initial?.startsWith("#version 300 es");
   let template = initial ?? "";
   for (let i = 0; i < rest.length; i++) {
-    template += `${resolveGLSLSlotToString(slots[i], v300)}${rest[i]}`;
+    template += `${glslSlotToString(slots[i], v300)}${rest[i]}`;
   }
   return template;
 }
-function resolveGLSLSlotToString(slot, v300) {
-  if (typeof slot === "string" || typeof slot === "number" || typeof slot === "symbol") {
+function glslSlotToString(slot, v300) {
+  if (typeof slot !== "object") {
     return toID(slot);
   }
   if (slot.type === "glsl") {
-    return resolveGLSLTagToString(slot);
+    return glslTagToString(slot);
   }
   if (slot.type === "interleavedAttribute") {
     return slot.layout.reduce(

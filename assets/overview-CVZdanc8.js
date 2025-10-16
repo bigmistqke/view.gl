@@ -1,4 +1,4 @@
-import { i as interleave, a as attribute, u as uniform, g as glsl, c as compile, v as view } from './tag-Ahw-5sKJ.js';
+import { i as interleave, a as attribute, u as uniform, g as glsl, c as compile } from './tag-CpVTFYUu.js';
 
 const canvas = document.createElement("canvas");
 canvas.width = 800;
@@ -37,12 +37,14 @@ varying vec3 v_color;
 void main() {
   gl_FragColor = vec4(v_color, 1.0);
 }`;
-const { program, schema } = compile(gl, vertex, fragment);
 const {
-  attributes: { a_vertex },
-  uniforms: { u_time },
-  interleavedAttributes: { instancedData }
-} = view(gl, program, schema);
+  program,
+  view: {
+    attributes: { a_vertex },
+    uniforms: { u_time },
+    interleavedAttributes: { instancedData }
+  }
+} = compile(gl, vertex, fragment);
 instancedData.set(
   new Float32Array(
     function* () {
