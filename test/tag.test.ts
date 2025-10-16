@@ -638,6 +638,282 @@ void main() { gl_FragColor = vec4(0.5); }`
   })
 })
 
+describe('glsl composition', () => {
+  let gl: GL
+
+  beforeEach(() => {
+    gl = createMockGL()
+  })
+
+  it('should compose glsl templates inside other glsl templates', () => {
+    const sharedUniforms = glsl`
+      ${uniform.vec2('u_resolution')}
+      ${uniform.float('u_time')}
+    `
+
+    const vertex = glsl`
+      ${sharedUniforms}
+      ${attribute.vec2('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position * u_resolution, 0.0, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_resolution: { kind: 'vec2' },
+      u_time: { kind: 'float' },
+    })
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec2' },
+    })
+  })
+
+  it('should compose nested glsl with symbols', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_pos_symbol = Symbol('a_position')
+
+    const sharedCode = glsl`
+      ${uniform.float(u_time_symbol)}
+      ${uniform.vec3('u_color')}
+    `
+
+    const vertex = glsl`
+      ${sharedCode}
+      ${attribute.vec2(a_pos_symbol)}
+      
+      void main() {
+        gl_Position = vec4(${a_pos_symbol}, 0.0, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      [u_time_symbol]: { kind: 'float' },
+      u_color: { kind: 'vec3' },
+    })
+
+    expect(schema.attributes).toEqual({
+      [a_pos_symbol]: { kind: 'vec2' },
+    })
+  })
+
+  it('should compose multiple levels of nesting', () => {
+    const basicUniforms = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+    `
+
+    const lightingUniforms = glsl`
+      ${basicUniforms}
+      ${uniform.vec3('u_lightPos')}
+      ${uniform.vec3('u_lightColor')}
+    `
+
+    const materialUniforms = glsl`
+      ${lightingUniforms}
+      ${uniform.float('u_roughness')}
+      ${uniform.float('u_metallic')}
+    `
+
+    const vertex = glsl`
+      ${materialUniforms}
+      ${attribute.vec3('a_position')}
+      ${attribute.vec3('a_normal')}
+      
+      void main() {
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_lightPos: { kind: 'vec3' },
+      u_lightColor: { kind: 'vec3' },
+      u_roughness: { kind: 'float' },
+      u_metallic: { kind: 'float' },
+    })
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec3' },
+      a_normal: { kind: 'vec3' },
+    })
+  })
+
+  it('should compose glsl with interleaved attributes', () => {
+    const vertexLayout = glsl`
+      ${interleave('vertexData', [
+        attribute.vec3('a_position'),
+        attribute.vec2('a_uv'),
+        attribute.vec3('a_normal')
+      ])}
+    `
+
+    const instanceLayout = glsl`
+      ${interleave('instanceData', [
+        attribute.vec3('a_instancePos'),
+        attribute.float('a_instanceScale')
+      ], { instanced: true })}
+    `
+
+    const vertex = glsl`
+      ${vertexLayout}
+      ${instanceLayout}
+      ${uniform.mat4('u_mvpMatrix')}
+      
+      void main() {
+        vec3 worldPos = a_position * a_instanceScale + a_instancePos;
+        gl_Position = u_mvpMatrix * vec4(worldPos, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.uniforms).toEqual({
+      u_mvpMatrix: { kind: 'mat4' },
+    })
+
+    expect(schema.interleavedAttributes).toEqual({
+      vertexData: {
+        layout: [
+          { key: 'a_position', kind: 'vec3' },
+          { key: 'a_uv', kind: 'vec2' },
+          { key: 'a_normal', kind: 'vec3' },
+        ],
+        instanced: false,
+      },
+      instanceData: {
+        layout: [
+          { key: 'a_instancePos', kind: 'vec3' },
+          { key: 'a_instanceScale', kind: 'float' },
+        ],
+        instanced: true,
+      },
+    })
+  })
+
+  it('should compose glsl in both vertex and fragment shaders', () => {
+    const sharedUniforms = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+    `
+
+    const lightingCode = glsl`
+      ${uniform.vec3('u_lightPos')}
+      
+      vec3 calculateLighting(vec3 pos, vec3 normal) {
+        vec3 lightDir = normalize(u_lightPos - pos);
+        return max(dot(normal, lightDir), 0.0) * vec3(1.0);
+      }
+    `
+
+    const vertex = glsl`
+      ${sharedUniforms}
+      ${attribute.vec3('a_position')}
+      ${attribute.vec3('a_normal')}
+      
+      varying vec3 v_normal;
+      varying vec3 v_position;
+      
+      void main() {
+        v_normal = a_normal;
+        v_position = a_position;
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    const fragment = glsl`
+      ${sharedUniforms}
+      ${lightingCode}
+      
+      varying vec3 v_normal;
+      varying vec3 v_position;
+      
+      void main() {
+        vec3 lighting = calculateLighting(v_position, v_normal);
+        gl_FragColor = vec4(lighting, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, vertex, fragment)
+
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_lightPos: { kind: 'vec3' },
+    })
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec3' },
+      a_normal: { kind: 'vec3' },
+    })
+  })
+
+  it('should handle empty composed glsl templates', () => {
+    const emptyCode = glsl``
+    
+    const vertex = glsl`
+      ${emptyCode}
+      ${attribute.vec2('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, vertex, glsl``)
+
+    expect(schema.attributes).toEqual({
+      a_position: { kind: 'vec2' },
+    })
+
+    expect(schema.uniforms).toEqual({})
+  })
+
+  it('should deduplicate uniforms across composed templates', () => {
+    const timeUniform = glsl`${uniform.float('u_time')}`
+    const resolutionUniform = glsl`${uniform.vec2('u_resolution')}`
+    
+    const sharedUniforms1 = glsl`
+      ${timeUniform}
+      ${resolutionUniform}
+    `
+    
+    const sharedUniforms2 = glsl`
+      ${timeUniform} // Same uniform appears again
+      ${uniform.vec3('u_color')}
+    `
+
+    const vertex = glsl`
+      ${sharedUniforms1}
+      ${sharedUniforms2}
+      ${attribute.vec2('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position * u_resolution, 0.0, 1.0);
+      }
+    `
+
+    const { schema } = compile(gl, vertex, glsl``)
+
+    // Should only have one instance of u_time, despite appearing multiple times
+    expect(schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_color: { kind: 'vec3' },
+    })
+
+    expect(Object.keys(schema.uniforms)).toHaveLength(3)
+  })
+})
+
 describe('compile with symbols', () => {
   let gl: GL
   let mockProgram: WebGLProgram
