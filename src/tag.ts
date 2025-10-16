@@ -92,20 +92,14 @@ export function interleave<
 /*                                                                                */
 /**********************************************************************************/
 
-type _FlattenSlots<T> =
-  T extends GLSLTag<infer TSlots>
-    ? TSlots extends [infer First, ...infer Rest]
-      ? First extends GLSLTag
-        ? _FlattenSlots<First>
-        : First extends unknown[]
-          ? _FlattenSlots<[...First, ..._FlattenSlots<Rest>]>
-          : [First, ..._FlattenSlots<Rest>]
-      : []
-    : T
+type GLSLTagToSchema<TTag extends GLSLTag> =
+  FlattenSlots<TTag> extends infer TSlots
+    ? TSlots extends Array<any>
+      ? GLSLSlotsToSchema<TSlots>
+      : never
+    : never
 
-type FlattenSlots<T extends GLSLTag> = _FlattenSlots<T>
-
-type ResolveSlots<TSlots extends Array<GLSLSlot>> = {
+type GLSLSlotsToSchema<TSlots extends Array<GLSLSlot>> = {
   uniforms: {
     [K in Extract<TSlots[number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
   }
@@ -117,14 +111,22 @@ type ResolveSlots<TSlots extends Array<GLSLSlot>> = {
   }
 }
 
-type ResolveSchema<TTag extends GLSLTag> =
-  FlattenSlots<TTag> extends infer TSlots
-    ? TSlots extends Array<any>
-      ? ResolveSlots<TSlots>
+type FlattenSlots<T> =
+  T extends GLSLTag<infer TSlots>
+    ? _FlattenSlots<TSlots>
+    : T extends Array<GLSLSlot>
+      ? _FlattenSlots<T>
       : never
-    : never
 
-type MergeSchema<TVertex extends Record<string, any>, TFragment extends Record<string, any>> = {
+type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer Rest]
+  ? First extends GLSLTag
+    ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
+    : First extends unknown[]
+      ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
+      : [First, ...FlattenSlots<Rest>]
+  : []
+
+type MergeGLSLSchema<TVertex extends Record<string, any>, TFragment extends Record<string, any>> = {
   uniforms: Spread<[TVertex['uniforms'], TFragment['uniforms']]>
   attributes: Spread<[TVertex['attributes'], TFragment['attributes']]>
   interleavedAttributes: Spread<
@@ -132,9 +134,9 @@ type MergeSchema<TVertex extends Record<string, any>, TFragment extends Record<s
   >
 }
 
-type CompilationResult<TVertex extends GLSLTag, TFragment extends GLSLTag> = {
+type CompileResult<TVertex extends GLSLTag, TFragment extends GLSLTag> = {
   program: WebGLProgram
-  schema: MergeSchema<ResolveSchema<TVertex>, ResolveSchema<TFragment>>
+  schema: MergeGLSLSchema<GLSLTagToSchema<TVertex>, GLSLTagToSchema<TFragment>>
 }
 
 export function compile<TVertex extends GLSLTag, TFragment extends GLSLTag>(
@@ -163,7 +165,7 @@ export function compile<TVertex extends GLSLTag, TFragment extends GLSLTag>(
         ..._fragment.schema.interleavedAttributes,
       },
     },
-  } as CompilationResult<TVertex, TFragment>
+  } as CompileResult<TVertex, TFragment>
 }
 
 function resolveGLSLTag<TTag extends GLSLTag>(tag: TTag) {
