@@ -20,7 +20,7 @@ Object.entries(urls).forEach(([name, localUrl]) => {
       event.preventDefault()
       load(name, localUrl)
     },
-    innerHTML: name,
+    innerHTML: name.replaceAll('-', ' '),
     parentElement: nav,
     'data-route': name,
   })
