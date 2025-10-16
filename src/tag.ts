@@ -4,11 +4,11 @@ import type {
   AttributeOptions,
   AttributeTag,
   AttributeTagFn as AttributeTagMethod,
-  GLSLResult,
   GLSLSlot,
   GLSLTag,
   InterleaveTag,
   Prettify,
+  Spread,
   UniformKind,
   UniformOptions,
   UniformTag,
@@ -20,7 +20,7 @@ export function glsl<TSlot extends GLSLSlot, TSlots extends TSlot[]>(
   template: TemplateStringsArray,
   ...slots: [...TSlots]
 ): GLSLTag<TSlots> {
-  return { template, slots }
+  return { template, slots, type: 'glsl' }
 }
 
 export const uniform = new Proxy(
@@ -92,10 +92,56 @@ export function interleave<
 /*                                                                                */
 /**********************************************************************************/
 
-export function compile<
-  TVertex extends ReturnType<typeof glsl>,
-  TFragment extends ReturnType<typeof glsl>,
->(gl: WebGLRenderingContext, vertex: TVertex, fragment: TFragment) {
+type _FlattenSlots<T> =
+  T extends GLSLTag<infer TSlots>
+    ? TSlots extends [infer First, ...infer Rest]
+      ? First extends GLSLTag
+        ? _FlattenSlots<First>
+        : First extends unknown[]
+          ? _FlattenSlots<[...First, ..._FlattenSlots<Rest>]>
+          : [First, ..._FlattenSlots<Rest>]
+      : []
+    : T
+
+type FlattenSlots<T extends GLSLTag> = _FlattenSlots<T>
+
+type ResolveSlots<TSlots extends Array<GLSLSlot>> = {
+  uniforms: {
+    [K in Extract<TSlots[number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+  }
+  attributes: {
+    [K in Extract<TSlots[number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+  }
+  interleavedAttributes: {
+    [K in Extract<TSlots[number], InterleaveTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+  }
+}
+
+type ResolveSchema<TTag extends GLSLTag> =
+  FlattenSlots<TTag> extends infer TSlots
+    ? TSlots extends Array<any>
+      ? ResolveSlots<TSlots>
+      : never
+    : never
+
+type MergeSchema<TVertex extends Record<string, any>, TFragment extends Record<string, any>> = {
+  uniforms: Spread<[TVertex['uniforms'], TFragment['uniforms']]>
+  attributes: Spread<[TVertex['attributes'], TFragment['attributes']]>
+  interleavedAttributes: Spread<
+    [TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]
+  >
+}
+
+type CompilationResult<TVertex extends GLSLTag, TFragment extends GLSLTag> = {
+  program: WebGLProgram
+  schema: MergeSchema<ResolveSchema<TVertex>, ResolveSchema<TFragment>>
+}
+
+export function compile<TVertex extends GLSLTag, TFragment extends GLSLTag>(
+  gl: WebGLRenderingContext,
+  vertex: TVertex,
+  fragment: TFragment,
+) {
   const _vertex = resolveGLSLTag(vertex)
   const _fragment = resolveGLSLTag(fragment)
 
@@ -105,57 +151,56 @@ export function compile<
     program,
     schema: {
       uniforms: {
-        ..._vertex.uniforms,
-        ..._fragment.uniforms,
+        ..._vertex.schema.uniforms,
+        ..._fragment.schema.uniforms,
       },
       attributes: {
-        ..._vertex.attributes,
-        ..._fragment.attributes,
+        ..._vertex.schema.attributes,
+        ..._fragment.schema.attributes,
       },
       interleavedAttributes: {
-        ..._vertex.interleavedAttributes,
-        ..._fragment.interleavedAttributes,
+        ..._vertex.schema.interleavedAttributes,
+        ..._fragment.schema.interleavedAttributes,
       },
     },
-  } satisfies GLSLResult
+  } as CompilationResult<TVertex, TFragment>
 }
 
-interface ResolveGLSLTag<T extends GLSLTag> {
-  template: string
-  uniforms: {
-    [K in Extract<T['slots'][number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-  }
-  attributes: {
-    [K in Extract<T['slots'][number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-  }
-  interleavedAttributes: {
-    [K in Extract<T['slots'][number], InterleaveTag> as K['key']]: Prettify<
-      Omit<K, 'name' | 'type'>
-    >
+function resolveGLSLTag<TTag extends GLSLTag>(tag: TTag) {
+  return {
+    template: resolveGLSLTagToString(tag),
+    schema: resolveGLSLTagToSchema(tag),
   }
 }
 
-function resolveGLSLTag<TTag extends ReturnType<typeof glsl>>({
-  template: [initial, ...rest],
-  slots,
-}: TTag) {
-  const v300 = !!initial?.startsWith('#version 300 es')
-
-  let template = initial ?? ''
-
-  for (let i = 0; i < rest.length; i++) {
-    template += `${resolveGLSLSlot(slots[i]!, v300)}${rest[i]}`
-  }
-
+function resolveGLSLTagToSchema<TTag extends GLSLTag>(tag: TTag) {
   const result = {
-    template,
     uniforms: {},
     attributes: {},
     interleavedAttributes: {},
-  } as ResolveGLSLTag<TTag>
+  }
 
-  for (const slot of slots) {
+  for (const slot of tag.slots) {
     if (typeof slot === 'string' || typeof slot === 'number' || typeof slot === 'symbol') {
+      continue
+    }
+
+    if (slot.type === 'glsl') {
+      const { uniforms, attributes, interleavedAttributes } = resolveGLSLTagToSchema(slot)
+
+      result.uniforms = {
+        ...result.uniforms,
+        ...uniforms,
+      }
+      result.attributes = {
+        ...result.attributes,
+        ...attributes,
+      }
+      result.interleavedAttributes = {
+        ...result.interleavedAttributes,
+        ...interleavedAttributes,
+      }
+
       continue
     }
 
@@ -168,9 +213,28 @@ function resolveGLSLTag<TTag extends ReturnType<typeof glsl>>({
   return result
 }
 
-function resolveGLSLSlot(slot: GLSLSlot, v300: boolean) {
+function resolveGLSLTagToString<TTag extends GLSLTag>({
+  template: [initial, ...rest],
+  slots,
+}: TTag) {
+  const v300 = !!initial?.startsWith('#version 300 es')
+
+  let template = initial ?? ''
+
+  for (let i = 0; i < rest.length; i++) {
+    template += `${resolveGLSLSlotToString(slots[i]!, v300)}${rest[i]}`
+  }
+
+  return template
+}
+
+function resolveGLSLSlotToString(slot: GLSLSlot, v300: boolean) {
   if (typeof slot === 'string' || typeof slot === 'number' || typeof slot === 'symbol') {
     return toID(slot)
+  }
+
+  if (slot.type === 'glsl') {
+    return resolveGLSLTagToString(slot)
   }
 
   if (slot.type === 'interleavedAttribute') {
@@ -181,7 +245,7 @@ function resolveGLSLSlot(slot: GLSLSlot, v300: boolean) {
     )
   }
 
-  if (typeof slot === 'object' && slot.type === 'uniform' && 'size' in slot) {
+  if (slot.type === 'uniform' && 'size' in slot) {
     return `${slot.type} ${slot.kind} ${toID(slot.key)}[${slot.size}];`
   }
 
