@@ -18,9 +18,23 @@ export type RemoveSuffix<T, S extends string> = {
 
 export type GL = WebGLRenderingContext | WebGL2RenderingContext
 
+export type DeepMerge<A extends readonly [...any]> = A extends [infer L, ...infer R]
+  ? DeepMergeTwo<L, DeepMerge<R>>
+  : unknown
+
+type DeepMergeTwo<TBase, TOverride> = {
+  [K in keyof TBase | keyof TOverride]: K extends keyof TOverride
+    ? K extends keyof TBase
+      ? ShallowMerge<[TBase[K], TOverride[K]]>
+      : TOverride[K]
+    : K extends keyof TBase
+      ? TBase[K]
+      : never
+}
+
 // see https://stackoverflow.com/a/49683575
-export type Spread<A extends readonly [...any]> = A extends [infer L, ...infer R]
-  ? SpreadTwo<L, Spread<R>>
+export type ShallowMerge<A extends readonly [...any]> = A extends [infer L, ...infer R]
+  ? ShallowMergeTwo<L, ShallowMerge<R>>
   : unknown
 
 type OptionalPropertyNames<T> = {
@@ -33,7 +47,7 @@ type SpreadProperties<L, R, K extends keyof L & keyof R> = {
 
 type Id<T> = T extends infer U ? { [K in keyof U]: U[K] } : never
 
-type SpreadTwo<L, R> = Id<
+type ShallowMergeTwo<L, R> = Id<
   Pick<L, Exclude<keyof L, keyof R>> &
     Pick<R, Exclude<keyof R, OptionalPropertyNames<R>>> &
     Pick<R, Exclude<OptionalPropertyNames<R>, keyof L>> &
@@ -381,6 +395,7 @@ export interface UniformOptions {
 }
 
 export type UniformSchema = Record<string | symbol, UniformOptions>
+export type UniformSchemaPartial = Record<string | symbol, Partial<UniformOptions>>
 
 export type UniformMethods<TOptions extends UniformOptions> = TOptions['size'] extends number
   ? {
@@ -665,6 +680,13 @@ export interface ViewSchema {
   attributes?: AttributeSchema
   interleavedAttributes?: InterleavedAttributeSchema
   buffers?: BufferSchema
+}
+
+export interface ViewSchemaPartial {
+  uniforms?: Record<string | symbol, Partial<UniformOptions>>
+  attributes?: Record<string | symbol, Partial<AttributeOptions>>
+  interleavedAttributes?: Record<string | symbol, Partial<InterleavedAttributeOptions>>
+  buffers?: Record<string | symbol, Partial<BufferOptions>>
 }
 
 export type View<T extends ViewSchema = ViewSchema> = {

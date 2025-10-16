@@ -1,6 +1,5 @@
 import { FramebufferOptions } from 'src/types'
 import { createFramebuffer } from 'src/utils'
-import { view } from 'view.gl'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
 import { createElement } from '../utils'
 
@@ -462,17 +461,8 @@ void main() {
 
 // --- Create programs ---
 const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment)
-
-const { program: renderProgram, schema: renderSchema } = compile(gl, vertex, renderFragment)
-const renderView = view(gl, renderProgram, {
-  ...renderSchema,
-  attributes: {
-    ...renderSchema.attributes,
-    a_vertex: {
-      ...renderSchema.attributes.a_vertex,
-      buffer: stepView.attributes.a_vertex.buffer,
-    },
-  },
+const { program: renderProgram, view: renderView } = compile(gl, vertex, renderFragment, {
+  attributes: { a_vertex: { buffer: stepView.attributes.a_vertex.buffer } },
 })
 
 gl.useProgram(renderProgram)

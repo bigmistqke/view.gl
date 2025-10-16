@@ -4,17 +4,19 @@ import type {
   AttributeOptions,
   AttributeTag,
   AttributeTagFn as AttributeTagMethod,
+  DeepMerge,
   GLSLSlot,
   GLSLTag,
   InterleaveTag,
   Prettify,
-  Spread,
+  ShallowMerge,
   UniformKind,
   UniformOptions,
   UniformTag,
   UniformTagFn as UniformTagMethod,
   View,
   ViewSchema,
+  ViewSchemaPartial,
 } from './types'
 import { createProgram } from './utils'
 
@@ -128,18 +130,34 @@ type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer
       : [First, ...FlattenSlots<Rest>]
   : []
 
-type MergeGLSLSchema<TVertex extends Record<string, any>, TFragment extends Record<string, any>> = {
-  uniforms: Spread<[TVertex['uniforms'], TFragment['uniforms']]>
-  attributes: Spread<[TVertex['attributes'], TFragment['attributes']]>
-  interleavedAttributes: Spread<
-    [TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]
+type MergeGLSLSchema<
+  TVertex extends ViewSchema,
+  TFragment extends ViewSchema,
+  TOverrides extends ViewSchemaPartial,
+> = {
+  uniforms: DeepMerge<
+    [ShallowMerge<[TVertex['uniforms'], TFragment['uniforms']]>, TOverrides['uniforms']]
+  >
+  attributes: DeepMerge<
+    [ShallowMerge<[TVertex['attributes'], TFragment['attributes']]>, TOverrides['attributes']]
+  >
+  interleavedAttributes: DeepMerge<
+    [
+      ShallowMerge<[TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]>,
+      TOverrides['interleavedAttributes'],
+    ]
   >
 }
 
-type CompileResult<TVertex extends GLSLTag, TFragment extends GLSLTag> =
+type CompileResult<
+  TVertex extends GLSLTag,
+  TFragment extends GLSLTag,
+  TOverrides extends ViewSchemaPartial,
+> =
   MergeGLSLSchema<
     glslTagToSchema<TVertex>,
-    glslTagToSchema<TFragment>
+    glslTagToSchema<TFragment>,
+    TOverrides
   > extends infer TSchema extends ViewSchema
     ? {
         program: WebGLProgram
@@ -148,11 +166,11 @@ type CompileResult<TVertex extends GLSLTag, TFragment extends GLSLTag> =
       }
     : never
 
-export function compile<TVertex extends GLSLTag, TFragment extends GLSLTag>(
-  gl: WebGLRenderingContext,
-  vertex: TVertex,
-  fragment: TFragment,
-) {
+export function compile<
+  TVertex extends GLSLTag,
+  TFragment extends GLSLTag,
+  TOverride extends ViewSchemaPartial,
+>(gl: WebGLRenderingContext, vertex: TVertex, fragment: TFragment, overrideSchema?: TOverride) {
   const _vertex = resolveGLSLTag(vertex)
   const _fragment = resolveGLSLTag(fragment)
 
@@ -171,13 +189,27 @@ export function compile<TVertex extends GLSLTag, TFragment extends GLSLTag>(
     },
   }
 
+  for (const kind in overrideSchema) {
+    const schemaKind = schema[kind as keyof typeof schema]
+    const overrideSchemaKind = overrideSchema[kind]
+
+    for (const key in overrideSchemaKind) {
+      // @ts-expect-error
+      schemaKind[key] = {
+        // @ts-expect-error
+        ...schemaKind[key],
+        ...overrideSchemaKind[key],
+      }
+    }
+  }
+
   const program = createProgram(gl, _vertex.template, _fragment.template)
 
   return {
-    program: program,
+    program,
     schema,
     view: view(gl, program, schema),
-  } as CompileResult<TVertex, TFragment>
+  } as CompileResult<TVertex, TFragment, TOverride>
 }
 
 function resolveGLSLTag<TTag extends GLSLTag>(tag: TTag) {
