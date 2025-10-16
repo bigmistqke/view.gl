@@ -422,6 +422,9 @@ function bufferView(gl, schema, { signal } = {}) {
   return buffers;
 }
 
+function glsl(template, ...slots) {
+  return { template, slots, type: "glsl" };
+}
 const uniform = new Proxy(
   {},
   {
@@ -463,54 +466,95 @@ function interleave(key, layout, { instanced, buffer } = {}) {
     buffer
   };
 }
-function glsl([initial, ...rest], ...holes) {
-  const v300 = initial?.startsWith("#version 300 es");
-  const template = rest.reduce((out, templatePart, index) => {
-    const hole = holes[index];
-    const holePart = typeof hole === "string" || typeof hole === "number" || typeof hole === "symbol" ? toID(hole) : hole.type === "interleavedAttribute" ? hole.layout.reduce(
-      (a, v) => v300 ? `${a}in ${v.kind} ${toID(v.key)};
-` : `${a}attribute ${v.kind} ${toID(v.key)};
-`,
-      ""
-    ) : typeof hole === "object" && hole.type === "uniform" && "size" in hole ? `${hole.type} ${hole.kind} ${toID(hole.key)}[${hole.size}];` : `${hole.type === "attribute" && v300 ? "in" : hole.type} ${hole.kind} ${toID(hole.key)};`;
-    return out + holePart + templatePart;
-  }, initial || "");
-  return holes.reduce(
-    (resources, resource) => {
-      if (typeof resource === "string" || typeof resource === "number" || typeof resource === "symbol") {
-        return resources;
-      }
-      const { key: name, type, ...rest2 } = resource;
-      resources[`${type}s`][name] = rest2;
-      return resources;
-    },
-    {
-      template,
-      uniforms: {},
-      attributes: {},
-      interleavedAttributes: {}
-    }
-  );
-}
 function compile(gl, vertex, fragment) {
-  const program = createProgram(gl, vertex.template, fragment.template);
+  const _vertex = resolveGLSLTag(vertex);
+  const _fragment = resolveGLSLTag(fragment);
+  const program = createProgram(gl, _vertex.template, _fragment.template);
   return {
     program,
     schema: {
       uniforms: {
-        ...vertex.uniforms,
-        ...fragment.uniforms
+        ..._vertex.schema.uniforms,
+        ..._fragment.schema.uniforms
       },
       attributes: {
-        ...vertex.attributes,
-        ...fragment.attributes
+        ..._vertex.schema.attributes,
+        ..._fragment.schema.attributes
       },
       interleavedAttributes: {
-        ...vertex.interleavedAttributes,
-        ...fragment.interleavedAttributes
+        ..._vertex.schema.interleavedAttributes,
+        ..._fragment.schema.interleavedAttributes
       }
     }
   };
+}
+function resolveGLSLTag(tag) {
+  return {
+    template: resolveGLSLTagToString(tag),
+    schema: resolveGLSLTagToSchema(tag)
+  };
+}
+function resolveGLSLTagToSchema(tag) {
+  const result = {
+    uniforms: {},
+    attributes: {},
+    interleavedAttributes: {}
+  };
+  for (const slot of tag.slots) {
+    if (typeof slot === "string" || typeof slot === "number" || typeof slot === "symbol") {
+      continue;
+    }
+    if (slot.type === "glsl") {
+      const { uniforms, attributes, interleavedAttributes } = resolveGLSLTagToSchema(slot);
+      result.uniforms = {
+        ...result.uniforms,
+        ...uniforms
+      };
+      result.attributes = {
+        ...result.attributes,
+        ...attributes
+      };
+      result.interleavedAttributes = {
+        ...result.interleavedAttributes,
+        ...interleavedAttributes
+      };
+      continue;
+    }
+    const { key: name, type, ...rest } = slot;
+    result[`${type}s`][name] = rest;
+  }
+  return result;
+}
+function resolveGLSLTagToString({
+  template: [initial, ...rest],
+  slots
+}) {
+  const v300 = !!initial?.startsWith("#version 300 es");
+  let template = initial ?? "";
+  for (let i = 0; i < rest.length; i++) {
+    template += `${resolveGLSLSlotToString(slots[i], v300)}${rest[i]}`;
+  }
+  return template;
+}
+function resolveGLSLSlotToString(slot, v300) {
+  if (typeof slot === "string" || typeof slot === "number" || typeof slot === "symbol") {
+    return toID(slot);
+  }
+  if (slot.type === "glsl") {
+    return resolveGLSLTagToString(slot);
+  }
+  if (slot.type === "interleavedAttribute") {
+    return slot.layout.reduce(
+      (a, v) => v300 ? `${a}in ${v.kind} ${toID(v.key)};
+` : `${a}attribute ${v.kind} ${toID(v.key)};
+`,
+      ""
+    );
+  }
+  if (slot.type === "uniform" && "size" in slot) {
+    return `${slot.type} ${slot.kind} ${toID(slot.key)}[${slot.size}];`;
+  }
+  return `${slot.type === "attribute" && v300 ? "in" : slot.type} ${slot.kind} ${toID(slot.key)};`;
 }
 
 export { attribute as a, createFramebuffer as b, compile as c, uniformView as d, attributeView as e, glsl as g, interleave as i, uniform as u, view as v };
