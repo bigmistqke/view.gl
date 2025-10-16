@@ -466,7 +466,7 @@ function interleave(key, layout, { instanced, buffer } = {}) {
     buffer
   };
 }
-function compile(gl, vertex, fragment) {
+function compile(gl, vertex, fragment, overrideSchema) {
   const _vertex = resolveGLSLTag(vertex);
   const _fragment = resolveGLSLTag(fragment);
   const schema = {
@@ -483,6 +483,17 @@ function compile(gl, vertex, fragment) {
       ..._fragment.schema.interleavedAttributes
     }
   };
+  for (const kind in overrideSchema) {
+    const schemaKind = schema[kind];
+    const overrideSchemaKind = overrideSchema[kind];
+    for (const key in overrideSchemaKind) {
+      schemaKind[key] = {
+        // @ts-expect-error
+        ...schemaKind[key],
+        ...overrideSchemaKind[key]
+      };
+    }
+  }
   const program = createProgram(gl, _vertex.template, _fragment.template);
   return {
     program,
@@ -556,4 +567,4 @@ function glslSlotToString(slot, v300) {
   return `${slot.type === "attribute" && v300 ? "in" : slot.type} ${slot.kind} ${toID(slot.key)};`;
 }
 
-export { attribute as a, createFramebuffer as b, compile as c, uniformView as d, attributeView as e, glsl as g, interleave as i, uniform as u, view as v };
+export { attribute as a, createFramebuffer as b, compile as c, uniformView as d, attributeView as e, glsl as g, interleave as i, uniform as u };

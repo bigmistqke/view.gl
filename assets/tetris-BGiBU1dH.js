@@ -1,4 +1,4 @@
-import { a as attribute, u as uniform, g as glsl, c as compile, d as uniformView, e as attributeView } from './tag-CpVTFYUu.js';
+import { a as attribute, u as uniform, g as glsl, c as compile, d as uniformView, e as attributeView } from './tag-B8cKWkxB.js';
 
 function rotate(data, size, clockwise = true) {
   for (let layer = 0; layer < Math.floor(size / 2); layer++) {

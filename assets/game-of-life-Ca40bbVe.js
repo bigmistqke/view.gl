@@ -1,4 +1,4 @@
-import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile, v as view } from './tag-CpVTFYUu.js';
+import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-B8cKWkxB.js';
 
 let playing = false;
 const canvas = document.createElement("canvas");
@@ -125,13 +125,9 @@ const renderFragment = glsl`
     gl_FragColor = vec4(vec3(cell), 1.0);
   }`;
 const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment);
-const { program: renderProgram, schema: renderSchema } = compile(gl, vertex, renderFragment);
-const renderView = view(gl, renderProgram, {
-  ...renderSchema,
+const { program: renderProgram, view: renderView } = compile(gl, vertex, renderFragment, {
   attributes: {
-    ...renderSchema.attributes,
     a_vertex: {
-      ...renderSchema.attributes.a_vertex,
       buffer: stepView.attributes.a_vertex.buffer
     }
   }

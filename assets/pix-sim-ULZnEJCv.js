@@ -1,4 +1,4 @@
-import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile, v as view } from './tag-CpVTFYUu.js';
+import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-B8cKWkxB.js';
 import { c as createElement } from './utils-CvCgsM08.js';
 
 const MATERIALS = {
@@ -422,16 +422,8 @@ void main() {
   }
 }`;
 const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment);
-const { program: renderProgram, schema: renderSchema } = compile(gl, vertex, renderFragment);
-const renderView = view(gl, renderProgram, {
-  ...renderSchema,
-  attributes: {
-    ...renderSchema.attributes,
-    a_vertex: {
-      ...renderSchema.attributes.a_vertex,
-      buffer: stepView.attributes.a_vertex.buffer
-    }
-  }
+const { program: renderProgram, view: renderView } = compile(gl, vertex, renderFragment, {
+  attributes: { a_vertex: { buffer: stepView.attributes.a_vertex.buffer } }
 });
 gl.useProgram(renderProgram);
 renderView.uniforms.u_palette.set(
