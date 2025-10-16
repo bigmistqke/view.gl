@@ -11,45 +11,38 @@
 - [👁️ view.gl](#️-viewgl)
   - [🚀 Basic Usage](#-basic-usage)
   - [👁️ view](#️-view)
-  - [👀 View Types](#-view-types)
+  - [👀 Resource Views](#-resource-views)
     - [🎯 uniformView](#-uniformview)
     - [📝 attributeView](#-attributeview)
     - [🔗 interleavedAttributeView](#-interleavedattributeview)
     - [🗂️ bufferView](#-bufferview)
-  - [🎨 Drawing Examples](#-drawing-examples)
-    - [🖼️ Regular Drawing](#-regular-drawing)
-    - [📱 Instanced Drawing](#-instanced-drawing)
 - [🏷️ view.gl/tag](#️-viewgltag)
   - [🚀 Basic Usage](#-basic-usage-1)
-  - [📝 Template Features](#-template-features)
-  - [⚙️ Tag Functions](#️-tag-functions)
+  - [📝 glsl](#-glsl)
+    - [🧩 GLSL Fragment](#-glsl-fragment)
+    - [🔒 Symbol Scoping](#-symbol-scoping)
+    - [WebGL Version Support](#webgl-version-support)
+  - [⚙️ Resource Tags](#️-resource-tags)
     - [🎯 uniform[kind](name, options?)](#-uniformkindname-options)
     - [📝 attribute[kind](name, options?)](#-attributekindname-options)
     - [🔗 interleave(name, layout, options?)](#-interleavename-layout-options)
-    - [📝 glsl](#-glsl)
-    - [⚙️ compile(gl, vertex, fragment)](#️-compilegl-vertex-fragment)
-  - [🔣 Symbol Support](#-symbol-support)
+  - [⚙️ compile(gl, vertex, fragment)](#️-compilegl-vertex-fragment)
 - [🛠️ Utils](#️-utils)
   - [🏗️ createProgram](#️-createprogram)
   - [🖼️ createTexture](#️-createtexture)
   - [🖥️ createFramebuffer](#️-createframebuffer)
+- [🔍 WebGL Type Compatibility](#-webgl-type-compatibility)
+  - [🎯 Uniform Types](#-uniform-types)
+  - [📝 Attribute Types](#-attribute-types)
 
 ## 📦 Install
 
 ```shell
 npm install @bigmistqke/view.gl
-```
-
-```shell
+# or
 pnpm add @bigmistqke/view.gl
-```
-
-```shell
+# or
 yarn add @bigmistqke/view.gl
-```
-
-```shell
-bun add @bigmistqke/view.gl
 ```
 
 ## 👁️ view.gl
@@ -86,69 +79,72 @@ attributes.position.bind()
 
 ### 👁️ view
 
-The `view()` function is the main entry point for managing WebGL resources. It takes a WebGL context, program, and schema to create type-safe resource managers.
+The `view()` function creates type-safe WebGL resource managers from a schema.
 
 ```typescript
-import { view } from '@bigmistqke/view.gl'
-
 const { uniforms, attributes, buffers } = view(gl, program, schema)
 ```
 
 **Parameters:**
 
-- `gl`: WebGL rendering context (`WebGLRenderingContext` or `WebGL2RenderingContext`)
+- `gl`: WebGL rendering context
 - `program`: Compiled WebGL program
 - `schema`: Resource definitions object
 
-**Schema Structure:**
+**Returns:**
+
+- `uniforms`: Type-safe uniform setters
+- `attributes`: Attribute managers with buffer handling
+- `buffers`: Generic buffer managers
+
+**ViewSchema:**
+The complete schema object that defines all WebGL resources. Contains optional mappings for uniforms, attributes, interleaved attributes, and buffers.
+
+<details>
+<summary>TypeScript Types</summary>
 
 ```typescript
-const schema = {
-  uniforms: {
-    // Uniform definitions
-    time: { kind: 'float' },
-    transform: { kind: 'mat4' },
-    lights: { kind: 'vec3', size: 8 }, // Array uniform
-  },
-  attributes: {
-    // Attribute definitions
-    position: { kind: 'vec3' },
-    instanceOffset: { kind: 'vec2', instanced: true },
-  },
-  buffers: {
-    // Buffer definitions
-    indices: { target: 'ELEMENT_ARRAY_BUFFER' },
-    data: { target: 'ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
-  },
+interface ViewSchema {
+  uniforms?: Record<string | symbol, UniformOptions>
+  attributes?: Record<string | symbol, AttributeOptions>
+  interleavedAttributes?: Record<string | symbol, InterleavedAttributeOptions>
+  buffers?: Record<string | symbol, BufferOptions>
+}
+
+interface UniformOptions {
+  kind: UniformKind
+  size?: number // For array uniforms
+}
+
+interface AttributeOptions {
+  kind: AttributeKind
+  instanced?: boolean
+  buffer?: WebGLBuffer
+}
+
+interface InterleavedAttributeOptions {
+  layout: Array<{ key: string | symbol; kind: AttributeKind }>
+  instanced?: boolean
+  buffer?: WebGLBuffer
+}
+
+interface BufferOptions {
+  target: 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
+  usage?: 'STATIC_DRAW' | 'DYNAMIC_DRAW' | 'STREAM_DRAW'
 }
 ```
 
-**Returns:**
+</details>
 
-- `uniforms`: Object with uniform setters (e.g., `uniforms.time.set(value)`)
-- `attributes`: Object with attribute managers (e.g., `attributes.position.set(data).bind()`)
-- `buffers`: Object with buffer managers (e.g., `buffers.indices.set(data).bind()`)
+### 👀 Resource Views
 
-### 👀 View Types
-
-Each view type can be imported individually too.
-
-```typescript
-import {
-  uniformView,
-  attributeView,
-  interleavedAttributeView,
-  bufferView,
-} from '@bigmistqke/view.gl'
-```
+Each view type can be imported individually.
 
 #### 🎯 uniformView
 
 Manages shader uniform variables.
 
 ```typescript
-import { uniformView } from '@bigmistqke/view.gl'
-
 const uniforms = uniformView(gl, program, {
   time: { kind: 'float' },
   lights: { kind: 'vec3', size: 8 }, // Array uniform: vec3[8]
@@ -157,52 +153,118 @@ const uniforms = uniformView(gl, program, {
 
 uniforms.time.set(performance.now())
 uniforms.lights.set(lightData) // Takes Float32Array for array uniforms
-uniforms.transform.set(transformMatrix)
 ```
 
-**Settings:**
+**UniformSchema:**
+A mapping of uniform names to their configuration. Each uniform has a GLSL type and optional array size.
 
-- `kind`: GLSL type (`'float'`, `'vec2'`, `'mat4'`, `'sampler2D'`, etc.)
-- `size`: Array size (optional) - converts uniform to array type with Float32Array setter
+```typescript
+{
+  time: { kind: 'float' },
+  transform: { kind: 'mat4' },
+  lights: { kind: 'vec3', size: 8 }, // Array uniform
+}
+```
+
+- `kind`: GLSL type (see [Uniform Types](#-uniform-types) for full list and WebGL compatibility)
+- `size`: Array size (optional) - converts uniform to array type
+
+<details>
+<summary>TypeScript Types</summary>
+
+```typescript
+type UniformKind =
+  | 'float'
+  | 'int'
+  | 'bool'
+  | 'vec2'
+  | 'vec3'
+  | 'vec4'
+  | 'ivec2'
+  | 'ivec3'
+  | 'ivec4'
+  | 'bvec2'
+  | 'bvec3'
+  | 'bvec4'
+  | 'mat2'
+  | 'mat3'
+  | 'mat4'
+  | 'sampler2D'
+  | 'samplerCube'
+
+interface UniformOptions {
+  kind: UniformKind
+  size?: number // Creates array uniform with Float32Array setter
+}
+
+type UniformSchema = Record<string | symbol, UniformOptions>
+```
+
+</details>
 
 #### 📝 attributeView
 
-Manages vertex attributes with buffer creation, binding, and data management.
+Manages vertex attributes with automatic buffer creation and binding.
 
 ```typescript
-import { attributeView } from '@bigmistqke/view.gl'
-
 const attributes = attributeView(gl, program, {
   position: { kind: 'vec3' },
   instanceOffset: { kind: 'vec2', instanced: true },
 })
 
-// Regular attribute for vertices
 attributes.position.set(positionData).bind()
-
-// Instanced attribute for per-instance data
 attributes.instanceOffset.set(instanceData).bind()
 
-// Draw regular geometry
-gl.drawArrays(gl.TRIANGLES, 0, 3)
-
-// Draw instanced geometry
 gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 ```
 
-**Settings:**
+**AttributeSchema:**
+A mapping of attribute names to their configuration. Each attribute has a GLSL type, optional instancing, and optional custom buffer.
 
-- `kind`: GLSL type (`'float'`, `'vec2'`, `'vec3'`, `'vec4'`, `'mat2'`, `'mat3'`, `'mat4'`, integer types)
-- `instanced`: Boolean - enables instanced rendering with `vertexAttribDivisor`
-- `buffer`: Custom WebGLBuffer (optional) - uses auto-created buffer if not provided
+```typescript
+{
+  position: { kind: 'vec3' },
+  instanceOffset: { kind: 'vec2', instanced: true },
+}
+```
+
+- `kind`: GLSL type (see [Attribute Types](#-attribute-types) for full list and WebGL compatibility)
+- `instanced`: Boolean - enables instanced rendering
+- `buffer`: Custom WebGLBuffer (optional)
+
+<details>
+<summary>TypeScript Types</summary>
+
+```typescript
+type AttributeKind =
+  | 'float'
+  | 'vec2'
+  | 'vec3'
+  | 'vec4'
+  | 'mat2'
+  | 'mat3'
+  | 'mat4'
+  | 'int'
+  | 'ivec2'
+  | 'ivec3'
+  | 'ivec4'
+
+interface AttributeOptions {
+  kind: AttributeKind
+  instanced?: boolean // Enables vertexAttribDivisor
+  buffer?: WebGLBuffer // Custom buffer, auto-created if not provided
+}
+
+type AttributeSchema = Record<string | symbol, AttributeOptions>
+```
+
+</details>
 
 #### 🔗 interleavedAttributeView
 
-Manages interleaved vertex data with automatic stride/offset calculation and VAO optimization.
+Manages interleaved vertex data with automatic stride/offset calculation.
 
 ```typescript
-import { interleavedAttributeView } from '@bigmistqke/view.gl'
-
 const interleavedAttributes = interleavedAttributeView(gl, program, {
   vertexData: {
     layout: [
@@ -211,92 +273,96 @@ const interleavedAttributes = interleavedAttributeView(gl, program, {
       { key: 'uv', kind: 'vec2' },
     ],
   },
-  instanceData: {
-    layout: [
-      { key: 'instancePos', kind: 'vec2' },
-      { key: 'instanceColor', kind: 'vec3' },
-    ],
-    instanced: true,
-  },
 })
 
-// Upload interleaved data
-interleavedAttributes.vertexData.set(interleavedVertexData)
-interleavedAttributes.instanceData.set(interleavedInstanceData)
-
-// Bind all attributes in layout
-interleavedAttributes.vertexData.bind()
-interleavedAttributes.instanceData.bind()
+interleavedAttributes.vertexData.set(interleavedVertexData).bind()
 ```
 
-**Settings:**
+**InterleavedAttributeSchema:**
+A mapping of interleaved buffer names to their layout configuration. Each layout defines multiple attributes packed into a single buffer.
 
-- `layout`: Array of attribute definitions with `name` and `kind`
-- `instanced`: Boolean - applies `vertexAttribDivisor` to all attributes in layout
+```typescript
+{
+  vertexData: {
+    layout: [
+      { key: 'position', kind: 'vec3' },
+      { key: 'normal', kind: 'vec3' },
+      { key: 'uv', kind: 'vec2' },
+    ],
+  },
+}
+```
+
+- `layout`: Array of attribute definitions with `key` and `kind` (see [Attribute Types](#-attribute-types) for WebGL compatibility)
+- `instanced`: Boolean - applies to all attributes in layout
+
+<details>
+<summary>TypeScript Types</summary>
+
+```typescript
+interface InterleavedAttributeOptions {
+  layout: Array<{
+    key: string | symbol
+    kind: AttributeKind
+  }>
+  instanced?: boolean // Applies vertexAttribDivisor to all attributes
+  buffer?: WebGLBuffer // Custom buffer for interleaved data
+}
+
+type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeOptions>
+```
+
+</details>
 
 #### 🗂️ bufferView
 
-Manages generic WebGL buffers for various uses.
+Manages generic WebGL buffers.
 
 ```typescript
-import { bufferView } from '@bigmistqke/view.gl'
-
 const buffers = bufferView(gl, {
   indices: { target: 'ELEMENT_ARRAY_BUFFER' },
   data: { target: 'ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
 })
 
-buffers.indices.set(indexData)
-buffers.indices.bind()
-
-buffers.data.set(dynamicData)
-buffers.data.bind()
+buffers.indices.set(indexData).bind()
+buffers.data.set(dynamicData).bind()
 ```
 
-**Settings:**
+**BufferSchema:**
+A mapping of buffer names to their configuration. Each buffer has a target type and optional usage pattern.
+
+```typescript
+{
+  indices: { target: 'ELEMENT_ARRAY_BUFFER' },
+  data: { target: 'ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
+}
+```
 
 - `target`: Buffer target (`'ARRAY_BUFFER'`, `'ELEMENT_ARRAY_BUFFER'`)
 - `usage`: Usage pattern (`'STATIC_DRAW'`, `'DYNAMIC_DRAW'`, `'STREAM_DRAW'`)
 
-### 🎨 Drawing Examples
-
-#### 🖼️ Regular Drawing
-
-```typescript
-const { attributes } = view(gl, program, {
-  attributes: {
-    position: { kind: 'vec3' },
-    uv: { kind: 'vec2' },
-  },
-})
-
-attributes.position.set(vertices).bind()
-attributes.uv.set(uvData).bind()
-
-gl.drawArrays(gl.TRIANGLES, 0, vertexCount)
-```
-
-#### 📱 Instanced Drawing
+<details>
+<summary>TypeScript Types</summary>
 
 ```typescript
-const { attributes } = view(gl, program, {
-  attributes: {
-    position: { kind: 'vec3' },
-    instanceOffset: { kind: 'vec2', instanced: true },
-    instanceColor: { kind: 'vec3', instanced: true },
-  },
-})
+interface BufferOptions {
+  target: 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
+  usage?: 'STATIC_DRAW' | 'DYNAMIC_DRAW' | 'STREAM_DRAW' // Defaults to 'STATIC_DRAW'
+}
 
-attributes.position.set(triangleVertices).bind()
-attributes.instanceOffset.set(instanceOffsets).bind()
-attributes.instanceColor.set(instanceColors).bind()
-
-gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, instanceCount)
+type BufferSchema = Record<string | symbol, BufferOptions>
 ```
+
+</details>
 
 ## 🏷️ view.gl/tag
 
-The tag system provides GLSL template literal support with embedded schema definitions.
+Type-safe GLSL template literals with automatic schema extraction.
+
+- **Embedded Resources**: Define uniforms, attributes, and interleaved layouts directly in GLSL
+- **Type Inference**: Automatically infers schema types and creates type-safe view
+- **Scoped Variables**: Prevent naming collisions using symbols for private shader variables
+- **GLSL Composition**: Compose reusable GLSL fragments with automatic dependency resolution
 
 ### 🚀 Basic Usage
 
@@ -330,28 +396,109 @@ const fragmentShader = glsl`
 const { program, schema } = compile(gl, vertexShader, fragmentShader)
 ```
 
-### 📝 Template Features
+### 📝 glsl
 
-- **Embedded Resources**: Define uniforms and attributes directly in GLSL
-- **Type Safety**: Automatic schema generation from template literals
-- **WebGL Version Support**: Automatic syntax conversion for WebGL1/2
-- **Interleaved Attributes**: Multi-attribute layout support
-- **Symbol Support**: Use JavaScript symbols as keys (see [Symbol Support](#-symbol-support))
+Template literal processor that handles GLSL code and embedded resources. Supports interpolation of:
 
-### ⚙️ Tag Functions
+- **[Resource tags](#️-resource-tags)**: `uniform.*()`, `attribute.*()`, `interleave()`
+- **[Composed GLSL fragments](#-glsl-fragment)**: Reusable shader code snippets
+- **[Symbols](#-symbol-scoping)**: Scoped variable names to prevent collisions
+
+```typescript
+import { glsl, uniform, attribute } from '@bigmistqke/view.gl/tag'
+
+const shader = glsl`
+  ${uniform.vec2('resolution')}
+  ${attribute.vec3('position')}
+  
+  void main() {
+    gl_Position = vec4(position, 1.0);
+  }
+`
+```
+
+#### 🧩 GLSL Fragment
+
+Compose reusable GLSL code fragments to build complex shaders:
+
+```typescript
+const lighting = glsl`
+  vec3 calculateLighting(vec3 normal, vec3 lightDir) {
+    float diff = max(dot(normal, lightDir), 0.0);
+    return vec3(diff);
+  }
+`
+
+const vertexShader = glsl`
+  ${attribute.vec3('position')}
+  ${attribute.vec3('normal')}
+  ${lighting}  // Include the lighting fragment
+  
+  void main() {
+    vec3 light = calculateLighting(normal, vec3(0.0, 1.0, 0.0));
+    // Use the composed function
+  }
+`
+```
+
+#### 🔒 Symbol Scoping
+
+Use JavaScript symbols to prevent naming collisions:
+
+```typescript
+const sum = Symbol('sum')
+
+const sumFragment = glsl`
+float ${sum}(float a, float b){
+  return a + b;
+}`
+
+const shader = glsl`
+${sumFragment}
+
+void main(){
+  float result = ${sum}(1.0, 2.0);
+}
+`
+```
+
+Symbols are converted to unique identifiers in the shader.
+
+#### WebGL Version Support
+
+The glsl-function supports both WebGL1 and WebGL2 syntax, automatically using the correct keywords for resource tags:
+
+```typescript
+// WebGL1 (default)
+const shader = glsl`
+  ${attribute.vec3('position')}  // → attribute vec3 position;
+  varying vec2 vUv;
+`
+```
+
+If the shader starts with `#version 300 es`, resource tags generate WebGL2 syntax:
+
+```typescript
+// WebGL2
+const shader = glsl`#version 300 es
+  ${attribute.vec3('position')}  // → in vec3 position;
+  out vec2 vUv;
+`
+```
+
+### ⚙️ Resource Tags
+
+Functions for defining WebGL resources directly in GLSL templates. These tags generate GLSL declarations and automatically extract type-safe schemas for use with the view system.
 
 #### 🎯 uniform[kind](name, options?)
 
-Define uniform variables in GLSL templates. Supports all GLSL uniform types.
+Define uniform variables in GLSL templates. Supports all GLSL uniform types (see [Uniform Types](#-uniform-types) for WebGL version compatibility).
 
 ```typescript
 import { uniform, glsl } from '@bigmistqke/view.gl/tag'
 
 const shader = glsl`
   ${uniform.float('time')}
-  ${uniform.vec2('resolution')}
-  ${uniform.mat4('projection')}
-  ${uniform.sampler2D('texture')}
   ${uniform.vec3('lights', { size: 8 })} // Array uniform: vec3[8]
   
   void main() {
@@ -360,32 +507,40 @@ const shader = glsl`
 `
 ```
 
-**Available types**: `float`, `int`, `bool`, `vec2`, `vec3`, `vec4`, `ivec2`, `ivec3`, `ivec4`, `bvec2`, `bvec3`, `bvec4`, `mat2`, `mat3`, `mat4`, `sampler2D`, `samplerCube`
-
 **Options**:
 
 - `size`: Array size (creates array uniform with Float32Array setter)
 
 #### 📝 attribute[kind](name, options?)
 
-Define vertex attributes in GLSL templates.
+Define vertex attributes in GLSL templates (see [Attribute Types](#-attribute-types) for WebGL version compatibility).
+
+**Regular rendering:**
 
 ```typescript
 import { attribute, glsl } from '@bigmistqke/view.gl/tag'
 
 const vertexShader = glsl`
   ${attribute.vec3('position')}
-  ${attribute.vec2('uv')}
-  ${attribute.vec3('normal')}
-  ${attribute.vec2('instanceOffset', { instanced: true })}
   
   void main() {
-    gl_Position = vec4(position + vec3(instanceOffset, 0.0), 1.0);
+    gl_Position = vec4(position, 1.0);
   }
 `
 ```
 
-**Available types**: `float`, `vec2`, `vec3`, `vec4`, `mat2`, `mat3`, `mat4`, `int`, `ivec2`, `ivec3`, `ivec4`
+**Instanced rendering:**
+
+```typescript
+const vertexShader = glsl`
+  ${attribute.vec3('position')}
+  ${attribute.vec2('offset', { instanced: true })}
+  
+  void main() {
+    gl_Position = vec4(position + vec3(offset, 0.0), 1.0);
+  }
+`
+```
 
 **Options**:
 
@@ -402,21 +557,11 @@ import { interleave, glsl } from '@bigmistqke/view.gl/tag'
 const vertexShader = glsl`
   ${interleave('vertexData', [
     { key: 'position', kind: 'vec3' },
-    { key: 'normal', kind: 'vec3' },
     { key: 'uv', kind: 'vec2' },
   ])}
   
-  ${interleave(
-    'instanceData',
-    [
-      { key: 'instancePos', kind: 'vec2' },
-      { key: 'instanceColor', kind: 'vec3' },
-    ],
-    { instanced: true },
-  )}
-  
   void main() {
-    gl_Position = vec4(position + vec3(instancePos, 0.0), 1.0);
+    gl_Position = vec4(position + vec3(uv, 0.0), 1.0);
   }
 `
 ```
@@ -424,72 +569,56 @@ const vertexShader = glsl`
 **Layout format**:
 
 - `key`: Attribute name
-- `kind`: GLSL type
+- `kind`: GLSL type (see [Attribute Types](#-attribute-types) for WebGL compatibility)
 
 **Options**:
 
 - `instanced`: Boolean - applies `vertexAttribDivisor` to all attributes
 
-#### 📝 glsl
+### ⚙️ compile(gl, vertex, fragment, overrideSchema?)
 
-Template literal processor that handles GLSL code and embedded resources. Supports interpolation of resource tags, composed GLSL fragments, and symbols.
-
-```typescript
-import { glsl, uniform, attribute } from '@bigmistqke/view.gl/tag'
-
-// Basic usage with resource tags
-const shader = glsl`
-  ${uniform.vec2('resolution')}
-  ${attribute.vec3('position')}
-  
-  void main() {
-    gl_Position = vec4(position, 1.0);
-  }
-`
-
-// GLSL composition with reusable components
-const mathUtils = glsl`
-  float wave(float x, float speed, float frequency) {
-    return sin(x * frequency + u_time * speed);
-  }
-`
-
-const vertex = glsl`
-  ${uniform.float('u_time')}
-  ${attribute.vec2('a_position')}
-  ${mathUtils}  // Compose GLSL fragments
-  
-  void main() {
-    vec2 pos = a_position;
-    pos.y += wave(pos.x, 2.0, 5.0) * 0.1;
-    gl_Position = vec4(pos, 0.0, 1.0);
-  }
-`
-```
-
-**Interpolation types:**
-- **Resource tags**: `uniform.*()`, `attribute.*()`, `interleave()` generate declarations and collect schema
-- **GLSL fragments**: Composed template literals include code and merge schemas
-- **Strings/Symbols**: Direct interpolation (symbols converted to unique identifiers)
-
-#### ⚙️ compile(gl, vertex, fragment)
-
-Compiles shaders and extracts schema from embedded resources.
+Compiles shaders and extracts schema from embedded resources. Returns both the compiled program and a ready-to-use view.
 
 ```typescript
 import { compile } from '@bigmistqke/view.gl/tag'
 
-const { program, schema } = compile(gl, vertexShader, fragmentShader)
+const { program, schema, view } = compile(gl, vertexShader, fragmentShader)
 
-// Schema contains extracted uniforms, attributes, and buffers
+// Use the view directly
+view.uniforms.time.set(performance.now())
+view.attributes.position.set(vertexData).bind()
+
+// Or access the extracted schema
 console.log(schema.uniforms) // { time: { kind: 'float' }, ... }
 console.log(schema.attributes) // { position: { kind: 'vec3' }, ... }
+```
+
+**Override Schema:**
+
+You can provide an optional override schema to enhance or override the automatically extracted schema:
+
+```typescript
+const { program, schema, view } = compile(gl, vertexShader, fragmentShader, {
+  uniforms: {
+    // Add additional uniforms not automatically inferred
+    customTime: { kind: 'float' },
+  },
+  buffers: {
+    // Add buffer definitions
+    indices: { target: 'ELEMENT_ARRAY_BUFFER' },
+  },
+})
+
+// The override schema is merged with the extracted schema
+view.uniforms.customTime.set(123.45)
+view.buffers.indices.set(indexData).bind()
 ```
 
 **Returns**:
 
 - `program`: Compiled WebGL program
-- `schema`: Extracted resource definitions for use with `view()`
+- `schema`: Merged schema (extracted + override)
+- `view`: Ready-to-use view with type-safe resource access
 
 <details>
 <summary>Usage with vanilla view.gl</summary>
@@ -589,3 +718,76 @@ const { framebuffer, texture } = createFramebuffer(gl, {
 ```
 
 Supports color, depth, stencil, and combined depth-stencil attachments with completeness validation.
+
+## 🔍 WebGL Type Compatibility
+
+### 🎯 Uniform Types
+
+| Type                   | WebGL 1 | WebGL 2 |
+| ---------------------- | ------- | ------- |
+| `float`                | ✅      | ✅      |
+| `int`                  | ✅      | ✅      |
+| `bool`                 | ✅      | ✅      |
+| `vec2`                 | ✅      | ✅      |
+| `vec3`                 | ✅      | ✅      |
+| `vec4`                 | ✅      | ✅      |
+| `ivec2`                | ✅      | ✅      |
+| `ivec3`                | ✅      | ✅      |
+| `ivec4`                | ✅      | ✅      |
+| `bvec2`                | ✅      | ✅      |
+| `bvec3`                | ✅      | ✅      |
+| `bvec4`                | ✅      | ✅      |
+| `mat2`                 | ✅      | ✅      |
+| `mat3`                 | ✅      | ✅      |
+| `mat4`                 | ✅      | ✅      |
+| `sampler2D`            | ✅      | ✅      |
+| `samplerCube`          | ✅      | ✅      |
+| `uint`                 | ❌      | ✅      |
+| `uvec2`                | ❌      | ✅      |
+| `uvec3`                | ❌      | ✅      |
+| `uvec4`                | ❌      | ✅      |
+| `mat2x3`               | ❌      | ✅      |
+| `mat2x4`               | ❌      | ✅      |
+| `mat3x2`               | ❌      | ✅      |
+| `mat3x4`               | ❌      | ✅      |
+| `mat4x2`               | ❌      | ✅      |
+| `mat4x3`               | ❌      | ✅      |
+| `sampler3D`            | ❌      | ✅      |
+| `sampler2DArray`       | ❌      | ✅      |
+| `sampler2DShadow`      | ❌      | ✅      |
+| `samplerCubeShadow`    | ❌      | ✅      |
+| `sampler2DArrayShadow` | ❌      | ✅      |
+| `isampler2D`           | ❌      | ✅      |
+| `isampler3D`           | ❌      | ✅      |
+| `isamplerCube`         | ❌      | ✅      |
+| `isampler2DArray`      | ❌      | ✅      |
+| `usampler2D`           | ❌      | ✅      |
+| `usampler3D`           | ❌      | ✅      |
+| `usamplerCube`         | ❌      | ✅      |
+| `usampler2DArray`      | ❌      | ✅      |
+
+### 📝 Attribute Types
+
+| Type     | WebGL 1 | WebGL 2 |
+| -------- | ------- | ------- |
+| `float`  | ✅      | ✅      |
+| `vec2`   | ✅      | ✅      |
+| `vec3`   | ✅      | ✅      |
+| `vec4`   | ✅      | ✅      |
+| `mat2`   | ✅      | ✅      |
+| `mat3`   | ✅      | ✅      |
+| `mat4`   | ✅      | ✅      |
+| `int`    | ❌      | ✅      |
+| `ivec2`  | ❌      | ✅      |
+| `ivec3`  | ❌      | ✅      |
+| `ivec4`  | ❌      | ✅      |
+| `uint`   | ❌      | ✅      |
+| `uvec2`  | ❌      | ✅      |
+| `uvec3`  | ❌      | ✅      |
+| `uvec4`  | ❌      | ✅      |
+| `mat2x3` | ❌      | ✅      |
+| `mat2x4` | ❌      | ✅      |
+| `mat3x2` | ❌      | ✅      |
+| `mat3x4` | ❌      | ✅      |
+| `mat4x2` | ❌      | ✅      |
+| `mat4x3` | ❌      | ✅      |
