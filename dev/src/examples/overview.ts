@@ -1,4 +1,3 @@
-import { view } from 'view.gl'
 import { attribute, compile, glsl, interleave, uniform } from 'view.gl/tag'
 
 const canvas = document.createElement('canvas')
@@ -42,12 +41,14 @@ void main() {
   gl_FragColor = vec4(v_color, 1.0);
 }`
 
-const { program, schema } = compile(gl, vertex, fragment)
 const {
-  attributes: { a_vertex },
-  uniforms: { u_time },
-  interleavedAttributes: { instancedData },
-} = view(gl, program, schema)
+  program,
+  view: {
+    attributes: { a_vertex },
+    uniforms: { u_time },
+    interleavedAttributes: { instancedData },
+  },
+} = compile(gl, vertex, fragment)
 
 // Upload interleaved buffer
 instancedData.set(

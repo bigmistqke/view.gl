@@ -1,4 +1,3 @@
-import { view } from 'view.gl'
 import { attribute, compile, glsl, interleave, uniform } from 'view.gl/tag'
 import { createElement, cursor } from '../utils'
 
@@ -259,14 +258,9 @@ void main() {
 /**********************************************************************************/
 
 // Compile shaders and create shader programs
-const { program: curveProgram, schema: curveSchema } = compile(gl, curveVertex, curveFragment)
-const curveView = view(gl, curveProgram, curveSchema)
-
-const { program: pointProgram, schema: pointSchema } = compile(gl, pointVertex, pointFragment)
-const pointView = view(gl, pointProgram, pointSchema)
-
-const { program: lineProgram, schema: lineSchema } = compile(gl, lineVertex, lineFragment)
-const lineView = view(gl, lineProgram, lineSchema)
+const { program: curveProgram, view: curveView } = compile(gl, curveVertex, curveFragment)
+const { program: pointProgram, view: pointView } = compile(gl, pointVertex, pointFragment)
+const { program: lineProgram, view: lineView } = compile(gl, lineVertex, lineFragment)
 
 /**********************************************************************************/
 /*                                                                                */

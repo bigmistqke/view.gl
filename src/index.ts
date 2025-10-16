@@ -52,12 +52,12 @@ export function toID(key: string | number | symbol) {
 /*                                                                                */
 /**********************************************************************************/
 
-export function view<T extends ViewSchema>(
+export function view<TSchema extends ViewSchema>(
   gl: GL,
   program: WebGLProgram,
-  schema: T,
+  schema: TSchema,
   options?: ViewOptions,
-): View<T> {
+): View<TSchema> {
   return {
     uniforms: !schema.uniforms ? undefined : uniformView(gl, program, schema.uniforms),
     attributes: !schema.attributes
@@ -67,7 +67,7 @@ export function view<T extends ViewSchema>(
       ? undefined
       : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
     buffers: !schema.buffers ? undefined : bufferView(gl, schema.buffers),
-  } as View<T>
+  } as View<TSchema>
 }
 
 /**********************************************************************************/

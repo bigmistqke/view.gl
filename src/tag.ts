@@ -1,4 +1,4 @@
-import { toID } from '.'
+import { toID, view } from '.'
 import type {
   AttributeKind,
   AttributeOptions,
@@ -13,6 +13,8 @@ import type {
   UniformOptions,
   UniformTag,
   UniformTagFn as UniformTagMethod,
+  View,
+  ViewSchema,
 } from './types'
 import { createProgram } from './utils'
 
@@ -92,7 +94,7 @@ export function interleave<
 /*                                                                                */
 /**********************************************************************************/
 
-type GLSLTagToSchema<TTag extends GLSLTag> =
+type glslTagToSchema<TTag extends GLSLTag> =
   FlattenSlots<TTag> extends infer TSlots
     ? TSlots extends Array<any>
       ? GLSLSlotsToSchema<TSlots>
@@ -134,10 +136,17 @@ type MergeGLSLSchema<TVertex extends Record<string, any>, TFragment extends Reco
   >
 }
 
-type CompileResult<TVertex extends GLSLTag, TFragment extends GLSLTag> = {
-  program: WebGLProgram
-  schema: MergeGLSLSchema<GLSLTagToSchema<TVertex>, GLSLTagToSchema<TFragment>>
-}
+type CompileResult<TVertex extends GLSLTag, TFragment extends GLSLTag> =
+  MergeGLSLSchema<
+    glslTagToSchema<TVertex>,
+    glslTagToSchema<TFragment>
+  > extends infer TSchema extends ViewSchema
+    ? {
+        program: WebGLProgram
+        schema: TSchema
+        view: View<TSchema>
+      }
+    : never
 
 export function compile<TVertex extends GLSLTag, TFragment extends GLSLTag>(
   gl: WebGLRenderingContext,
@@ -147,35 +156,38 @@ export function compile<TVertex extends GLSLTag, TFragment extends GLSLTag>(
   const _vertex = resolveGLSLTag(vertex)
   const _fragment = resolveGLSLTag(fragment)
 
+  const schema = {
+    uniforms: {
+      ..._vertex.schema.uniforms,
+      ..._fragment.schema.uniforms,
+    },
+    attributes: {
+      ..._vertex.schema.attributes,
+      ..._fragment.schema.attributes,
+    },
+    interleavedAttributes: {
+      ..._vertex.schema.interleavedAttributes,
+      ..._fragment.schema.interleavedAttributes,
+    },
+  }
+
   const program = createProgram(gl, _vertex.template, _fragment.template)
 
   return {
-    program,
-    schema: {
-      uniforms: {
-        ..._vertex.schema.uniforms,
-        ..._fragment.schema.uniforms,
-      },
-      attributes: {
-        ..._vertex.schema.attributes,
-        ..._fragment.schema.attributes,
-      },
-      interleavedAttributes: {
-        ..._vertex.schema.interleavedAttributes,
-        ..._fragment.schema.interleavedAttributes,
-      },
-    },
+    program: program,
+    schema,
+    view: view(gl, program, schema),
   } as CompileResult<TVertex, TFragment>
 }
 
 function resolveGLSLTag<TTag extends GLSLTag>(tag: TTag) {
   return {
-    template: resolveGLSLTagToString(tag),
-    schema: resolveGLSLTagToSchema(tag),
+    template: glslTagToString(tag),
+    schema: glslTagToSchema(tag),
   }
 }
 
-function resolveGLSLTagToSchema<TTag extends GLSLTag>(tag: TTag) {
+function glslTagToSchema<TTag extends GLSLTag>(tag: TTag) {
   const result = {
     uniforms: {},
     attributes: {},
@@ -183,12 +195,12 @@ function resolveGLSLTagToSchema<TTag extends GLSLTag>(tag: TTag) {
   }
 
   for (const slot of tag.slots) {
-    if (typeof slot === 'string' || typeof slot === 'number' || typeof slot === 'symbol') {
+    if (typeof slot !== 'object') {
       continue
     }
 
     if (slot.type === 'glsl') {
-      const { uniforms, attributes, interleavedAttributes } = resolveGLSLTagToSchema(slot)
+      const { uniforms, attributes, interleavedAttributes } = glslTagToSchema(slot)
 
       result.uniforms = {
         ...result.uniforms,
@@ -215,28 +227,25 @@ function resolveGLSLTagToSchema<TTag extends GLSLTag>(tag: TTag) {
   return result
 }
 
-function resolveGLSLTagToString<TTag extends GLSLTag>({
-  template: [initial, ...rest],
-  slots,
-}: TTag) {
+function glslTagToString<TTag extends GLSLTag>({ template: [initial, ...rest], slots }: TTag) {
   const v300 = !!initial?.startsWith('#version 300 es')
 
   let template = initial ?? ''
 
   for (let i = 0; i < rest.length; i++) {
-    template += `${resolveGLSLSlotToString(slots[i]!, v300)}${rest[i]}`
+    template += `${glslSlotToString(slots[i]!, v300)}${rest[i]}`
   }
 
   return template
 }
 
-function resolveGLSLSlotToString(slot: GLSLSlot, v300: boolean) {
-  if (typeof slot === 'string' || typeof slot === 'number' || typeof slot === 'symbol') {
+function glslSlotToString(slot: GLSLSlot, v300: boolean) {
+  if (typeof slot !== 'object') {
     return toID(slot)
   }
 
   if (slot.type === 'glsl') {
-    return resolveGLSLTagToString(slot)
+    return glslTagToString(slot)
   }
 
   if (slot.type === 'interleavedAttribute') {

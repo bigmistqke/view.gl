@@ -7,7 +7,6 @@
  * - Share code between vertex and fragment shaders
  */
 
-import { view } from 'view.gl'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
 import { createElement } from '../utils'
 
@@ -92,8 +91,10 @@ const fragment = glsl`
   }
 `
 
-const { program, schema } = compile(gl, vertex, fragment)
-const { attributes, uniforms } = view(gl, program, schema)
+const {
+  program,
+  view: { attributes, uniforms },
+} = compile(gl, vertex, fragment)
 
 gl.useProgram(program)
 

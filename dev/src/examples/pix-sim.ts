@@ -461,8 +461,7 @@ void main() {
 }`
 
 // --- Create programs ---
-const { program: stepProgram, schema: stepSchema } = compile(gl, vertex, stepFragment)
-const stepView = view(gl, stepProgram, stepSchema)
+const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment)
 
 const { program: renderProgram, schema: renderSchema } = compile(gl, vertex, renderFragment)
 const renderView = view(gl, renderProgram, {
