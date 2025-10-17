@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { toID } from '../src'
 import { attribute, compile, glsl, interleave, uniform } from '../src/tag'
 import type { GL } from '../src/types'
 import { createMockGL } from './mocks/webgl'
@@ -628,13 +629,15 @@ void main() { gl_FragColor = vec4(0.5); }`
 
     compile(gl, glsl``, fragment)
 
-    // Check that shaderSource was called with symbol aliases in template
+    const colorAlias = toID(color_symbol)
+
+    // Check that shaderSource was called with exact symbol alias
     const fragmentShaderSource = (gl.shaderSource as any).mock.calls.find(
-      (call: any[]) => call[1].includes('vec3') && call[1].includes('VIEW_GL_ALIAS_')
+      (call: any[]) => call[1].includes(`vec3 ${colorAlias}`)
     )?.[1]
 
-    expect(fragmentShaderSource).toMatch(/vec3 VIEW_GL_ALIAS_\d+ = vec3/)
-    expect(fragmentShaderSource).toMatch(/vec4\(VIEW_GL_ALIAS_\d+, 1\.0\)/)
+    expect(fragmentShaderSource).toContain(`vec3 ${colorAlias} = vec3(1.0, 0.0, 0.0);`)
+    expect(fragmentShaderSource).toContain(`gl_FragColor = vec4(${colorAlias}, 1.0);`)
   })
 })
 
@@ -1485,6 +1488,231 @@ describe('compile', () => {
     expect(schema.uniforms[u_vertex_only]).toEqual({ kind: 'vec2' })
     expect(schema.uniforms[u_fragment_only]).toEqual({ kind: 'vec3' })
   })
+
+  it('should return compiled vertex and fragment shader strings', () => {
+    const vertex = glsl`
+      ${attribute.vec2('a_position')}
+      ${uniform.mat4('u_mvpMatrix')}
+      
+      void main() {
+        gl_Position = u_mvpMatrix * vec4(a_position, 0.0, 1.0);
+      }
+    `
+
+    const fragment = glsl`
+      precision mediump float;
+      ${uniform.vec4('u_color')}
+      
+      void main() {
+        gl_FragColor = u_color;
+      }
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    // Check vertex shader string
+    expect(result.vertex).toContain('attribute vec2 a_position;')
+    expect(result.vertex).toContain('uniform mat4 u_mvpMatrix;')
+    expect(result.vertex).toContain('gl_Position = u_mvpMatrix * vec4(a_position, 0.0, 1.0);')
+
+    // Check fragment shader string
+    expect(result.fragment).toContain('precision mediump float;')
+    expect(result.fragment).toContain('uniform vec4 u_color;')
+    expect(result.fragment).toContain('gl_FragColor = u_color;')
+  })
+
+  it('should return WebGL2 shader strings with proper syntax', () => {
+    const vertex = glsl`#version 300 es
+      ${attribute.vec3('a_position')}
+      ${attribute.vec3('a_normal')}
+      out vec3 v_normal;
+      
+      void main() {
+        v_normal = a_normal;
+        gl_Position = vec4(a_position, 1.0);
+      }
+    `
+
+    const fragment = glsl`#version 300 es
+      precision mediump float;
+      ${uniform.vec3('u_lightDir')}
+      in vec3 v_normal;
+      out vec4 fragColor;
+      
+      void main() {
+        float light = dot(v_normal, u_lightDir);
+        fragColor = vec4(vec3(light), 1.0);
+      }
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    // Check vertex uses 'in' for attributes in WebGL2
+    expect(result.vertex).toContain('in vec3 a_position;')
+    expect(result.vertex).toContain('in vec3 a_normal;')
+    expect(result.vertex).toContain('out vec3 v_normal;')
+
+    // Check fragment shader WebGL2 syntax
+    expect(result.fragment).toContain('#version 300 es')
+    expect(result.fragment).toContain('in vec3 v_normal;')
+    expect(result.fragment).toContain('out vec4 fragColor;')
+  })
+
+  it('should return shader strings with resolved symbols', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_pos_symbol = Symbol('a_position')
+
+    const vertex = glsl`
+      ${attribute.vec3(a_pos_symbol)}
+      ${uniform.float(u_time_symbol)}
+      
+      void main() {
+        gl_Position = vec4(${a_pos_symbol}, ${u_time_symbol});
+      }
+    `
+
+    const fragment = glsl`
+      precision mediump float;
+      ${uniform.float(u_time_symbol)}
+      
+      void main() {
+        gl_FragColor = vec4(${u_time_symbol});
+      }
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    // Get exact symbol aliases
+    const posAlias = toID(a_pos_symbol)
+    const timeAlias = toID(u_time_symbol)
+
+    // Check vertex shader contains expected exact strings
+    expect(result.vertex).toContain(`attribute vec3 ${posAlias};`)
+    expect(result.vertex).toContain(`uniform float ${timeAlias};`)
+    expect(result.vertex).toContain(`gl_Position = vec4(${posAlias}, ${timeAlias});`)
+
+    // Check fragment shader contains expected exact strings
+    expect(result.fragment).toContain(`uniform float ${timeAlias};`)
+    expect(result.fragment).toContain(`gl_FragColor = vec4(${timeAlias});`)
+    expect(result.fragment).toContain('precision mediump float;')
+  })
+
+  it('should return shader strings with interleaved attributes', () => {
+    const vertex = glsl`
+      ${interleave('vertexData', [
+        attribute.vec3('a_position'),
+        attribute.vec2('a_uv'),
+        attribute.vec3('a_normal')
+      ])}
+      
+      void main() {
+        gl_Position = vec4(a_position + a_normal, 0.0, 1.0);
+      }
+    `
+
+    const fragment = glsl`
+      precision mediump float;
+      
+      void main() {
+        gl_FragColor = vec4(1.0);
+      }
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    // Check all interleaved attributes are expanded in vertex shader
+    expect(result.vertex).toContain('attribute vec3 a_position;')
+    expect(result.vertex).toContain('attribute vec2 a_uv;')
+    expect(result.vertex).toContain('attribute vec3 a_normal;')
+    expect(result.vertex).toContain('gl_Position = vec4(a_position + a_normal, 0.0, 1.0);')
+
+    // Fragment shader should be returned as-is
+    expect(result.fragment).toContain('precision mediump float;')
+    expect(result.fragment).toContain('gl_FragColor = vec4(1.0);')
+  })
+
+  it('should return shader strings with composed GLSL fragments', () => {
+    const sharedUniforms = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+    `
+
+    const utils = glsl`
+      float rand(vec2 co) {
+        return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+      }
+    `
+
+    const vertex = glsl`
+      ${sharedUniforms}
+      ${attribute.vec2('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position * u_resolution, 0.0, 1.0);
+      }
+    `
+
+    const fragment = glsl`
+      precision mediump float;
+      ${sharedUniforms}
+      ${utils}
+      
+      void main() {
+        float r = rand(gl_FragCoord.xy * u_time);
+        gl_FragColor = vec4(r);
+      }
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    // Check vertex shader includes composed uniforms
+    expect(result.vertex).toContain('uniform float u_time;')
+    expect(result.vertex).toContain('uniform vec2 u_resolution;')
+    expect(result.vertex).toContain('attribute vec2 a_position;')
+
+    // Check fragment shader includes both uniforms and utils
+    expect(result.fragment).toContain('uniform float u_time;')
+    expect(result.fragment).toContain('uniform vec2 u_resolution;')
+    expect(result.fragment).toContain('float rand(vec2 co)')
+    expect(result.fragment).toContain('return fract(sin(dot(co.xy')
+  })
+
+  it('should return shader strings with array interpolations', () => {
+    const vertex = glsl`
+      ${[
+        uniform.mat4('u_model'),
+        uniform.mat4('u_view'),
+        uniform.mat4('u_projection')
+      ]}
+      ${[attribute.vec3('a_position'), attribute.vec3('a_normal')]}
+      
+      void main() {
+        gl_Position = u_projection * u_view * u_model * vec4(a_position, 1.0);
+      }
+    `
+
+    const fragment = glsl`
+      precision mediump float;
+      ${[uniform.vec3('u_color'), uniform.float('u_alpha')]}
+      
+      void main() {
+        gl_FragColor = vec4(u_color, u_alpha);
+      }
+    `
+
+    const result = compile(gl, vertex, fragment)
+
+    // Check vertex shader has all uniforms and attributes from arrays
+    expect(result.vertex).toContain('uniform mat4 u_model;')
+    expect(result.vertex).toContain('uniform mat4 u_view;')
+    expect(result.vertex).toContain('uniform mat4 u_projection;')
+    expect(result.vertex).toContain('attribute vec3 a_position;')
+    expect(result.vertex).toContain('attribute vec3 a_normal;')
+
+    // Check fragment shader
+    expect(result.fragment).toContain('uniform vec3 u_color;')
+    expect(result.fragment).toContain('uniform float u_alpha;')
+  })
 })
 
 describe('compile.toString', () => {
@@ -1544,9 +1772,10 @@ describe('compile.toString', () => {
       }`
 
     const result = compile.toString(shader)
+    const timeAlias = toID(u_time_symbol)
 
-    expect(result).toMatch(/uniform float VIEW_GL_ALIAS_\d+;/)
-    expect(result).toMatch(/vec4\(VIEW_GL_ALIAS_\d+\)/)
+    expect(result).toContain(`uniform float ${timeAlias};`)
+    expect(result).toContain(`gl_FragColor = vec4(${timeAlias});`)
   })
 
   it('should handle interleaved attributes', () => {
