@@ -389,21 +389,22 @@ interface UniformKindMap {
   usampler2DArray: [number];
 }
 
-export interface UniformOptions {
+export interface UniformDefinition {
   kind: UniformKind
   size?: number
 }
 
-export type UniformSchema = Record<string | symbol, UniformOptions>
-export type UniformSchemaPartial = Record<string | symbol, Partial<UniformOptions>>
+export type UniformSchema = Record<string | symbol, UniformDefinition>
+export type UniformSchemaPartial = Record<string | symbol, Partial<UniformDefinition>>
 
-export type UniformMethods<TOptions extends UniformOptions> = TOptions['size'] extends number
-  ? {
-      set(arg: Float32Array): void
-    }
-  : {
-      set(...args: UniformKindMap[TOptions['kind']]): void
-    }
+export type UniformMethods<TDefinition extends UniformDefinition> =
+  TDefinition['size'] extends number
+    ? {
+        set(arg: Float32Array): void
+      }
+    : {
+        set(...args: UniformKindMap[TDefinition['kind']]): void
+      }
 
 export type UniformView<T extends UniformSchema> = {
   [K in keyof T]: UniformMethods<T[K]>
@@ -457,13 +458,13 @@ export type AttributeKind =
   | 'uvec3'
   | 'uvec4'
 
-export interface AttributeOptions {
+export interface AttributeDefinition {
   kind: AttributeKind
   instanced?: boolean
   buffer?: WebGLBuffer
 }
 
-export type AttributeSchema = Record<string | symbol, AttributeOptions>
+export type AttributeSchema = Record<string | symbol, AttributeDefinition>
 
 export interface AttributeMethods<T = AttributeKind> {
   buffer: WebGLBuffer
@@ -487,12 +488,12 @@ export interface InterleavedAttributeLayout {
   kind: AttributeKind
 }
 
-export interface InterleavedAttributeOptions {
+export interface InterleavedAttributeDefinition {
   layout: InterleavedAttributeLayout[]
   instanced?: boolean
 }
 
-export type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeOptions>
+export type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeDefinition>
 
 export interface InterleavedAttributeMethods<
   T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
@@ -513,12 +514,12 @@ export type InterleavedAttributeView<T extends InterleavedAttributeSchema> = {
 /*                                                                                */
 /**********************************************************************************/
 
-export interface BufferOptions {
+export interface BufferDefinition {
   target?: GLTarget
   usage?: GLUsage
 }
 
-export type BufferSchema = Record<string | symbol, BufferOptions>
+export type BufferSchema = Record<string | symbol, BufferDefinition>
 
 export interface BufferMethods {
   set(data: Float32Array | Uint16Array | Uint32Array): void
@@ -536,12 +537,12 @@ export type BufferView<T extends BufferSchema> = {
 /*                                                                                */
 /**********************************************************************************/
 
-export interface FramebufferOptions extends Omit<TextureOptions, 'data'> {
+export interface FramebufferDefinition extends Omit<TextureDefinition, 'data'> {
   attachment: 'color' | 'depth' | 'stencil' | 'depthStencil'
   texture?: WebGLTexture
 }
 
-export interface TextureOptions {
+export interface TextureDefinition {
   target?: GLTextureTarget
   width: number
   height: number
@@ -574,7 +575,7 @@ export type TextureTarget =
   | 'TEXTURE_3D' // WebGL2 only
   | 'TEXTURE_2D_ARRAY' // WebGL2 only
 
-export type TextureSchema = Record<string | symbol, TextureOptions>
+export type TextureSchema = Record<string | symbol, TextureDefinition>
 
 export interface TextureMethods {
   texture: WebGLTexture
@@ -683,10 +684,10 @@ export interface ViewSchema {
 }
 
 export interface ViewSchemaPartial {
-  uniforms?: Record<string | symbol, Partial<UniformOptions>>
-  attributes?: Record<string | symbol, Partial<AttributeOptions>>
-  interleavedAttributes?: Record<string | symbol, Partial<InterleavedAttributeOptions>>
-  buffers?: Record<string | symbol, Partial<BufferOptions>>
+  uniforms?: Record<string | symbol, Partial<UniformDefinition>>
+  attributes?: Record<string | symbol, Partial<AttributeDefinition>>
+  interleavedAttributes?: Record<string | symbol, Partial<InterleavedAttributeDefinition>>
+  buffers?: Record<string | symbol, Partial<BufferDefinition>>
 }
 
 export type View<T extends ViewSchema = ViewSchema> = {
@@ -722,8 +723,8 @@ export interface GLSLTag<TSlots extends GLSLSlot[] = GLSLSlot[]> {
 export type UniformTag<
   TKey extends string | symbol = string | symbol,
   TKind extends UniformKind = UniformKind,
-  TOptions extends Partial<UniformOptions> = UniformOptions,
-> = TOptions extends { size: infer TSize }
+  TDefinition extends Partial<UniformDefinition> = UniformDefinition,
+> = TDefinition extends { size: infer TSize }
   ? {
       type: 'uniform'
       kind: TKind
@@ -737,10 +738,10 @@ export type UniformTag<
     }
 
 export interface UniformTagFn<TKind extends UniformKind> {
-  <const TKey extends string | symbol, const TOptions extends Omit<UniformOptions, 'kind'>>(
+  <const TKey extends string | symbol, const TDefinition extends Omit<UniformDefinition, 'kind'>>(
     key: TKey,
-    TOptions: TOptions,
-  ): Prettify<UniformTag<TKey, TKind, TOptions>>
+    TDefinition: TDefinition,
+  ): Prettify<UniformTag<TKey, TKind, TDefinition>>
   <const TName extends string | symbol>(key: TName): Prettify<UniformTag<TName, TKind>>
 }
 
@@ -756,10 +757,10 @@ export interface AttributeTag<
 }
 
 export interface AttributeTagFn<TKey extends AttributeKind> {
-  <TName extends string | symbol, TOptions extends Omit<AttributeOptions, 'kind'>>(
+  <TName extends string | symbol, TDefinition extends Omit<AttributeDefinition, 'kind'>>(
     key: TName,
-    options: TOptions,
-  ): Prettify<AttributeTag<TName, TKey, TOptions['instanced']>>
+    options: TDefinition,
+  ): Prettify<AttributeTag<TName, TKey, TDefinition['instanced']>>
   <TName extends string | symbol>(key: TName): Prettify<AttributeTag<TName, TKey, undefined>>
 }
 
@@ -768,8 +769,8 @@ export type InterleaveTag<
   TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>> = Array<
     AttributeTag<string | symbol, AttributeKind, undefined>
   >,
-  TOptions extends Omit<AttributeOptions, 'kind'> = Omit<AttributeOptions, 'kind'>,
-> = TOptions & {
+  TDefinition extends Omit<AttributeDefinition, 'kind'> = Omit<AttributeDefinition, 'kind'>,
+> = TDefinition & {
   key: TKey
   type: 'interleavedAttribute'
   layout: {

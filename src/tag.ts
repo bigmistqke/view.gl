@@ -1,7 +1,7 @@
 import { toID, view } from '.'
 import type {
+  AttributeDefinition,
   AttributeKind,
-  AttributeOptions,
   AttributeTag,
   AttributeTagFn as AttributeTagMethod,
   CompileResult,
@@ -10,8 +10,8 @@ import type {
   GLSLTagToSchema,
   InterleaveTag,
   Prettify,
+  UniformDefinition,
   UniformKind,
-  UniformOptions,
   UniformTagFn as UniformTagMethod,
   ViewSchema,
   ViewSchemaPartial,
@@ -33,7 +33,7 @@ export const uniform = new Proxy(
     get(target, property) {
       // @ts-expect-error
       if (typeof property === 'symbol') return target[property]
-      return (key: string, options?: Omit<UniformOptions, 'kind'>) => ({
+      return (key: string, options?: Omit<UniformDefinition, 'kind'>) => ({
         type: 'uniform',
         key,
         kind: property,
@@ -51,7 +51,7 @@ export const attribute = new Proxy(
     get(target, property) {
       // @ts-expect-error
       if (typeof property === 'symbol') return target[property]
-      return (key: string, options?: Omit<AttributeOptions, 'kind'>) => ({
+      return (key: string, options?: Omit<AttributeDefinition, 'kind'>) => ({
         type: 'attribute',
         key,
         kind: property,
@@ -64,7 +64,7 @@ export const attribute = new Proxy(
 export function interleave<
   const TKey extends string | symbol,
   const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
-  const TOptions extends Omit<AttributeOptions, 'kind'>,
+  const TOptions extends Omit<AttributeDefinition, 'kind'>,
 >(key: TKey, layout: TLayout, instanced: TOptions): InterleaveTag<TKey, TLayout, TOptions>
 export function interleave<
   const TKey extends string | symbol,
@@ -73,7 +73,7 @@ export function interleave<
 export function interleave<
   const TKey extends string | symbol,
   const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
-  const TOptions extends Omit<AttributeOptions, 'kind'>,
+  const TOptions extends Omit<AttributeDefinition, 'kind'>,
 >(key: TKey, layout: TLayout, { instanced, buffer }: Partial<TOptions> = {}) {
   return {
     type: 'interleavedAttribute',

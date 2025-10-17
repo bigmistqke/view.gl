@@ -1,4 +1,4 @@
-import { FramebufferOptions } from 'src/types'
+import { FramebufferDefinition } from 'src/types'
 import { createFramebuffer } from 'src/utils'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
 
@@ -169,7 +169,7 @@ const framebufferOptions = {
   type: 'UNSIGNED_BYTE',
   magFilter: 'NEAREST',
   minFilter: 'NEAREST',
-} satisfies FramebufferOptions
+} satisfies FramebufferDefinition
 
 let read = createFramebuffer(gl, framebufferOptions)
 let write = createFramebuffer(gl, framebufferOptions)

@@ -1,10 +1,10 @@
 import type {
   AttributeKind,
-  FramebufferOptions,
+  FramebufferDefinition,
   GL,
   KIND_TO_SIZE_MAP,
   KIND_TO_UNIFORM_FN_NAME_MAP,
-  TextureOptions,
+  TextureDefinition,
   UniformKind,
 } from '../types'
 
@@ -158,7 +158,7 @@ export function createTexture(
     wrapT = 'CLAMP_TO_EDGE',
     width,
     height,
-  }: TextureOptions,
+  }: TextureDefinition,
   data?: ArrayBufferView | null,
 ): WebGLTexture {
   const texture = gl.createTexture()
@@ -229,7 +229,10 @@ class FramebufferError extends Error {
   }
 }
 
-export function createFramebuffer(gl: GL, { attachment, texture, ...options }: FramebufferOptions) {
+export function createFramebuffer(
+  gl: GL,
+  { attachment, texture, ...options }: FramebufferDefinition,
+) {
   // Create texture for the framebuffer
   texture ??= createTexture(gl, options)
 
