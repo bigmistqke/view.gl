@@ -635,12 +635,12 @@ export interface ViewSchemaPartial {
 export type View<T extends ViewSchema = ViewSchema> = {
   attributes: T['attributes'] extends AttributeSchema
     ? Prettify<AttributeView<T['attributes']>>
-    : never
+    : {}
   interleavedAttributes: T['interleavedAttributes'] extends InterleavedAttributeSchema
     ? Prettify<InterleavedAttributeView<T['interleavedAttributes']>>
-    : never
-  buffers: T['buffers'] extends BufferSchema ? Prettify<BufferView<T['buffers']>> : never
-  uniforms: T['uniforms'] extends UniformSchema ? Prettify<UniformView<T['uniforms']>> : never
+    : {}
+  buffers: T['buffers'] extends BufferSchema ? Prettify<BufferView<T['buffers']>> : {}
+  uniforms: T['uniforms'] extends UniformSchema ? Prettify<UniformView<T['uniforms']>> : {}
 }
 
 /**********************************************************************************/
