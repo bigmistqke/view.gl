@@ -498,7 +498,9 @@ function compile(gl, vertex, fragment, overrideSchema) {
   return {
     program,
     schema,
-    view: view(gl, program, schema)
+    view: view(gl, program, schema),
+    vertex: _vertex.template,
+    fragment: _fragment.template
   };
 }
 function resolveGLSLTag(tag) {
