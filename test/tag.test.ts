@@ -914,84 +914,6 @@ describe('glsl composition', () => {
   })
 })
 
-describe('compile with symbols', () => {
-  let gl: GL
-  let mockProgram: WebGLProgram
-
-  beforeEach(() => {
-    gl = createMockGL()
-    mockProgram = gl.createProgram()!
-
-    // Mock shader creation and compilation
-    gl.createShader = vi.fn(type => ({ type } as WebGLShader))
-    gl.shaderSource = vi.fn()
-    gl.compileShader = vi.fn()
-    gl.getShaderParameter = vi.fn(() => true)
-    gl.attachShader = vi.fn()
-    gl.linkProgram = vi.fn()
-    gl.getProgramParameter = vi.fn(() => true)
-    gl.createProgram = vi.fn(() => mockProgram)
-  })
-
-  it('should compile shaders with symbol keys', () => {
-    const u_time_symbol = Symbol('u_time')
-    const a_position_symbol = Symbol('a_position')
-
-    const vertex = glsl`
-      ${attribute.vec2(a_position_symbol)}
-      ${uniform.float(u_time_symbol)}
-      
-      void main() {
-        gl_Position = vec4(${a_position_symbol}, 0.0, 1.0);
-      }`
-
-    const fragment = glsl`
-      precision mediump float;
-      
-      ${uniform.float(u_time_symbol)}
-      
-      void main() {
-        gl_FragColor = vec4(${u_time_symbol}, 0.0, 0.0, 1.0);
-      }`
-
-    const { program, schema } = compile(gl, vertex, fragment)
-
-    expect(program).toBe(mockProgram)
-    expect(schema.uniforms[u_time_symbol]).toEqual({ kind: 'float' })
-    expect(schema.attributes[a_position_symbol]).toEqual({ kind: 'vec2' })
-  })
-
-  it('should merge symbols from vertex and fragment shaders', () => {
-    const u_shared_symbol = Symbol('u_shared')
-    const u_vertex_only = Symbol('u_vertex_only')
-    const u_fragment_only = Symbol('u_fragment_only')
-
-    const vertex = glsl`
-      ${uniform.float(u_shared_symbol)}
-      ${uniform.vec2(u_vertex_only)}
-      
-      void main() {
-        gl_Position = vec4(${u_vertex_only}, ${u_shared_symbol}, 1.0);
-      }`
-
-    const fragment = glsl`
-      precision mediump float;
-      
-      ${uniform.float(u_shared_symbol)}
-      ${uniform.vec3(u_fragment_only)}
-      
-      void main() {
-        gl_FragColor = vec4(${u_fragment_only}, ${u_shared_symbol});
-      }`
-
-    const { schema } = compile(gl, vertex, fragment)
-
-    expect(schema.uniforms[u_shared_symbol]).toEqual({ kind: 'float' })
-    expect(schema.uniforms[u_vertex_only]).toEqual({ kind: 'vec2' })
-    expect(schema.uniforms[u_fragment_only]).toEqual({ kind: 'vec3' })
-  })
-})
-
 describe('glsl array interpolation', () => {
   let gl: GL
 
@@ -1504,5 +1426,417 @@ describe('compile', () => {
     expect(gl.attachShader).toHaveBeenCalledTimes(2)
     expect(gl.linkProgram).toHaveBeenCalled()
     expect(gl.getProgramParameter).toHaveBeenCalled()
+  })
+
+  it('should compile shaders with symbol keys', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_position_symbol = Symbol('a_position')
+
+    const vertex = glsl`
+      ${attribute.vec2(a_position_symbol)}
+      ${uniform.float(u_time_symbol)}
+      
+      void main() {
+        gl_Position = vec4(${a_position_symbol}, 0.0, 1.0);
+      }`
+
+    const fragment = glsl`
+      precision mediump float;
+      
+      ${uniform.float(u_time_symbol)}
+      
+      void main() {
+        gl_FragColor = vec4(${u_time_symbol}, 0.0, 0.0, 1.0);
+      }`
+
+    const { program, schema } = compile(gl, vertex, fragment)
+
+    expect(program).toBe(mockProgram)
+    expect(schema.uniforms[u_time_symbol]).toEqual({ kind: 'float' })
+    expect(schema.attributes[a_position_symbol]).toEqual({ kind: 'vec2' })
+  })
+
+  it('should merge symbols from vertex and fragment shaders', () => {
+    const u_shared_symbol = Symbol('u_shared')
+    const u_vertex_only = Symbol('u_vertex_only')
+    const u_fragment_only = Symbol('u_fragment_only')
+
+    const vertex = glsl`
+      ${uniform.float(u_shared_symbol)}
+      ${uniform.vec2(u_vertex_only)}
+      
+      void main() {
+        gl_Position = vec4(${u_vertex_only}, ${u_shared_symbol}, 1.0);
+      }`
+
+    const fragment = glsl`
+      precision mediump float;
+      
+      ${uniform.float(u_shared_symbol)}
+      ${uniform.vec3(u_fragment_only)}
+      
+      void main() {
+        gl_FragColor = vec4(${u_fragment_only}, ${u_shared_symbol});
+      }`
+
+    const { schema } = compile(gl, vertex, fragment)
+
+    expect(schema.uniforms[u_shared_symbol]).toEqual({ kind: 'float' })
+    expect(schema.uniforms[u_vertex_only]).toEqual({ kind: 'vec2' })
+    expect(schema.uniforms[u_fragment_only]).toEqual({ kind: 'vec3' })
+  })
+})
+
+describe('compile.toString', () => {
+  it('should convert glsl tag to shader string', () => {
+    const shader = glsl`
+      ${uniform.float('u_time')}
+      ${attribute.vec2('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toContain('uniform float u_time;')
+    expect(result).toContain('attribute vec2 a_position;')
+    expect(result).toContain('void main() {')
+    expect(result).toContain('gl_Position = vec4(a_position, 0.0, 1.0);')
+  })
+
+  it('should handle WebGL2 syntax', () => {
+    const shader = glsl`#version 300 es
+      ${uniform.float('u_time')}
+      ${attribute.vec3('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position, 1.0);
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toContain('#version 300 es')
+    expect(result).toContain('uniform float u_time;')
+    expect(result).toContain('in vec3 a_position;')
+  })
+
+  it('should handle arrays', () => {
+    const shader = glsl`
+      ${uniform.vec3('u_palette', { size: 5 })}
+      
+      void main() {
+        gl_FragColor = vec4(u_palette[0], 1.0);
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toContain('uniform vec3 u_palette[5];')
+  })
+
+  it('should handle symbols', () => {
+    const u_time_symbol = Symbol('u_time')
+    const shader = glsl`
+      ${uniform.float(u_time_symbol)}
+      
+      void main() {
+        gl_FragColor = vec4(${u_time_symbol});
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toMatch(/uniform float VIEW_GL_ALIAS_\d+;/)
+    expect(result).toMatch(/vec4\(VIEW_GL_ALIAS_\d+\)/)
+  })
+
+  it('should handle interleaved attributes', () => {
+    const shader = glsl`
+      ${interleave('vertexData', [
+        attribute.vec2('a_position'),
+        attribute.vec4('a_color')
+      ])}
+      
+      void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toContain('attribute vec2 a_position;')
+    expect(result).toContain('attribute vec4 a_color;')
+  })
+
+  it('should handle nested glsl tags', () => {
+    const uniforms = glsl`${uniform.float('u_time')}`
+    const shader = glsl`
+      ${uniforms}
+      ${attribute.vec2('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position, u_time, 0.0, 1.0);
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toContain('uniform float u_time;')
+    expect(result).toContain('attribute vec2 a_position;')
+  })
+
+  it('should handle arrays of resources', () => {
+    const shader = glsl`
+      ${[uniform.float('u_time'), uniform.vec2('u_resolution')]}
+      
+      void main() {
+        gl_Position = vec4(u_resolution * u_time, 0.0, 1.0);
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toContain('uniform float u_time;')
+    expect(result).toContain('uniform vec2 u_resolution;')
+  })
+
+  it('should handle string interpolations', () => {
+    const maxLights = 4
+    const shader = glsl`
+      #define MAX_LIGHTS ${maxLights}
+      ${uniform.float('u_time')}
+      
+      void main() {
+        gl_Position = vec4(1.0);
+      }`
+
+    const result = compile.toString(shader)
+
+    expect(result).toContain('#define MAX_LIGHTS 4')
+    expect(result).toContain('uniform float u_time;')
+  })
+})
+
+describe('compile.toSchema', () => {
+  it('should extract schema from glsl tag', () => {
+    const shader = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec3('u_color')}
+      ${attribute.vec2('a_position')}
+      
+      void main() {
+        gl_Position = vec4(a_position, 0.0, 1.0);
+      }`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {
+        u_time: { kind: 'float' },
+        u_color: { kind: 'vec3' }
+      },
+      attributes: {
+        a_position: { kind: 'vec2' }
+      },
+      interleavedAttributes: {}
+    })
+  })
+
+  it('should handle arrays', () => {
+    const shader = glsl`
+      ${uniform.vec3('u_palette', { size: 5 })}
+      ${uniform.mat4('u_matrices', { size: 10 })}
+      
+      void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {
+        u_palette: { kind: 'vec3', size: 5 },
+        u_matrices: { kind: 'mat4', size: 10 }
+      },
+      attributes: {},
+      interleavedAttributes: {}
+    })
+  })
+
+  it('should handle symbols', () => {
+    const u_time_symbol = Symbol('u_time')
+    const a_pos_symbol = Symbol('a_position')
+    
+    const shader = glsl`
+      ${uniform.float(u_time_symbol)}
+      ${attribute.vec3(a_pos_symbol)}
+      
+      void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {
+        [u_time_symbol]: { kind: 'float' }
+      },
+      attributes: {
+        [a_pos_symbol]: { kind: 'vec3' }
+      },
+      interleavedAttributes: {}
+    })
+  })
+
+  it('should handle interleaved attributes', () => {
+    const shader = glsl`
+      ${interleave('vertexData', [
+        attribute.vec2('a_position'),
+        attribute.vec4('a_color')
+      ])}
+      ${interleave('instanceData', [
+        attribute.vec3('a_instancePos'),
+        attribute.float('a_instanceScale')
+      ], { instanced: true })}
+      
+      void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {},
+      attributes: {},
+      interleavedAttributes: {
+        vertexData: {
+          layout: [
+            { key: 'a_position', kind: 'vec2' },
+            { key: 'a_color', kind: 'vec4' }
+          ],
+          instanced: false
+        },
+        instanceData: {
+          layout: [
+            { key: 'a_instancePos', kind: 'vec3' },
+            { key: 'a_instanceScale', kind: 'float' }
+          ],
+          instanced: true
+        }
+      }
+    })
+  })
+
+  it('should handle nested glsl tags', () => {
+    const uniforms = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+    `
+    
+    const lighting = glsl`
+      ${uniform.vec3('u_lightPos')}
+      ${uniform.vec3('u_lightColor')}
+    `
+    
+    const shader = glsl`
+      ${uniforms}
+      ${lighting}
+      ${attribute.vec3('a_position')}
+      
+      void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {
+        u_time: { kind: 'float' },
+        u_resolution: { kind: 'vec2' },
+        u_lightPos: { kind: 'vec3' },
+        u_lightColor: { kind: 'vec3' }
+      },
+      attributes: {
+        a_position: { kind: 'vec3' }
+      },
+      interleavedAttributes: {}
+    })
+  })
+
+  it('should handle arrays of resources', () => {
+    const shader = glsl`
+      ${[
+        uniform.float('u_time'),
+        uniform.vec2('u_resolution'),
+        attribute.vec3('a_position')
+      ]}
+      ${[
+        interleave('data', [
+          attribute.vec2('a_uv')
+        ])
+      ]}
+      
+      void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {
+        u_time: { kind: 'float' },
+        u_resolution: { kind: 'vec2' }
+      },
+      attributes: {
+        a_position: { kind: 'vec3' }
+      },
+      interleavedAttributes: {
+        data: {
+          layout: [
+            { key: 'a_uv', kind: 'vec2' }
+          ],
+          instanced: false
+        }
+      }
+    })
+  })
+
+  it('should ignore non-resource interpolations', () => {
+    const shader = glsl`
+      ${'// Comment'}
+      ${42}
+      ${uniform.float('u_time')}
+      ${'precision highp float;'}
+      
+      void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {
+        u_time: { kind: 'float' }
+      },
+      attributes: {},
+      interleavedAttributes: {}
+    })
+  })
+
+  it('should handle empty glsl tag', () => {
+    const shader = glsl`void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {},
+      attributes: {},
+      interleavedAttributes: {}
+    })
+  })
+
+  it('should handle instanced attributes', () => {
+    const shader = glsl`
+      ${attribute.vec3('a_position')}
+      ${attribute.vec4('a_color', { instanced: true })}
+      ${attribute.mat4('a_instanceMatrix', { instanced: true })}
+      
+      void main() {}`
+
+    const schema = compile.toSchema(shader)
+
+    expect(schema).toEqual({
+      uniforms: {},
+      attributes: {
+        a_position: { kind: 'vec3' },
+        a_color: { kind: 'vec4', instanced: true },
+        a_instanceMatrix: { kind: 'mat4', instanced: true }
+      },
+      interleavedAttributes: {}
+    })
   })
 })
