@@ -4,17 +4,15 @@ import type {
   AttributeOptions,
   AttributeTag,
   AttributeTagFn as AttributeTagMethod,
-  DeepMerge,
+  CompileResult,
   GLSLSlot,
   GLSLTag,
+  GLSLTagToSchema,
   InterleaveTag,
   Prettify,
-  ShallowMerge,
   UniformKind,
   UniformOptions,
-  UniformTag,
   UniformTagFn as UniformTagMethod,
-  View,
   ViewSchema,
   ViewSchemaPartial,
 } from './types'
@@ -96,83 +94,13 @@ export function interleave<
 /*                                                                                */
 /**********************************************************************************/
 
-type glslTagToSchema<TTag extends GLSLTag> =
-  FlattenSlots<TTag> extends infer TSlots
-    ? TSlots extends Array<any>
-      ? GLSLSlotsToSchema<TSlots>
-      : never
-    : never
-
-type GLSLSlotsToSchema<TSlots extends Array<GLSLSlot>> = {
-  uniforms: {
-    [K in Extract<TSlots[number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-  }
-  attributes: {
-    [K in Extract<TSlots[number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-  }
-  interleavedAttributes: {
-    [K in Extract<TSlots[number], InterleaveTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
-  }
-}
-
-type FlattenSlots<T> =
-  T extends GLSLTag<infer TSlots>
-    ? _FlattenSlots<TSlots>
-    : T extends Array<GLSLSlot>
-      ? _FlattenSlots<T>
-      : never
-
-type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer Rest]
-  ? First extends GLSLTag
-    ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
-    : First extends unknown[]
-      ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
-      : [First, ...FlattenSlots<Rest>]
-  : []
-
-type MergeGLSLSchema<
-  TVertex extends ViewSchema,
-  TFragment extends ViewSchema,
-  TOverrides extends ViewSchemaPartial,
-> = {
-  uniforms: DeepMerge<
-    [ShallowMerge<[TVertex['uniforms'], TFragment['uniforms']]>, TOverrides['uniforms']]
-  >
-  attributes: DeepMerge<
-    [ShallowMerge<[TVertex['attributes'], TFragment['attributes']]>, TOverrides['attributes']]
-  >
-  interleavedAttributes: DeepMerge<
-    [
-      ShallowMerge<[TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]>,
-      TOverrides['interleavedAttributes'],
-    ]
-  >
-}
-
-type CompileResult<
-  TVertex extends GLSLTag,
-  TFragment extends GLSLTag,
-  TOverrides extends ViewSchemaPartial,
-> =
-  MergeGLSLSchema<
-    glslTagToSchema<TVertex>,
-    glslTagToSchema<TFragment>,
-    TOverrides
-  > extends infer TSchema extends ViewSchema
-    ? {
-        program: WebGLProgram
-        schema: TSchema
-        view: View<TSchema>
-      }
-    : never
-
 export function compile<
   TVertex extends GLSLTag,
   TFragment extends GLSLTag,
   TOverride extends ViewSchemaPartial,
 >(gl: WebGLRenderingContext, vertex: TVertex, fragment: TFragment, overrideSchema?: TOverride) {
-  const _vertex = resolveGLSLTag(vertex)
-  const _fragment = resolveGLSLTag(fragment)
+  const _vertex = resolveGLSLTag(vertex) as { template: string; schema: ViewSchema }
+  const _fragment = resolveGLSLTag(fragment) as { template: string; schema: ViewSchema }
 
   const schema = {
     uniforms: {
@@ -194,9 +122,7 @@ export function compile<
     const overrideSchemaKind = overrideSchema[kind]
 
     for (const key in overrideSchemaKind) {
-      // @ts-expect-error
       schemaKind[key] = {
-        // @ts-expect-error
         ...schemaKind[key],
         ...overrideSchemaKind[key],
       }
@@ -209,17 +135,17 @@ export function compile<
     program,
     schema,
     view: view(gl, program, schema),
-  } as CompileResult<TVertex, TFragment, TOverride>
+  } as Prettify<CompileResult<TVertex, TFragment, TOverride>>
 }
 
 function resolveGLSLTag<TTag extends GLSLTag>(tag: TTag) {
   return {
-    template: glslTagToString(tag),
-    schema: glslTagToSchema(tag),
+    template: compile.toString(tag),
+    schema: compile.toSchema(tag),
   }
 }
 
-function glslTagToSchema<TTag extends GLSLTag>(tag: TTag) {
+compile.toSchema = function <TTag extends GLSLTag>(tag: TTag) {
   const result = {
     uniforms: {},
     attributes: {},
@@ -237,7 +163,7 @@ function glslTagToSchema<TTag extends GLSLTag>(tag: TTag) {
     }
 
     if (slot.type === 'glsl') {
-      const { uniforms, attributes, interleavedAttributes } = glslTagToSchema(slot)
+      const { uniforms, attributes, interleavedAttributes } = compile.toSchema(slot)
 
       result.uniforms = {
         ...result.uniforms,
@@ -263,45 +189,10 @@ function glslTagToSchema<TTag extends GLSLTag>(tag: TTag) {
 
   tag.slots.forEach(handleSlot)
 
-  return result
+  return result as unknown as Prettify<GLSLTagToSchema<TTag>>
 }
 
-// function glslSlotToSchema(slot: GLSLSlot){
-//   if(Array.isArray(slot)){
-
-//     return
-//   }
-
-//   if (typeof slot !== 'object') {
-//       return
-//     }
-
-//   if (slot.type === 'glsl') {
-//       return glslTagToSchema(slot)
-
-//       // result.uniforms = {
-//       //   ...result.uniforms,
-//       //   ...uniforms,
-//       // }
-//       // result.attributes = {
-//       //   ...result.attributes,
-//       //   ...attributes,
-//       // }
-//       // result.interleavedAttributes = {
-//       //   ...result.interleavedAttributes,
-//       //   ...interleavedAttributes,
-//       // }
-
-//       // continue
-//     }
-
-//     const { key: name, type, ...rest } = slot
-
-//     // @ts-expect-error
-//     result[`${type}s`][name] = rest
-// }
-
-function glslTagToString<TTag extends GLSLTag>({ template: [initial, ...rest], slots }: TTag) {
+compile.toString = function <TTag extends GLSLTag>({ template: [initial, ...rest], slots }: TTag) {
   const v300 = !!initial?.startsWith('#version 300 es')
 
   let template = initial ?? ''
@@ -323,7 +214,7 @@ function glslSlotToString(slot: GLSLSlot, v300: boolean): string {
   }
 
   if (slot.type === 'glsl') {
-    return glslTagToString(slot)
+    return compile.toString(slot)
   }
 
   if (slot.type === 'interleavedAttribute') {

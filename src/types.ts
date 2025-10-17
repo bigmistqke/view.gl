@@ -776,3 +776,73 @@ export type InterleaveTag<
     [TKey in keyof TLayout]: Prettify<Pick<TLayout[TKey], 'kind' | 'key'>>
   }
 }
+
+export type GLSLTagToSchema<TTag extends GLSLTag> =
+  FlattenSlots<TTag> extends infer TSlots
+    ? TSlots extends Array<any>
+      ? GLSLSlotsToSchema<TSlots>
+      : never
+    : never
+
+export type GLSLSlotsToSchema<TSlots extends Array<GLSLSlot>> = {
+  uniforms: {
+    [K in Extract<TSlots[number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+  }
+  attributes: {
+    [K in Extract<TSlots[number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+  }
+  interleavedAttributes: {
+    [K in Extract<TSlots[number], InterleaveTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+  }
+}
+
+type FlattenSlots<T> =
+  T extends GLSLTag<infer TSlots>
+    ? _FlattenSlots<TSlots>
+    : T extends Array<GLSLSlot>
+      ? _FlattenSlots<T>
+      : never
+
+type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer Rest]
+  ? First extends GLSLTag
+    ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
+    : First extends unknown[]
+      ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
+      : [First, ...FlattenSlots<Rest>]
+  : []
+
+export type MergeGLSLSchema<
+  TVertex extends ViewSchema,
+  TFragment extends ViewSchema,
+  TOverrides extends ViewSchemaPartial = {},
+> = {
+  uniforms: DeepMerge<
+    [ShallowMerge<[TVertex['uniforms'], TFragment['uniforms']]>, TOverrides['uniforms']]
+  >
+  attributes: DeepMerge<
+    [ShallowMerge<[TVertex['attributes'], TFragment['attributes']]>, TOverrides['attributes']]
+  >
+  interleavedAttributes: DeepMerge<
+    [
+      ShallowMerge<[TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]>,
+      TOverrides['interleavedAttributes'],
+    ]
+  >
+}
+
+export type CompileResult<
+  TVertex extends GLSLTag,
+  TFragment extends GLSLTag,
+  TOverrides extends ViewSchemaPartial,
+> =
+  MergeGLSLSchema<
+    GLSLTagToSchema<TVertex>,
+    GLSLTagToSchema<TFragment>,
+    TOverrides
+  > extends infer TSchema extends ViewSchema
+    ? {
+        program: WebGLProgram
+        schema: TSchema
+        view: View<TSchema>
+      }
+    : never
