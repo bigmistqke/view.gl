@@ -11,11 +11,16 @@
 - [👁️ view.gl](#️-viewgl)
   - [🚀 Basic Usage](#-basic-usage)
   - [👁️ view](#️-view)
+    - [📋 ViewSchema](#-viewschema)
   - [👀 Resource Views](#-resource-views)
     - [🎯 uniformView](#-uniformview)
+      - [📋 UniformSchema](#-uniformschema)
     - [📝 attributeView](#-attributeview)
+      - [📋 AttributeSchema](#-attributeschema)
     - [🔗 interleavedAttributeView](#-interleavedattributeview)
+      - [📋 InterleavedAttributeSchema](#-interleavedattributeschema)
     - [🗂️ bufferView](#-bufferview)
+      - [📋 BufferSchema](#-bufferschema)
 - [🏷️ view.gl/tag](#️-viewgltag)
   - [🚀 Basic Usage](#-basic-usage-1)
   - [📝 glsl](#-glsl)
@@ -27,6 +32,8 @@
     - [📝 attribute[kind](name, options?)](#-attributekindname-options)
     - [🔗 interleave(name, layout, options?)](#-interleavename-layout-options)
   - [⚙️ compile(gl, vertex, fragment)](#️-compilegl-vertex-fragment)
+    - [🔍 compile.toString(shader)](#-compiletostringshader)
+    - [📋 compile.toSchema(shader)](#-compiletoschemaschader)
 - [🛠️ Utils](#️-utils)
   - [🏗️ createProgram](#️-createprogram)
   - [🖼️ createTexture](#️-createtexture)
@@ -87,7 +94,7 @@ const { uniforms, attributes, buffers } = view(gl, program, schema)
 
 - `gl`: WebGL rendering context
 - `program`: Compiled WebGL program
-- `schema`: Resource definitions object
+- `schema`: see [`ViewSchema`](#viewschema)
 
 **Returns:**
 
@@ -95,40 +102,22 @@ const { uniforms, attributes, buffers } = view(gl, program, schema)
 - `attributes`: Attribute managers with buffer handling
 - `buffers`: Generic buffer managers
 
-**ViewSchema:**
-The complete schema object that defines all WebGL resources. Contains optional mappings for uniforms, attributes, interleaved attributes, and buffers.
+#### 📋 ViewSchema
+The complete schema object that defines all WebGL resources. Contains mappings for:
+- [`UniformSchema`](#-uniformschema) - uniform variable definitions
+- [`AttributeSchema`](#-attributeschema) - vertex attribute definitions  
+- [`InterleavedAttributeSchema`](#-interleavedattributeschema) - interleaved vertex data definitions
+- [`BufferSchema`](#-bufferschema) - generic buffer definitions
 
 <details>
 <summary>TypeScript Types</summary>
 
 ```typescript
 interface ViewSchema {
-  uniforms?: Record<string | symbol, UniformOptions>
-  attributes?: Record<string | symbol, AttributeOptions>
-  interleavedAttributes?: Record<string | symbol, InterleavedAttributeOptions>
-  buffers?: Record<string | symbol, BufferOptions>
-}
-
-interface UniformOptions {
-  kind: UniformKind
-  size?: number // For array uniforms
-}
-
-interface AttributeOptions {
-  kind: AttributeKind
-  instanced?: boolean
-  buffer?: WebGLBuffer
-}
-
-interface InterleavedAttributeOptions {
-  layout: Array<{ key: string | symbol; kind: AttributeKind }>
-  instanced?: boolean
-  buffer?: WebGLBuffer
-}
-
-interface BufferOptions {
-  target: 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
-  usage?: 'STATIC_DRAW' | 'DYNAMIC_DRAW' | 'STREAM_DRAW'
+  uniforms: UniformSchema
+  attributes: AttributeSchema
+  interleavedAttributes: InterleavedAttributeSchema
+  buffers: BufferSchema
 }
 ```
 
@@ -153,8 +142,9 @@ uniforms.time.set(performance.now())
 uniforms.lights.set(lightData) // Takes Float32Array for array uniforms
 ```
 
-**UniformSchema:**
-A mapping of uniform names to their configuration. Each uniform has a GLSL type and optional array size.
+##### 📋 UniformSchema
+
+A mapping of uniform names to their configuration.
 
 - `kind`: GLSL type (see [Uniform Types](#-uniform-types) for full list and WebGL compatibility)
 - `size`: Array size (optional) - converts uniform to array type
@@ -182,12 +172,12 @@ type UniformKind =
   | 'sampler2D'
   | 'samplerCube'
 
-interface UniformOptions {
+interface UniformDefinition {
   kind: UniformKind
   size?: number                               // Creates array uniform with Float32Array setter
 }
 
-type UniformSchema = Record<string | symbol, UniformOptions>
+type UniformSchema = Record<string | symbol, UniformDefinition>
 ```
 
 </details>
@@ -208,12 +198,13 @@ attributes.instanceOffset.set(instanceData).bind()
 gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 ```
 
-**AttributeSchema:**
-A mapping of attribute names to their configuration. Each attribute has a GLSL type, optional instancing, and optional custom buffer.
+##### 📋 AttributeSchema
+
+A mapping of attribute names to their configuration.
 
 - `kind`: GLSL type (see [Attribute Types](#-attribute-types) for full list and WebGL compatibility)
-- `instanced`: Boolean - enables instanced rendering
-- `buffer`: Custom WebGLBuffer (optional)
+- `instanced`: Boolean (optional) - enables instanced rendering
+- `buffer`: Custom WebGLBuffer (optional) - by default it gets created automatically during compilation
 
 <details>
 <summary>TypeScript Types</summary>
@@ -232,13 +223,13 @@ type AttributeKind =
   | 'ivec3'
   | 'ivec4'
 
-interface AttributeOptions {
+interface AttributeDefinition {
   kind: AttributeKind
   instanced?: boolean                         // Enables vertexAttribDivisor
   buffer?: WebGLBuffer                        // Custom buffer, auto-created if not provided
 }
 
-type AttributeSchema = Record<string | symbol, AttributeOptions>
+type AttributeSchema = Record<string | symbol, AttributeDefinition>
 ```
 
 </details>
@@ -261,17 +252,19 @@ const interleavedAttributes = interleavedAttributeView(gl, program, {
 interleavedAttributes.vertexData.set(interleavedVertexData).bind()
 ```
 
-**InterleavedAttributeSchema:**
+##### 📋 InterleavedAttributeSchema
+
 A mapping of interleaved buffer names to their layout configuration. Each layout defines multiple attributes packed into a single buffer.
 
 - `layout`: Array of attribute definitions with `key` and `kind` (see [Attribute Types](#-attribute-types))
 - `instanced`: Boolean - applies to all attributes in layout
+- `buffer`: Custom WebGLBuffer (optional) - by default it gets created automatically during compilation
 
 <details>
 <summary>TypeScript Types</summary>
 
 ```typescript
-interface InterleavedAttributeOptions {
+interface InterleavedAttributeDefinition {
   layout: Array<{
     key: string | symbol
     kind: AttributeKind
@@ -280,7 +273,7 @@ interface InterleavedAttributeOptions {
   buffer?: WebGLBuffer                        // Custom buffer for interleaved data
 }
 
-type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeOptions>
+type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeDefinition>
 ```
 
 </details>
@@ -299,7 +292,7 @@ buffers.indices.set(indexData).bind()
 buffers.data.set(dynamicData).bind()
 ```
 
-**BufferSchema:**
+##### 📋 BufferSchema
 A mapping of buffer names to their configuration. Each buffer has a target type and optional usage pattern.
 
 - `target`: Buffer target (`'ARRAY_BUFFER'`, `'ELEMENT_ARRAY_BUFFER'`)
@@ -309,12 +302,12 @@ A mapping of buffer names to their configuration. Each buffer has a target type 
 <summary>TypeScript Types</summary>
 
 ```typescript
-interface BufferOptions {
+interface BufferDefinition {
   target: 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
   usage?: 'STATIC_DRAW' | 'DYNAMIC_DRAW' | 'STREAM_DRAW' // Defaults to 'STATIC_DRAW'
 }
 
-type BufferSchema = Record<string | symbol, BufferOptions>
+type BufferSchema = Record<string | symbol, BufferDefinition>
 ```
 
 </details>
@@ -590,6 +583,81 @@ view.buffers.indices.set(indexData).bind()
 - `program`: Compiled WebGL program
 - `schema`: Merged schema (extracted + override)
 - `view`: Ready-to-use view with type-safe resource access
+
+#### 🔍 compile.toString(shader)
+
+Converts a GLSL tagged template to a shader string without compilation of the `WebGLProgram`. Useful for debugging or when you need the raw shader code.
+
+```typescript
+const vertexShader = glsl`
+  ${attribute.vec3('position')}
+  ${uniform.mat4('mvpMatrix')}
+  
+  void main() {
+    gl_Position = mvpMatrix * vec4(position, 1.0);
+  }
+`
+
+const shaderString = compile.toString(vertexShader)
+console.log(shaderString)
+// Output:
+// attribute vec3 position;
+// uniform mat4 mvpMatrix;
+// 
+// void main() {
+//   gl_Position = mvpMatrix * vec4(position, 1.0);
+// }
+```
+
+**Features**:
+- Converts resource tags to GLSL declarations
+- Handles WebGL1/WebGL2 syntax automatically
+- Resolves symbol variables to unique identifiers
+- Processes nested GLSL fragments and arrays
+
+#### 📋 compile.toSchema(shader)
+
+Extracts the [`ViewSchema`](#viewschema) from a GLSL tagged template without compilation of the `WebGLProgram`. Returns the type-safe schema that could be used by [`view()`](#️-view).
+
+```typescript
+const shader = glsl`
+  ${uniform.float('time')}
+  ${uniform.vec3('lightPos', { size: 4 })}
+  ${attribute.vec3('position')}
+  ${interleave('vertexData', [
+    attribute.vec2('uv'),
+    attribute.vec4('color')
+  ])}
+`
+
+const schema = compile.toSchema(shader)
+console.log(schema)
+// Output:
+// {
+//   uniforms: {
+//     time: { kind: 'float' },
+//     lightPos: { kind: 'vec3', size: 4 }
+//   },
+//   attributes: {
+//     position: { kind: 'vec3' }
+//   },
+//   interleavedAttributes: {
+//     vertexData: {
+//       layout: [
+//         { key: 'uv', kind: 'vec2' },
+//         { key: 'color', kind: 'vec4' }
+//       ],
+//       instanced: false
+//     }
+//   }
+// }
+```
+
+**Use Cases**:
+- Analyze shader resources without GL context
+- Generate TypeScript types from shaders
+- Validate shader compatibility before compilation
+- Build tooling around shader resources
 
 <details>
 <summary>Usage with vanilla view.gl</summary>
