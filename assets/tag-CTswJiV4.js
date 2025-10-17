@@ -489,7 +489,6 @@ function compile(gl, vertex, fragment, overrideSchema) {
     const overrideSchemaKind = overrideSchema[kind];
     for (const key in overrideSchemaKind) {
       schemaKind[key] = {
-        // @ts-expect-error
         ...schemaKind[key],
         ...overrideSchemaKind[key]
       };
@@ -504,11 +503,11 @@ function compile(gl, vertex, fragment, overrideSchema) {
 }
 function resolveGLSLTag(tag) {
   return {
-    template: glslTagToString(tag),
-    schema: glslTagToSchema(tag)
+    template: compile.toString(tag),
+    schema: compile.toSchema(tag)
   };
 }
-function glslTagToSchema(tag) {
+compile.toSchema = function(tag) {
   const result = {
     uniforms: {},
     attributes: {},
@@ -523,7 +522,7 @@ function glslTagToSchema(tag) {
       return;
     }
     if (slot.type === "glsl") {
-      const { uniforms, attributes, interleavedAttributes } = glslTagToSchema(slot);
+      const { uniforms, attributes, interleavedAttributes } = compile.toSchema(slot);
       result.uniforms = {
         ...result.uniforms,
         ...uniforms
@@ -543,15 +542,15 @@ function glslTagToSchema(tag) {
   }
   tag.slots.forEach(handleSlot);
   return result;
-}
-function glslTagToString({ template: [initial, ...rest], slots }) {
+};
+compile.toString = function({ template: [initial, ...rest], slots }) {
   const v300 = !!initial?.startsWith("#version 300 es");
   let template = initial ?? "";
   for (let i = 0; i < rest.length; i++) {
     template += `${glslSlotToString(slots[i], v300)}${rest[i]}`;
   }
   return template;
-}
+};
 function glslSlotToString(slot, v300) {
   if (typeof slot !== "object") {
     return toID(slot);
@@ -560,7 +559,7 @@ function glslSlotToString(slot, v300) {
     return slot.map((slot2) => glslSlotToString(slot2, v300)).join("");
   }
   if (slot.type === "glsl") {
-    return glslTagToString(slot);
+    return compile.toString(slot);
   }
   if (slot.type === "interleavedAttribute") {
     return slot.layout.reduce(

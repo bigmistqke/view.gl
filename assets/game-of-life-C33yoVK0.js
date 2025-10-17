@@ -1,4 +1,4 @@
-import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-3djUpV57.js';
+import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-CTswJiV4.js';
 
 let playing = false;
 const canvas = document.createElement("canvas");
