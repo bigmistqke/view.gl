@@ -27,7 +27,7 @@
     - 🧩 [GLSL Fragment](#-glsl-fragment)
     - 🔒 [Symbol Variables](#-symbol-variables)
     - [WebGL Version Support](#webgl-version-support)
-  - 🏷️ [Resource Tags](#️-resource-tags)
+  - 🏷️ [Resource Tokens](#️-resource-tokens)
     - 🎯 [uniform[kind](name, options?)](#-uniformkindname-options)
     - 📝 [attribute[kind](name, options?)](#-attributekindname-options)
     - 🔗 [interleave(name, layout, options?)](#-interleavename-layout-options)
@@ -453,9 +453,9 @@ const shader = glsl`#version 300 es
 `
 ```
 
-### 🏷️ Resource Tags
+### 🏷️ Resource Tokens
 
-Functions for defining WebGL resources directly in GLSL templates. These tags generate GLSL declarations and automatically extract type-safe schemas for use with the view system.
+Utilities for defining WebGL resources directly in GLSL templates. These create metadata that the [`compile`](#️-compilegl-vertex-fragment-overrideschema) consumes to generate the typesafe schema and view.
 
 #### 🎯 uniform[kind](name, options?)
 
@@ -548,7 +548,7 @@ const vertexShader = glsl`
 
 ### ⚙️ compile(gl, vertex, fragment, overrideSchema?)
 
-Compiles shaders and extracts schema from embedded resources. Returns both the compiled program and a ready-to-use view.
+Compiles shaders to a `WebGLProgram` and extracts typesafe schema and view.
 
 ```typescript
 const { program, schema, view } = compile(gl, vertexShader, fragmentShader)

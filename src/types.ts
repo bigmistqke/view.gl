@@ -654,17 +654,24 @@ export interface GLSLResult {
   schema: ViewSchema
 }
 
-type GLSLSlotItem = GLSLTag | UniformTag | AttributeTag | InterleaveTag | string | number | symbol
+type GLSLSlotItem =
+  | GLSL
+  | UniformToken
+  | AttributeToken
+  | InterleaveToken
+  | string
+  | number
+  | symbol
 
 export type GLSLSlot = GLSLSlotItem | Array<GLSLSlotItem>
 
-export interface GLSLTag<TSlots extends GLSLSlot[] = GLSLSlot[]> {
+export interface GLSL<TSlots extends GLSLSlot[] = GLSLSlot[]> {
   type: 'glsl'
   template: TemplateStringsArray
   slots: TSlots
 }
 
-export type UniformTag<
+export type UniformToken<
   TKey extends string | symbol = string | symbol,
   TKind extends UniformKind = UniformKind,
   TDefinition extends Partial<UniformDefinition> = UniformDefinition,
@@ -681,15 +688,15 @@ export type UniformTag<
       key: TKey
     }
 
-export interface UniformTagFn<TKind extends UniformKind> {
+export interface UniformTokenFn<TKind extends UniformKind> {
   <const TKey extends string | symbol, const TDefinition extends Omit<UniformDefinition, 'kind'>>(
     key: TKey,
     TDefinition: TDefinition,
-  ): Prettify<UniformTag<TKey, TKind, TDefinition>>
-  <const TName extends string | symbol>(key: TName): Prettify<UniformTag<TName, TKind>>
+  ): Prettify<UniformToken<TKey, TKind, TDefinition>>
+  <const TName extends string | symbol>(key: TName): Prettify<UniformToken<TName, TKind>>
 }
 
-export interface AttributeTag<
+export interface AttributeToken<
   TKey extends string | symbol = string | symbol,
   TKind extends AttributeKind = AttributeKind,
   TInstanced extends boolean | undefined = boolean | undefined,
@@ -700,18 +707,18 @@ export interface AttributeTag<
   key: TKey
 }
 
-export interface AttributeTagFn<TKey extends AttributeKind> {
+export interface AttributeTokenFn<TKey extends AttributeKind> {
   <TName extends string | symbol, TDefinition extends Omit<AttributeDefinition, 'kind'>>(
     key: TName,
     options: TDefinition,
-  ): Prettify<AttributeTag<TName, TKey, TDefinition['instanced']>>
-  <TName extends string | symbol>(key: TName): Prettify<AttributeTag<TName, TKey, undefined>>
+  ): Prettify<AttributeToken<TName, TKey, TDefinition['instanced']>>
+  <TName extends string | symbol>(key: TName): Prettify<AttributeToken<TName, TKey, undefined>>
 }
 
-export type InterleaveTag<
+export type InterleaveToken<
   TKey extends string | symbol = string | symbol,
-  TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>> = Array<
-    AttributeTag<string | symbol, AttributeKind, undefined>
+  TLayout extends Array<AttributeToken<string | symbol, AttributeKind, undefined>> = Array<
+    AttributeToken<string | symbol, AttributeKind, undefined>
   >,
   TDefinition extends Omit<AttributeDefinition, 'kind'> = Omit<AttributeDefinition, 'kind'>,
 > = TDefinition & {
@@ -722,34 +729,36 @@ export type InterleaveTag<
   }
 }
 
-export type GLSLTagToSchema<TTag extends GLSLTag> =
-  FlattenSlots<TTag> extends infer TSlots
+export type GLSLToSchema<T extends GLSL> =
+  FlattenSlots<T> extends infer TSlots
     ? TSlots extends Array<any>
       ? GLSLSlotsToSchema<TSlots>
       : never
     : never
 
+export type GLSLToView<T extends GLSL> = View<GLSLToSchema<T>>
+
 export type GLSLSlotsToSchema<TSlots extends Array<GLSLSlot>> = {
   uniforms: {
-    [K in Extract<TSlots[number], UniformTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+    [K in Extract<TSlots[number], UniformToken> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
   }
   attributes: {
-    [K in Extract<TSlots[number], AttributeTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+    [K in Extract<TSlots[number], AttributeToken> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
   }
   interleavedAttributes: {
-    [K in Extract<TSlots[number], InterleaveTag> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+    [K in Extract<TSlots[number], InterleaveToken> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
   }
 }
 
 type FlattenSlots<T> =
-  T extends GLSLTag<infer TSlots>
+  T extends GLSL<infer TSlots>
     ? _FlattenSlots<TSlots>
     : T extends Array<GLSLSlot>
       ? _FlattenSlots<T>
       : never
 
 type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer Rest]
-  ? First extends GLSLTag
+  ? First extends GLSL
     ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
     : First extends unknown[]
       ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
@@ -776,14 +785,14 @@ export type MergeGLSLSchema<
 }
 
 export type CompileResult<
-  TVertex extends GLSLTag,
-  TFragment extends GLSLTag,
-  TOverrides extends ViewSchemaPartial,
+  TVertex extends GLSL,
+  TFragment extends GLSL,
+  TOverrideSchema extends ViewSchemaPartial,
 > =
   MergeGLSLSchema<
-    GLSLTagToSchema<TVertex>,
-    GLSLTagToSchema<TFragment>,
-    TOverrides
+    GLSLToSchema<TVertex>,
+    GLSLToSchema<TFragment>,
+    TOverrideSchema
   > extends infer TSchema extends ViewSchema
     ? {
         program: WebGLProgram

@@ -3,16 +3,16 @@ import type { Prettify } from './type-utils'
 import type {
   AttributeDefinition,
   AttributeKind,
-  AttributeTag,
-  AttributeTagFn as AttributeTagMethod,
+  AttributeTokenFn as AttributeTagMethod,
+  AttributeToken,
   CompileResult,
+  GLSL,
   GLSLSlot,
-  GLSLTag,
-  GLSLTagToSchema,
-  InterleaveTag,
+  GLSLToSchema,
+  InterleaveToken,
   UniformDefinition,
   UniformKind,
-  UniformTagFn as UniformTagMethod,
+  UniformTokenFn as UniformTagMethod,
   ViewSchema,
   ViewSchemaPartial,
 } from './types'
@@ -21,7 +21,7 @@ import { createProgram } from './utils'
 export function glsl<TSlot extends GLSLSlot, TSlots extends TSlot[]>(
   template: TemplateStringsArray,
   ...slots: [...TSlots]
-): GLSLTag<TSlots> {
+): GLSL<TSlots> {
   return { template, slots, type: 'glsl' }
 }
 
@@ -63,16 +63,16 @@ export const attribute = new Proxy(
 
 export function interleave<
   const TKey extends string | symbol,
-  const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
+  const TLayout extends Array<AttributeToken<string | symbol, AttributeKind, undefined>>,
   const TOptions extends Omit<AttributeDefinition, 'kind'>,
->(key: TKey, layout: TLayout, instanced: TOptions): InterleaveTag<TKey, TLayout, TOptions>
+>(key: TKey, layout: TLayout, instanced: TOptions): InterleaveToken<TKey, TLayout, TOptions>
 export function interleave<
   const TKey extends string | symbol,
-  const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
->(key: TKey, layout: TLayout): InterleaveTag<TKey, TLayout, { instanced: false }>
+  const TLayout extends Array<AttributeToken<string | symbol, AttributeKind, undefined>>,
+>(key: TKey, layout: TLayout): InterleaveToken<TKey, TLayout, { instanced: false }>
 export function interleave<
   const TKey extends string | symbol,
-  const TLayout extends Array<AttributeTag<string | symbol, AttributeKind, undefined>>,
+  const TLayout extends Array<AttributeToken<string | symbol, AttributeKind, undefined>>,
   const TOptions extends Omit<AttributeDefinition, 'kind'>,
 >(key: TKey, layout: TLayout, { instanced, buffer }: Partial<TOptions> = {}) {
   return {
@@ -85,7 +85,7 @@ export function interleave<
     })),
     instanced: !!instanced,
     buffer,
-  } as unknown as InterleaveTag<TKey, TLayout, TOptions>
+  } as unknown as InterleaveToken<TKey, TLayout, TOptions>
 }
 
 /**********************************************************************************/
@@ -95,8 +95,8 @@ export function interleave<
 /**********************************************************************************/
 
 export function compile<
-  TVertex extends GLSLTag,
-  TFragment extends GLSLTag,
+  TVertex extends GLSL,
+  TFragment extends GLSL,
   TOverride extends ViewSchemaPartial,
 >(gl: WebGLRenderingContext, vertex: TVertex, fragment: TFragment, overrideSchema?: TOverride) {
   const _vertex = resolveGLSLTag(vertex) as { template: string; schema: ViewSchema }
@@ -140,14 +140,14 @@ export function compile<
   } as unknown as Prettify<CompileResult<TVertex, TFragment, TOverride>>
 }
 
-function resolveGLSLTag<TTag extends GLSLTag>(tag: TTag) {
+function resolveGLSLTag<TTag extends GLSL>(tag: TTag) {
   return {
     template: compile.toString(tag),
     schema: compile.toSchema(tag),
   }
 }
 
-compile.toSchema = function <TTag extends GLSLTag>(tag: TTag) {
+compile.toSchema = function <TTag extends GLSL>(tag: TTag) {
   const result = {
     uniforms: {},
     attributes: {},
@@ -191,10 +191,10 @@ compile.toSchema = function <TTag extends GLSLTag>(tag: TTag) {
 
   tag.slots.forEach(handleSlot)
 
-  return result as unknown as Prettify<GLSLTagToSchema<TTag>>
+  return result as unknown as Prettify<GLSLToSchema<TTag>>
 }
 
-compile.toString = function <TTag extends GLSLTag>({ template: [initial, ...rest], slots }: TTag) {
+compile.toString = function <TTag extends GLSL>({ template: [initial, ...rest], slots }: TTag) {
   const v300 = !!initial?.startsWith('#version 300 es')
 
   let template = initial ?? ''
