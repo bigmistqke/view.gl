@@ -24,6 +24,7 @@ import {
   kindToUniformFnName,
   ObjectUtils,
 } from './utils'
+export * from './types'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -33,8 +34,12 @@ import {
 
 let index = 0
 const PREFIX = 'VIEW_GL_ALIAS'
+const IS_FIREFOX = navigator.userAgent.toLowerCase().indexOf('firefox') >= 0
 
-const SYMBOL_MAP = createUpsertMap(WeakMap<symbol, string>)
+// NOTE:  using symbol as key for WeakMap is currently broken in firefox
+//        see https://bugzilla.mozilla.org/show_bug.cgi?id=1710433
+//        fallback to Map will currently cause a memory leak.
+const SYMBOL_MAP = createUpsertMap(IS_FIREFOX ? Map<symbol, string> : WeakMap<symbol, string>)
 
 export function toID(key: string | number | symbol) {
   if (typeof key === 'string') {
