@@ -551,11 +551,15 @@ const vertexShader = glsl`
 Compiles shaders to a `WebGLProgram` and extracts typesafe schema and view.
 
 ```typescript
-const { program, schema, view } = compile(gl, vertexShader, fragmentShader)
+const { program, schema, view, vertex, fragment } = compile(gl, vertexShader, fragmentShader)
 
 // Use the view directly
 view.uniforms.time.set(performance.now())
 view.attributes.position.set(vertexData).bind()
+
+// Access the compiled shader strings
+console.log(vertex)                           // Compiled vertex shader GLSL
+console.log(fragment)                         // Compiled fragment shader GLSL
 
 // Or access the extracted schema
 console.log(schema.uniforms)                  // { time: { kind: 'float' }, ... }
@@ -588,6 +592,8 @@ view.buffers.indices.set(indexData).bind()
 - `program`: Compiled WebGL program
 - `schema`: Merged schema (extracted + override)
 - `view`: Ready-to-use view with type-safe resource access
+- `vertex`: Compiled vertex shader GLSL string
+- `fragment`: Compiled fragment shader GLSL string
 
 #### 🔍 compile.toString(shader)
 
