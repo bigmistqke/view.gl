@@ -236,7 +236,8 @@ function createUpsertMap(constructor) {
 
 let index = 0;
 const PREFIX = "VIEW_GL_ALIAS";
-const SYMBOL_MAP = createUpsertMap(WeakMap);
+const IS_FIREFOX = navigator.userAgent.toLowerCase().indexOf("firefox") >= 0;
+const SYMBOL_MAP = createUpsertMap(IS_FIREFOX ? Map : WeakMap);
 function toID(key) {
   if (typeof key === "string") {
     return key;
