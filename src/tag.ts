@@ -1,4 +1,5 @@
 import { toID, view } from '.'
+import type { Prettify } from './type-utils'
 import type {
   AttributeDefinition,
   AttributeKind,
@@ -9,7 +10,6 @@ import type {
   GLSLTag,
   GLSLTagToSchema,
   InterleaveTag,
-  Prettify,
   UniformDefinition,
   UniformKind,
   UniformTagFn as UniformTagMethod,

@@ -1,72 +1,14 @@
-export type Merge<A, B> = {
-  [K in keyof A | keyof B]: K extends keyof A
-    ? K extends keyof B
-      ? A[K] | B[K]
-      : A[K]
-    : K extends keyof B
-      ? B[K]
-      : never
-}
-
-export type Prettify<T> = {
-  [K in keyof T]: T[K]
-} & {}
-
-export type RemoveSuffix<T, S extends string> = {
-  [K in keyof T as K extends `${infer Prefix}${S}` ? Prefix : K]: T[K]
-}
+import { DeepMerge, Prettify, ShallowMerge } from './type-utils'
 
 export type GL = WebGLRenderingContext | WebGL2RenderingContext
 
-export type DeepMerge<A extends readonly [...any]> = A extends [infer L, ...infer R]
-  ? DeepMergeTwo<L, DeepMerge<R>>
-  : unknown
-
-type DeepMergeTwo<TBase, TOverride> = {
-  [K in keyof TBase | keyof TOverride]: K extends keyof TOverride
-    ? K extends keyof TBase
-      ? ShallowMerge<[TBase[K], TOverride[K]]>
-      : TOverride[K]
-    : K extends keyof TBase
-      ? TBase[K]
-      : never
-}
-
-// see https://stackoverflow.com/a/49683575
-export type ShallowMerge<A extends readonly [...any]> = A extends [infer L, ...infer R]
-  ? ShallowMergeTwo<L, ShallowMerge<R>>
-  : unknown
-
-type OptionalPropertyNames<T> = {
-  [K in keyof T]-?: {} extends { [P in K]: T[K] } ? K : never
-}[keyof T]
-
-type SpreadProperties<L, R, K extends keyof L & keyof R> = {
-  [P in K]: L[P] | Exclude<R[P], undefined>
-}
-
-type Id<T> = T extends infer U ? { [K in keyof U]: U[K] } : never
-
-type ShallowMergeTwo<L, R> = Id<
-  Pick<L, Exclude<keyof L, keyof R>> &
-    Pick<R, Exclude<keyof R, OptionalPropertyNames<R>>> &
-    Pick<R, Exclude<OptionalPropertyNames<R>, keyof L>> &
-    SpreadProperties<L, R, OptionalPropertyNames<R> & keyof L>
->
-
-/**********************************************************************************/
-/*                                                                                */
-/*                                    Constants                                   */
-/*                                                                                */
-/**********************************************************************************/
-
-type GLTarget = 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
-type GLUsage = 'STATIC_DRAW' | 'DYNAMIC_DRAW' | 'STREAM_DRAW'
-type GLTextureTarget = 'TEXTURE_2D' | 'TEXTURE_CUBE_MAP'
-type GLTextureFormat = 'RGBA' | 'RGB' | 'RGBA32F' | 'RGB32F' | 'RGBA16F' | 'RGB16F'
-type GLTextureType = 'UNSIGNED_BYTE' | 'FLOAT' | 'HALF_FLOAT'
-type GLTextureFilter = 'NEAREST' | 'LINEAR'
-type GLTextureWrap = 'CLAMP_TO_EDGE' | 'REPEAT' | 'MIRRORED_REPEAT'
+export type GLTarget = 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
+export type GLUsage = 'STATIC_DRAW' | 'DYNAMIC_DRAW' | 'STREAM_DRAW'
+export type GLTextureTarget = 'TEXTURE_2D' | 'TEXTURE_CUBE_MAP'
+export type GLTextureFormat = 'RGBA' | 'RGB' | 'RGBA32F' | 'RGB32F' | 'RGBA16F' | 'RGB16F'
+export type GLTextureType = 'UNSIGNED_BYTE' | 'FLOAT' | 'HALF_FLOAT'
+export type GLTextureFilter = 'NEAREST' | 'LINEAR'
+export type GLTextureWrap = 'CLAMP_TO_EDGE' | 'REPEAT' | 'MIRRORED_REPEAT'
 
 export interface KIND_TO_UNIFORM_FN_NAME_MAP {
   // Floats (WebGL1 + WebGL2)

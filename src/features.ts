@@ -1,4 +1,5 @@
-import type { GL, RemoveSuffix } from './types'
+import { RemoveSuffix } from './type-utils'
+import type { GL } from './types'
 
 const INSTANCED_ARRAYS_WRAPPER_MAP = new WeakMap<
   GL,
