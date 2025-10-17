@@ -1,7 +1,7 @@
 {
   "name": "@bigmistqke/view.gl",
-  "version": "0.1.6",
-  "description": "🪟 Utilities for managing WebGL resources.",
+  "version": "0.1.7",
+  "description": "👀 Utilities for managing WebGL resources.",
   "exports": {
     ".": {
       "import": "./dist/index.mjs",
