@@ -135,7 +135,9 @@ export function compile<
     program,
     schema,
     view: view(gl, program, schema),
-  } as Prettify<CompileResult<TVertex, TFragment, TOverride>>
+    vertex: _vertex.template,
+    fragment: _fragment.template,
+  } as unknown as Prettify<CompileResult<TVertex, TFragment, TOverride>>
 }
 
 function resolveGLSLTag<TTag extends GLSLTag>(tag: TTag) {
