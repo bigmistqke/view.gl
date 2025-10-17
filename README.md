@@ -1,55 +1,60 @@
 # 👁️ @bigmistqke/view.gl
 
-🔧 Minimal library for managing WebGL uniforms / (interleaved) attributes / buffers / ...
+🔧 Utilities for managing WebGL resources: uniforms, (interleaved) attributes and buffers.
 
 - schema-based resource management [`view-gl`](#️-viewgl)
-- type-safe GLSL template literals to compose schemas [`view-gl/tag`](#️-viewgltag)
+- compose schema and shader simultaneously via a tag template literal [`view-gl/tag`](#️-viewgltag)
 
 ## Table of Contents
 
-- [📦 Install](#-install)
-- [👁️ view.gl](#️-viewgl)
-  - [🚀 Basic Usage](#-basic-usage)
-  - [👁️ view](#️-view)
-    - [📋 ViewSchema](#-viewschema)
-  - [👀 Resource Views](#-resource-views)
-    - [🎯 uniformView](#-uniformview)
-      - [📋 UniformSchema](#-uniformschema)
-    - [📝 attributeView](#-attributeview)
-      - [📋 AttributeSchema](#-attributeschema)
-    - [🔗 interleavedAttributeView](#-interleavedattributeview)
-      - [📋 InterleavedAttributeSchema](#-interleavedattributeschema)
-    - [🗂️ bufferView](#-bufferview)
-      - [📋 BufferSchema](#-bufferschema)
-- [🏷️ view.gl/tag](#️-viewgltag)
-  - [🚀 Basic Usage](#-basic-usage-1)
-  - [📝 glsl](#-glsl)
-    - [🧩 GLSL Fragment](#-glsl-fragment)
-    - [🔒 Symbol Variables](#-symbol-variables)
+- 📦 [Install](#-install)
+- 👁️ [view.gl](#️-viewgl)
+  - 🚀 [Basic Usage](#-basic-usage)
+  - 👁️ [view](#️-view)
+    - 📋 [ViewSchema](#-viewschema)
+  - 👀 [Resource Views](#-resource-views)
+    - 🎯 [uniformView](#-uniformview)
+      - 📋 [UniformSchema](#-uniformschema)
+    - 📝 [attributeView](#-attributeview)
+      - 📋 [AttributeSchema](#-attributeschema)
+    - 🔗 [interleavedAttributeView](#-interleavedattributeview)
+      - 📋 [InterleavedAttributeSchema](#-interleavedattributeschema)
+    - 🗂️ [bufferView](#-bufferview)
+      - 📋 [BufferSchema](#-bufferschema)
+- 🏷️ [view.gl/tag](#️-viewgltag)
+  - 🚀 [Basic Usage](#-basic-usage-1)
+  - 📝 [glsl](#-glsl)
+    - 🧩 [GLSL Fragment](#-glsl-fragment)
+    - 🔒 [Symbol Variables](#-symbol-variables)
     - [WebGL Version Support](#webgl-version-support)
-  - [⚙️ Resource Tags](#️-resource-tags)
-    - [🎯 uniform[kind](name, options?)](#-uniformkindname-options)
-    - [📝 attribute[kind](name, options?)](#-attributekindname-options)
-    - [🔗 interleave(name, layout, options?)](#-interleavename-layout-options)
-  - [⚙️ compile(gl, vertex, fragment)](#️-compilegl-vertex-fragment)
-    - [🔍 compile.toString(shader)](#-compiletostringshader)
-    - [📋 compile.toSchema(shader)](#-compiletoschemaschader)
-- [🛠️ Utils](#️-utils)
-  - [🏗️ createProgram](#️-createprogram)
-  - [🖼️ createTexture](#️-createtexture)
-  - [🖥️ createFramebuffer](#️-createframebuffer)
-- [🔍 WebGL Type Compatibility](#-webgl-type-compatibility)
-  - [🎯 Uniform Types](#-uniform-types)
-  - [📝 Attribute Types](#-attribute-types)
+  - 🏷️ [Resource Tags](#️-resource-tags)
+    - 🎯 [uniform[kind](name, options?)](#-uniformkindname-options)
+    - 📝 [attribute[kind](name, options?)](#-attributekindname-options)
+    - 🔗 [interleave(name, layout, options?)](#-interleavename-layout-options)
+  - ⚙️ [compile(gl, vertex, fragment)](#️-compilegl-vertex-fragment)
+    - 🔍 [compile.toString(shader)](#-compiletostringshader)
+    - 📋 [compile.toSchema(shader)](#-compiletoschemaschader)
+- 🛠️ [Utils](#️-utils)
+  - 🏗️ [createProgram](#️-createprogram)
+  - 🖼️ [createTexture](#️-createtexture)
+  - 🖥️ [createFramebuffer](#️-createframebuffer)
+- 🔍 [WebGL Type Compatibility](#-webgl-type-compatibility)
+  - 🎯 [Uniform Types](#-uniform-types)
+  - 📝 [Attribute Types](#-attribute-types)
 
 ## 📦 Install
 
 ```shell
 npm install @bigmistqke/view.gl
-# or
+```
+```shell
 pnpm add @bigmistqke/view.gl
-# or
+```
+```shell
 yarn add @bigmistqke/view.gl
+```
+```shell
+bun add @bigmistqke/view.gl
 ```
 
 ## 👁️ view.gl
@@ -314,7 +319,7 @@ type BufferSchema = Record<string | symbol, BufferDefinition>
 
 ## 🏷️ view.gl/tag
 
-Type-safe GLSL template literals with automatic schema extraction.
+Type-safe GLSL template literals with automatic schema extraction and view creation.
 
 - **Embedded Resources**: Define uniforms, attributes, and interleaved layouts directly in GLSL
 - **Type Inference**: Automatically infers schema types and creates type-safe view
@@ -448,7 +453,7 @@ const shader = glsl`#version 300 es
 `
 ```
 
-### ⚙️ Resource Tags
+### 🏷️ Resource Tags
 
 Functions for defining WebGL resources directly in GLSL templates. These tags generate GLSL declarations and automatically extract type-safe schemas for use with the view system.
 
