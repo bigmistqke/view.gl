@@ -1,10 +1,10 @@
 import css from './index.css?url'
-import { createElement } from './utils'
+import { dom } from './utils'
 
 const iframe = document.querySelector('iframe')!
 const nav = document.querySelector('nav')!
 
-createElement('h3', { innerText: 'Examples', parentElement: nav })
+nav.append(dom('h3', { innerText: 'Examples' }))
 
 const urls = Object.fromEntries(
   Object.entries(import.meta.glob('./examples/*.ts', { eager: false })).map(([key, entry]) => {
@@ -15,15 +15,16 @@ const urls = Object.fromEntries(
 )
 
 Object.entries(urls).forEach(([name, localUrl]) => {
-  createElement('button', {
-    onclick(event) {
-      event.preventDefault()
-      load(name, localUrl)
-    },
-    innerHTML: name.replaceAll('-', ' '),
-    parentElement: nav,
-    'data-route': name,
-  })
+  nav.append(
+    dom('button', {
+      onclick(event) {
+        event.preventDefault()
+        load(name, localUrl)
+      },
+      innerHTML: name.replaceAll('-', ' '),
+      'data-route': name,
+    }),
+  )
 })
 
 function load(name: string, url: string) {

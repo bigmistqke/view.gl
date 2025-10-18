@@ -1,8 +1,8 @@
 import { attribute, compile, glsl, interleave, uniform } from 'view.gl/tag'
-import { createElement, cursor } from '../utils'
+import { cursor, dom } from '../utils'
 
 // Create canvas and WebGL context
-const canvas = createElement('canvas')
+const canvas = dom('canvas')
 canvas.width = window.innerWidth
 canvas.height = window.innerHeight
 const gl = canvas.getContext('webgl2', { antialias: true })!

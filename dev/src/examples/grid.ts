@@ -1,7 +1,7 @@
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
-import { createElement, cursor } from '../utils'
+import { cursor, dom } from '../utils'
 
-const canvas = createElement('canvas', { width: window.innerWidth, height: window.innerHeight })
+const canvas = dom('canvas', { width: window.innerWidth, height: window.innerHeight })
 const gl = canvas.getContext('webgl2', { antialias: false })!
 
 if (!gl) {
@@ -14,7 +14,7 @@ const state = {
   elements: [] as Array<ReturnType<typeof createGridElement>>,
 }
 
-const container = createElement('div')
+const container = dom('div')
 state.elements.push(createGridElement({ x: 100, y: 100 }))
 
 /**********************************************************************************/
@@ -29,28 +29,30 @@ function createGridElement(position = { x: 0, y: 0 }) {
     y: (position.y - state.position.y) / state.scale,
   }
 
-  const element = createElement('div', {
+  const div = dom('div', {
     innerText: 'HALLO WORLD',
-    style: `position: fixed; 
-z-index: 10; 
-left: 0px; 
-top: 0px; 
-transform-origin: top left; 
-background: white; 
-padding: 2px; 
-border-radius: 2px;`,
+    style: {
+      position: 'fixed',
+      zIndex: '10',
+      left: '0px',
+      top: '0px',
+      transformOrigin: 'top left',
+      background: 'white',
+      padding: '2px',
+      borderRadius: '2px',
+    },
     parentElement: container,
   })
 
   function update() {
-    element.style.transform = `translate3d(${state.position.x + position.x * state.scale}px,${
+    div.style.transform = `translate3d(${state.position.x + position.x * state.scale}px,${
       state.position.y + position.y * state.scale
     }px,0) scale(${state.scale})`
   }
   update()
 
   return {
-    element,
+    element: div,
     position,
     update,
   }

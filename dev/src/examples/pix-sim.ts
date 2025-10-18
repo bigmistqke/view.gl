@@ -1,7 +1,7 @@
 import { FramebufferDefinition } from 'src/types'
 import { createFramebuffer } from 'src/utils'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
-import { createElement } from '../utils'
+import { dom } from '../utils'
 
 export const MATERIALS = {
   SAND: {
@@ -24,36 +24,41 @@ let playing = false
 let currentMaterial: (typeof MATERIALS)[keyof typeof MATERIALS]['id'] = MATERIALS.SAND.id
 
 // Create UI container
-const container = createElement('div', {
-  style: 'display: flex; flex-direction: column; align-items: center; gap: 10px;',
+const container = dom('div', {
+  style: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '10px',
+  },
   parentElement: document.body,
 })
 
 // Create material buttons
-const buttonContainer = createElement('div', {
+const buttonContainer = dom('div', {
   style: 'display: flex; gap: 10px; margin-bottom: 10px;',
   parentElement: container,
 })
 
 Object.entries(MATERIALS).forEach(([name, material]) => {
-  createElement('button', {
-    textContent: name.toLowerCase(),
+  dom('button', {
     'data-name': name,
     'data-id': material.id.toString(),
-    style: `padding: 5px 10px;
-    font-size: 14px;
-    font-family: arial;
-    cursor: pointer;
-    color: black;
-    background: ${
-      currentMaterial === material.id
-        ? `rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`
-        : `rgba(${material.color.map(c => Math.floor(c * 255)).join(',')}, 0.75)`
-    };
-    border-color: ${name === 'SAND' ? 'black' : 'white'};
-    border: 2px solid rgb(${material.color.map(c => Math.floor(c * 255)).join(',')});
-    border-radius: 2px;
-  `,
+    textContent: name.toLowerCase(),
+    style: {
+      padding: '5px 10px',
+      fontSize: '14px',
+      fontFamily: 'arial',
+      cursor: 'pointer',
+      color: 'black',
+      background:
+        currentMaterial === material.id
+          ? `rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`
+          : `rgba(${material.color.map(c => Math.floor(c * 255)).join(',')}, 0.75)`,
+      borderColor: name === 'SAND' ? 'black' : 'white',
+      border: `2px solid rgb(${material.color.map(c => Math.floor(c * 255)).join(',')})`,
+      borderRadius: '2px',
+    },
     onclick() {
       currentMaterial = material.id
       // Update all button borders
@@ -79,7 +84,7 @@ function spray() {
   return Math.floor(Math.random() * 8) * (Math.random() < 0.5 ? 1 : -1)
 }
 
-const canvas = createElement('canvas', {
+const canvas = dom('canvas', {
   parentElement: container,
   onmousedown() {
     const rect = canvas.getBoundingClientRect()

@@ -8,13 +8,13 @@
  */
 
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
-import { createElement } from '../utils'
+import { dom } from '../utils'
 
-const canvas = createElement('canvas', {
+const canvas = dom('canvas', {
   width: window.innerWidth,
   height: window.innerHeight,
   parentElement: document.body,
-  style: 'width: 100%; height: 100%',
+  style: { width: '100%' },
 })
 
 const gl = canvas.getContext('webgl2')!

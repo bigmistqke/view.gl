@@ -43,25 +43,40 @@ export function cursor(event: PointerEvent, callback: (event: CursorEvent) => vo
   return promise
 }
 
-export function createElement<T extends keyof HTMLElementTagNameMap>(
+export function dom<T extends keyof HTMLElementTagNameMap>(
   tag: T,
   {
     parentElement,
     ...options
-  }: Partial<Omit<HTMLElementTagNameMap[T], 'style'> & { style: string }> &
+  }: Partial<Omit<HTMLElementTagNameMap[T], 'style'> & { style: Partial<CSSStyleDeclaration> }> &
     Record<`data-${string}`, string> = {},
 ) {
   const element = document.createElement(tag)
 
   for (const key in options) {
     if (key.startsWith('data-')) {
-      element.setAttribute(key, options[key])
-    } else {
+      element.setAttribute(
+        key,
+        // @ts-expect-error
+        options[key],
+      )
+    } else if (key == 'style') {
+      if (typeof options.style === 'string') {
+        element.style = options.style
+      } else {
+        options.style
+        for (const prop of options.style!) {
+          element.style[prop] = options.style![prop as any]
+        }
+      }
+    }
+    {
+      // @ts-expect-error
       element[key] = options[key]
     }
   }
 
-  ;(parentElement ?? document.body).appendChild(element)
+  parentElement?.appendChild(element)
 
   return element
 }

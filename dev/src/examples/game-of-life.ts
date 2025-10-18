@@ -1,10 +1,11 @@
 import { FramebufferDefinition } from 'src/types'
 import { createFramebuffer } from 'src/utils'
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
+import { dom } from '../utils'
 
 let playing = false
 
-const canvas = document.createElement('canvas')
+const canvas = dom('canvas')
 const gl = canvas.getContext('webgl', { antialias: false })!
 if (!gl) {
   throw new Error('WebGL not supported')
