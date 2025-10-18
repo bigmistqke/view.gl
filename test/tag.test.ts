@@ -1759,7 +1759,7 @@ describe('compile.toQuad', () => {
     
     // Should have quad attribute in schema
     expect(result.schema.attributes).toEqual({
-      a_quad: { kind: 'vec2' }
+      a_quad: { kind: 'vec2', buffer: expect.any(Object) }
     })
     
     // Should have fragment uniforms
@@ -1770,15 +1770,15 @@ describe('compile.toQuad', () => {
   })
 
   it('should generate vertex shader with correct uv output', () => {
-    const fragment = glsl`
+    const fragment = glsl`#version 300 es
       precision mediump float;
       ${uniform.vec3('u_color')}
       
-      in vec2 uv;
+      in vec2 v_uv;
       out vec4 fragColor;
       
       void main() {
-        fragColor = vec4(u_color * uv.x, 1.0);
+        fragColor = vec4(u_color * v_uv.x, 1.0);
       }
     `
 
@@ -1787,9 +1787,9 @@ describe('compile.toQuad', () => {
     // Check that vertex shader contains expected content
     expect(result.vertex).toContain('#version 300 es')
     expect(result.vertex).toContain('in vec2 a_quad;')
-    expect(result.vertex).toContain('out vec2 uv;')
-    expect(result.vertex).toContain('uv = a_quad;')
-    expect(result.vertex).toContain('gl_Position = vec4(uv, 0.0, 1.0);')
+    expect(result.vertex).toContain('out vec2 v_uv;')
+    expect(result.vertex).toContain('v_uv = a_quad;')
+    expect(result.vertex).toContain('gl_Position = vec4(v_uv, 0.0, 1.0);')
   })
 
   it('should handle fragment shader with multiple uniforms', () => {
@@ -1821,7 +1821,7 @@ describe('compile.toQuad', () => {
     })
 
     expect(result.schema.attributes).toEqual({
-      a_quad: { kind: 'vec2' }
+      a_quad: { kind: 'vec2', buffer: expect.any(Object) }
     })
   })
 
@@ -1987,7 +1987,7 @@ describe('compile.toQuad', () => {
 
     expect(result.schema.uniforms).toEqual({})
     expect(result.schema.attributes).toEqual({
-      a_quad: { kind: 'vec2' }
+      a_quad: { kind: 'vec2', buffer: expect.any(Object) }
     })
     expect(result.program).toBe(mockProgram)
   })
@@ -2013,6 +2013,167 @@ describe('compile.toQuad', () => {
 
     // The view should have the a_quad attribute available
     expect('a_quad' in result.view.attributes).toBe(true)
+  })
+
+  describe('WebGL version detection', () => {
+    it('should generate WebGL1 vertex shader for fragment without version directive', () => {
+      const fragment = glsl`
+        precision mediump float;
+        ${uniform.float('u_time')}
+        
+        varying vec2 v_uv;
+        
+        void main() {
+          gl_FragColor = vec4(v_uv, u_time, 1.0);
+        }
+      `
+
+      const result = compile.toQuad(gl, fragment)
+
+      // Should generate WebGL1 vertex shader
+      expect(result.vertex).not.toContain('#version 300 es')
+      expect(result.vertex).toContain('attribute vec2 a_quad;')
+      expect(result.vertex).toContain('varying vec2 v_uv;')
+      expect(result.vertex).not.toContain('in vec2 a_quad;')
+      expect(result.vertex).not.toContain('out vec2 v_uv;')
+    })
+
+    it('should generate WebGL2 vertex shader for fragment with #version 300 es', () => {
+      const fragment = glsl`#version 300 es
+        precision mediump float;
+        ${uniform.float('u_time')}
+        
+        in vec2 v_uv;
+        out vec4 fragColor;
+        
+        void main() {
+          fragColor = vec4(v_uv, u_time, 1.0);
+        }
+      `
+
+      const result = compile.toQuad(gl, fragment)
+
+      // Should generate WebGL2 vertex shader
+      expect(result.vertex).toContain('#version 300 es')
+      expect(result.vertex).toContain('in vec2 a_quad;')
+      expect(result.vertex).toContain('out vec2 v_uv;')
+      expect(result.vertex).not.toContain('attribute vec2 a_quad;')
+      expect(result.vertex).not.toContain('varying vec2 v_uv;')
+    })
+
+    it('should respect explicit webgl2 option over fragment version detection', () => {
+      const fragment = glsl`
+        precision mediump float;
+        ${uniform.float('u_time')}
+        
+        void main() {
+          gl_FragColor = vec4(u_time);
+        }
+      `
+
+      // Force WebGL2 despite no version directive in fragment
+      const result = compile.toQuad(gl, fragment, { webgl2: true })
+
+      // Should generate WebGL2 vertex shader
+      expect(result.vertex).toContain('#version 300 es')
+      expect(result.vertex).toContain('in vec2 a_quad;')
+      expect(result.vertex).toContain('out vec2 v_uv;')
+    })
+
+    it('should respect explicit webgl2: false option over fragment version detection', () => {
+      const fragment = glsl`#version 300 es
+        precision mediump float;
+        ${uniform.float('u_time')}
+        
+        in vec2 v_uv;
+        out vec4 fragColor;
+        
+        void main() {
+          fragColor = vec4(u_time);
+        }
+      `
+
+      // Force WebGL1 despite version directive in fragment
+      const result = compile.toQuad(gl, fragment, { webgl2: false })
+
+      // Should generate WebGL1 vertex shader
+      expect(result.vertex).not.toContain('#version 300 es')
+      expect(result.vertex).toContain('attribute vec2 a_quad;')
+      expect(result.vertex).toContain('varying vec2 v_uv;')
+    })
+
+    it('should handle fragment with mixed content and version detection', () => {
+      const commonUniforms = glsl`
+        ${uniform.float('u_time')}
+        ${uniform.vec2('u_resolution')}
+      `
+
+      const fragment = glsl`#version 300 es
+        precision mediump float;
+        
+        ${commonUniforms}
+        
+        in vec2 v_uv;
+        out vec4 fragColor;
+        
+        void main() {
+          vec2 uv = v_uv * u_resolution;
+          fragColor = vec4(sin(uv.x + u_time), cos(uv.y + u_time), 0.5, 1.0);
+        }
+      `
+
+      const result = compile.toQuad(gl, fragment)
+
+      // Should detect WebGL2 from version directive
+      expect(result.vertex).toContain('#version 300 es')
+      expect(result.vertex).toContain('in vec2 a_quad;')
+      expect(result.vertex).toContain('out vec2 v_uv;')
+
+      // Should preserve fragment uniforms
+      expect(result.schema.uniforms).toEqual({
+        u_time: { kind: 'float' },
+        u_resolution: { kind: 'vec2' }
+      })
+    })
+
+    it('should work with WebGL1 fragment containing complex shader logic', () => {
+      const lightingCode = glsl`
+        vec3 calculateLighting(vec3 normal, vec3 lightDir) {
+          return max(dot(normal, lightDir), 0.0) * vec3(1.0);
+        }
+      `
+
+      const fragment = glsl`
+        precision mediump float;
+        
+        ${uniform.vec3('u_lightPos')}
+        ${uniform.vec3('u_color')}
+        ${lightingCode}
+        
+        varying vec2 v_uv;
+        
+        void main() {
+          vec3 normal = normalize(vec3(v_uv, 1.0));
+          vec3 lightDir = normalize(u_lightPos);
+          vec3 lighting = calculateLighting(normal, lightDir);
+          gl_FragColor = vec4(u_color * lighting, 1.0);
+        }
+      `
+
+      const result = compile.toQuad(gl, fragment)
+
+      // Should generate WebGL1 vertex shader
+      expect(result.vertex).not.toContain('#version 300 es')
+      expect(result.vertex).toContain('attribute vec2 a_quad;')
+      expect(result.vertex).toContain('varying vec2 v_uv;')
+      
+      // Should preserve composed GLSL and uniforms
+      expect(result.fragment).toContain('calculateLighting')
+      expect(result.schema.uniforms).toEqual({
+        u_lightPos: { kind: 'vec3' },
+        u_color: { kind: 'vec3' }
+      })
+    })
   })
 })
 
