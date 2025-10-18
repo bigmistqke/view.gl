@@ -2,7 +2,7 @@ import { attribute, compile, glsl, interleave, uniform } from 'view.gl/tag'
 import { cursor, dom } from '../utils'
 
 // Create canvas and WebGL context
-const canvas = dom('canvas')
+const canvas = dom('canvas', { parentElement: document.body })
 canvas.width = window.innerWidth
 canvas.height = window.innerHeight
 const gl = canvas.getContext('webgl2', { antialias: true })!
@@ -357,6 +357,7 @@ updateLineData()
 /**********************************************************************************/
 
 function render() {
+  console.log('render!')
   // Update canvas size if window was resized
   if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
     canvas.width = window.innerWidth

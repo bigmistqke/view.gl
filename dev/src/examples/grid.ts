@@ -1,7 +1,11 @@
 import { attribute, compile, glsl, uniform } from 'view.gl/tag'
 import { cursor, dom } from '../utils'
 
-const canvas = dom('canvas', { width: window.innerWidth, height: window.innerHeight })
+const canvas = dom('canvas', {
+  width: window.innerWidth,
+  height: window.innerHeight,
+  parentElement: document.body,
+})
 const gl = canvas.getContext('webgl2', { antialias: false })!
 
 if (!gl) {
@@ -14,7 +18,7 @@ const state = {
   elements: [] as Array<ReturnType<typeof createGridElement>>,
 }
 
-const container = dom('div')
+const container = dom('div', { parentElement: document.body })
 state.elements.push(createGridElement({ x: 100, y: 100 }))
 
 /**********************************************************************************/
