@@ -1715,6 +1715,307 @@ describe('compile', () => {
   })
 })
 
+describe('compile.toQuad', () => {
+  let gl: GL
+  let mockProgram: WebGLProgram
+
+  beforeEach(() => {
+    gl = createMockGL()
+    mockProgram = gl.createProgram()!
+
+    // Mock shader creation and compilation
+    gl.createShader = vi.fn(type => ({ type } as WebGLShader))
+    gl.shaderSource = vi.fn()
+    gl.compileShader = vi.fn()
+    gl.getShaderParameter = vi.fn(() => true)
+    gl.attachShader = vi.fn()
+    gl.linkProgram = vi.fn()
+    gl.getProgramParameter = vi.fn(() => true)
+    gl.createProgram = vi.fn(() => mockProgram)
+    gl.createBuffer = vi.fn(() => ({} as WebGLBuffer))
+    gl.bindBuffer = vi.fn()
+    gl.bufferData = vi.fn()
+  })
+
+  it('should create a quad with fragment shader only', () => {
+    const fragment = glsl`
+      precision mediump float;
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+      
+      in vec2 uv;
+      out vec4 fragColor;
+      
+      void main() {
+        vec2 pos = uv * u_resolution;
+        float pattern = sin(pos.x * 0.01 + u_time) * sin(pos.y * 0.01 + u_time);
+        fragColor = vec4(vec3(pattern), 1.0);
+      }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    expect(result.program).toBe(mockProgram)
+    
+    // Should have quad attribute in schema
+    expect(result.schema.attributes).toEqual({
+      a_quad: { kind: 'vec2' }
+    })
+    
+    // Should have fragment uniforms
+    expect(result.schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' }
+    })
+  })
+
+  it('should generate vertex shader with correct uv output', () => {
+    const fragment = glsl`
+      precision mediump float;
+      ${uniform.vec3('u_color')}
+      
+      in vec2 uv;
+      out vec4 fragColor;
+      
+      void main() {
+        fragColor = vec4(u_color * uv.x, 1.0);
+      }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    // Check that vertex shader contains expected content
+    expect(result.vertex).toContain('#version 300 es')
+    expect(result.vertex).toContain('in vec2 a_quad;')
+    expect(result.vertex).toContain('out vec2 uv;')
+    expect(result.vertex).toContain('uv = a_quad;')
+    expect(result.vertex).toContain('gl_Position = vec4(uv, 0.0, 1.0);')
+  })
+
+  it('should handle fragment shader with multiple uniforms', () => {
+    const fragment = glsl`#version 300 es
+      precision mediump float;
+      
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+      ${uniform.vec3('u_color')}
+      ${uniform.sampler2D('u_texture')}
+      
+      in vec2 uv;
+      out vec4 fragColor;
+      
+      void main() {
+        vec2 pos = uv * u_resolution + u_time;
+        vec4 tex = texture(u_texture, pos);
+        fragColor = vec4(u_color * tex.rgb, 1.0);
+      }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    expect(result.schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_color: { kind: 'vec3' },
+      u_texture: { kind: 'sampler2D' }
+    })
+
+    expect(result.schema.attributes).toEqual({
+      a_quad: { kind: 'vec2' }
+    })
+  })
+
+  it('should automatically set up quad buffer data', () => {
+    const fragment = glsl`
+      precision mediump float;
+      void main() { gl_FragColor = vec4(1.0); }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    // Check that buffer was created and data was set
+    expect(gl.createBuffer).toHaveBeenCalled()
+    expect(gl.bindBuffer).toHaveBeenCalled()
+    expect(gl.bufferData).toHaveBeenCalled()
+
+    // Verify the quad data contains correct triangle vertices
+    const bufferDataCall = (gl.bufferData as any).mock.calls[0]
+    const quadData = bufferDataCall[1] as Float32Array
+    
+    // Should contain 6 vertices for 2 triangles forming a quad
+    expect(quadData.length).toBe(12) // 6 vertices * 2 components
+    expect(Array.from(quadData)).toEqual([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+  })
+
+  it('should work with ray-marching fragment shader', () => {
+    const fragment = glsl`#version 300 es
+      precision mediump float;
+      
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+      ${uniform.vec3('u_cameraPos')}
+      
+      in vec2 uv;
+      out vec4 fragColor;
+      
+      float sdSphere(vec3 pos, float radius) {
+        return length(pos) - radius;
+      }
+      
+      void main() {
+        vec2 screenPos = uv * u_resolution;
+        vec3 rayDir = normalize(vec3(screenPos, -1.0));
+        
+        float dist = sdSphere(u_cameraPos, 1.0);
+        vec3 color = vec3(smoothstep(0.0, 0.1, dist));
+        
+        fragColor = vec4(color, 1.0);
+      }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    expect(result.schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' },
+      u_cameraPos: { kind: 'vec3' }
+    })
+
+    // Should compile without errors
+    expect(result.program).toBe(mockProgram)
+    expect(result.vertex).toContain('in vec2 a_quad;')
+    expect(result.fragment).toContain('float sdSphere')
+  })
+
+  it('should support options parameter', () => {
+    const fragment = glsl`
+      precision mediump float;
+      ${uniform.float('u_time')}
+      void main() { gl_FragColor = vec4(1.0); }
+    `
+
+    const options = {
+      schema: {
+        uniforms: {
+          u_customUniform: { kind: 'vec3' as const }
+        }
+      }
+    }
+
+    const result = compile.toQuad(gl, fragment, options)
+
+    // Should merge the custom schema
+    expect(result.schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_customUniform: { kind: 'vec3' }
+    })
+  })
+
+  it('should handle fragment shader with symbol uniforms', () => {
+    const u_time_symbol = Symbol('u_time')
+    const u_color_symbol = Symbol('u_color')
+
+    const fragment = glsl`
+      precision mediump float;
+      
+      ${uniform.float(u_time_symbol)}
+      ${uniform.vec3(u_color_symbol)}
+      
+      in vec2 uv;
+      out vec4 fragColor;
+      
+      void main() {
+        float wave = sin(${u_time_symbol} + uv.x * 10.0);
+        fragColor = vec4(${u_color_symbol} * wave, 1.0);
+      }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    expect(result.schema.uniforms).toEqual({
+      [u_time_symbol]: { kind: 'float' },
+      [u_color_symbol]: { kind: 'vec3' }
+    })
+  })
+
+  it('should handle fragment shader with composed GLSL', () => {
+    const commonUniforms = glsl`
+      ${uniform.float('u_time')}
+      ${uniform.vec2('u_resolution')}
+    `
+
+    const noiseCode = glsl`
+      float random(vec2 st) {
+        return fract(sin(dot(st.xy, vec2(12.9898, 78.233))) * 43758.5453123);
+      }
+    `
+
+    const fragment = glsl`
+      precision mediump float;
+      
+      ${commonUniforms}
+      ${noiseCode}
+      
+      in vec2 uv;
+      out vec4 fragColor;
+      
+      void main() {
+        float noise = random(uv * u_resolution + u_time);
+        fragColor = vec4(vec3(noise), 1.0);
+      }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    expect(result.schema.uniforms).toEqual({
+      u_time: { kind: 'float' },
+      u_resolution: { kind: 'vec2' }
+    })
+
+    expect(result.fragment).toContain('float random(vec2 st)')
+  })
+
+  it('should work with empty fragment shader', () => {
+    const fragment = glsl`
+      precision mediump float;
+      void main() {
+        gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
+      }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    expect(result.schema.uniforms).toEqual({})
+    expect(result.schema.attributes).toEqual({
+      a_quad: { kind: 'vec2' }
+    })
+    expect(result.program).toBe(mockProgram)
+  })
+
+  it('should reuse buffers across multiple calls', () => {
+    const fragment1 = glsl`void main() { gl_FragColor = vec4(1.0); }`
+    const fragment2 = glsl`void main() { gl_FragColor = vec4(0.5); }`
+
+    compile.toQuad(gl, fragment1)
+    compile.toQuad(gl, fragment2)
+
+    // Buffer should only be created once (reused)
+    expect(gl.createBuffer).toHaveBeenCalledTimes(1)
+  })
+
+  it('should expose quad attribute in view for binding', () => {
+    const fragment = glsl`
+      precision mediump float;
+      void main() { gl_FragColor = vec4(1.0); }
+    `
+
+    const result = compile.toQuad(gl, fragment)
+
+    // The view should have the a_quad attribute available
+    expect('a_quad' in result.view.attributes).toBe(true)
+  })
+})
+
 describe('compile.toString', () => {
   it('should convert glsl tag to shader string', () => {
     const shader = glsl`
