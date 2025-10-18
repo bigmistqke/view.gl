@@ -6,6 +6,7 @@ import type {
   AttributeTokenFn as AttributeTagMethod,
   AttributeToken,
   CompileResult,
+  GL,
   GLSL,
   GLSLSlot,
   GLSLToSchema,
@@ -16,7 +17,7 @@ import type {
   ViewSchema,
   ViewSchemaPartial,
 } from './types'
-import { createProgram } from './utils'
+import { createProgram, createUpsertMap } from './utils'
 
 export function glsl<TSlot extends GLSLSlot, TSlots extends TSlot[]>(
   template: TemplateStringsArray,
@@ -94,15 +95,20 @@ export function interleave<
 /*                                                                                */
 /**********************************************************************************/
 
+export interface CompileOptions<TSchema extends ViewSchemaPartial> {
+  schema?: TSchema
+  webgl2: boolean
+}
+
 export function compile<
   TVertex extends GLSL,
   TFragment extends GLSL,
-  TOverride extends ViewSchemaPartial,
+  TSchema extends ViewSchemaPartial,
 >(
   gl: WebGLRenderingContext,
   vertex: TVertex,
   fragment: TFragment,
-  options?: { schema?: TOverride; webgl2: boolean },
+  options?: CompileOptions<TSchema> | undefined,
 ) {
   const _vertex = resolveGLSLTag(vertex, options) as { template: string; schema: ViewSchema }
   const _fragment = resolveGLSLTag(fragment, options) as { template: string; schema: ViewSchema }
@@ -122,6 +128,7 @@ export function compile<
     },
   }
 
+  // Deep merge options.schema with generated schema
   for (const kind in options?.schema) {
     const schemaKind = schema[kind as keyof typeof schema]
     const configSchemaKind = options?.schema[kind]
@@ -142,7 +149,7 @@ export function compile<
     view: view(gl, program, schema),
     vertex: _vertex.template,
     fragment: _fragment.template,
-  } as unknown as Prettify<CompileResult<TVertex, TFragment, TOverride>>
+  } as unknown as Prettify<CompileResult<TVertex, TFragment, TSchema>>
 }
 
 function resolveGLSLTag<TTag extends GLSL>(tag: TTag, options?: { webgl2?: boolean }) {
@@ -159,13 +166,13 @@ compile.toSchema = function <TTag extends GLSL>(tag: TTag) {
     interleavedAttributes: {},
   }
 
-  function handleSlot(slot: GLSLSlot) {
-    if (Array.isArray(slot)) {
-      slot.forEach(handleSlot)
+  tag.slots.forEach(function handleSlot(slot: GLSLSlot) {
+    if (typeof slot !== 'object') {
       return
     }
 
-    if (typeof slot !== 'object') {
+    if (Array.isArray(slot)) {
+      slot.forEach(handleSlot)
       return
     }
 
@@ -192,9 +199,7 @@ compile.toSchema = function <TTag extends GLSL>(tag: TTag) {
 
     // @ts-expect-error
     result[`${type}s`][name] = rest
-  }
-
-  tag.slots.forEach(handleSlot)
+  })
 
   return result as unknown as Prettify<GLSLToSchema<TTag>>
 }
@@ -223,21 +228,55 @@ function resolveGlslSlotToString(slot: GLSLSlot, v300: boolean): string {
     return slot.map(slot => resolveGlslSlotToString(slot, v300)).join('')
   }
 
-  if (slot.type === 'glsl') {
-    return compile.toString(slot)
+  switch (slot.type) {
+    case 'glsl':
+      return compile.toString(slot)
+    case 'interleavedAttribute':
+      return slot.layout.reduce(
+        (a, v) =>
+          v300 ? `${a}in ${v.kind} ${toID(v.key)};\n` : `${a}attribute ${v.kind} ${toID(v.key)};\n`,
+        '',
+      )
+    case 'uniform':
+      if ('size' in slot) {
+        return `${slot.type} ${slot.kind} ${toID(slot.key)}[${slot.size}];`
+      }
+      return `${slot.type} ${slot.kind} ${toID(slot.key)};`
   }
 
-  if (slot.type === 'interleavedAttribute') {
-    return slot.layout.reduce(
-      (a, v) =>
-        v300 ? `${a}in ${v.kind} ${toID(v.key)};\n` : `${a}attribute ${v.kind} ${toID(v.key)};\n`,
-      '',
-    )
+  if (slot.type === 'attribute') {
+    return `${v300 ? 'in' : slot.type} ${slot.kind} ${toID(slot.key)};`
   }
 
-  if (slot.type === 'uniform' && 'size' in slot) {
-    return `${slot.type} ${slot.kind} ${toID(slot.key)}[${slot.size}];`
-  }
+  throw new Error(`Unexpected slot: ${JSON.stringify(slot)}`)
+}
 
-  return `${slot.type === 'attribute' && v300 ? 'in' : slot.type} ${slot.kind} ${toID(slot.key)};`
+const QUAD_FLOAT_ARRAY = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
+const QUAD_BUFFER_MAP = createUpsertMap(WeakMap<GL, WebGLBuffer>)
+
+compile.toQuad = function <TFragment extends GLSL, TSchema extends ViewSchemaPartial>(
+  gl: GL,
+  fragment: TFragment,
+  options?: CompileOptions<TSchema>,
+) {
+  const buffer = QUAD_BUFFER_MAP.getOrInsert(gl, gl.createBuffer.bind(gl))
+
+  const vertex = glsl`#version 300 es
+precision mediump float;
+
+${attribute.vec2('a_quad', { buffer })}
+
+out vec2 uv;
+
+void main() {
+  uv = a_quad;
+  gl_Position = vec4(uv, 0.0,  1.0);
+}`
+
+  const result = compile(gl, vertex, fragment, options)
+
+  // @ts-expect-error
+  result.view.attributes.a_quad.set(QUAD_FLOAT_ARRAY)
+
+  return result
 }

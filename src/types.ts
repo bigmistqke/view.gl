@@ -416,7 +416,7 @@ export interface AttributeMethods<T = AttributeKind> {
 }
 
 export type AttributeView<T extends AttributeSchema> = {
-  [K in keyof T]: AttributeMethods<T[K]['kind']>
+  [K in keyof T]: Prettify<AttributeMethods<T[K]['kind']>>
 }
 
 /**********************************************************************************/
@@ -703,7 +703,7 @@ export interface AttributeToken<
 > {
   type: 'attribute'
   kind: TKind
-  instanced: TInstanced
+  instanced: TInstanced extends boolean ? boolean : false
   key: TKey
 }
 
@@ -768,26 +768,40 @@ type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer
 export type MergeGLSLSchema<
   TVertex extends ViewSchema,
   TFragment extends ViewSchema,
-  TOverrides extends ViewSchemaPartial = {},
-> = {
-  uniforms: DeepMerge<
-    [ShallowMerge<[TVertex['uniforms'], TFragment['uniforms']]>, TOverrides['uniforms']]
-  >
-  attributes: DeepMerge<
-    [ShallowMerge<[TVertex['attributes'], TFragment['attributes']]>, TOverrides['attributes']]
-  >
-  interleavedAttributes: DeepMerge<
-    [
-      ShallowMerge<[TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]>,
-      TOverrides['interleavedAttributes'],
-    ]
-  >
-}
+  TOverrides extends ViewSchemaPartial | undefined = {},
+> = TOverrides extends ViewSchemaPartial
+  ? {
+      uniforms: Prettify<
+        DeepMerge<
+          [ShallowMerge<[TVertex['uniforms'], TFragment['uniforms']]>, TOverrides['uniforms']]
+        >
+      >
+      attributes: Prettify<
+        DeepMerge<
+          [ShallowMerge<[TVertex['attributes'], TFragment['attributes']]>, TOverrides['attributes']]
+        >
+      >
+      interleavedAttributes: Prettify<
+        DeepMerge<
+          [
+            ShallowMerge<[TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]>,
+            TOverrides['interleavedAttributes'],
+          ]
+        >
+      >
+    }
+  : {
+      uniforms: Prettify<ShallowMerge<[TVertex['uniforms'], TFragment['uniforms']]>>
+      attributes: Prettify<ShallowMerge<[TVertex['attributes'], TFragment['attributes']]>>
+      interleavedAttributes: Prettify<
+        ShallowMerge<[TVertex['interleavedAttributes'], TFragment['interleavedAttributes']]>
+      >
+    }
 
 export type CompileResult<
   TVertex extends GLSL,
   TFragment extends GLSL,
-  TOverrideSchema extends ViewSchemaPartial,
+  TOverrideSchema extends ViewSchemaPartial | undefined,
 > =
   MergeGLSLSchema<
     GLSLToSchema<TVertex>,
