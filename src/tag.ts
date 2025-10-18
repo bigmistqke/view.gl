@@ -98,9 +98,14 @@ export function compile<
   TVertex extends GLSL,
   TFragment extends GLSL,
   TOverride extends ViewSchemaPartial,
->(gl: WebGLRenderingContext, vertex: TVertex, fragment: TFragment, overrideSchema?: TOverride) {
-  const _vertex = resolveGLSLTag(vertex) as { template: string; schema: ViewSchema }
-  const _fragment = resolveGLSLTag(fragment) as { template: string; schema: ViewSchema }
+>(
+  gl: WebGLRenderingContext,
+  vertex: TVertex,
+  fragment: TFragment,
+  options?: { schema?: TOverride; webgl2: boolean },
+) {
+  const _vertex = resolveGLSLTag(vertex, options) as { template: string; schema: ViewSchema }
+  const _fragment = resolveGLSLTag(fragment, options) as { template: string; schema: ViewSchema }
 
   const schema = {
     uniforms: {
@@ -117,14 +122,14 @@ export function compile<
     },
   }
 
-  for (const kind in overrideSchema) {
+  for (const kind in options?.schema) {
     const schemaKind = schema[kind as keyof typeof schema]
-    const overrideSchemaKind = overrideSchema[kind]
+    const configSchemaKind = options?.schema[kind]
 
-    for (const key in overrideSchemaKind) {
+    for (const key in configSchemaKind) {
       schemaKind[key] = {
         ...schemaKind[key],
-        ...overrideSchemaKind[key],
+        ...configSchemaKind[key],
       }
     }
   }
@@ -140,9 +145,9 @@ export function compile<
   } as unknown as Prettify<CompileResult<TVertex, TFragment, TOverride>>
 }
 
-function resolveGLSLTag<TTag extends GLSL>(tag: TTag) {
+function resolveGLSLTag<TTag extends GLSL>(tag: TTag, options?: { webgl2?: boolean }) {
   return {
-    template: compile.toString(tag),
+    template: compile.toString(tag, options),
     schema: compile.toSchema(tag),
   }
 }
@@ -194,25 +199,28 @@ compile.toSchema = function <TTag extends GLSL>(tag: TTag) {
   return result as unknown as Prettify<GLSLToSchema<TTag>>
 }
 
-compile.toString = function <TTag extends GLSL>({ template: [initial, ...rest], slots }: TTag) {
-  const v300 = !!initial?.startsWith('#version 300 es')
+compile.toString = function <TTag extends GLSL>(
+  { template: [initial, ...rest], slots }: TTag,
+  config?: { webgl2?: boolean },
+) {
+  const v300 = config?.webgl2 ?? !!initial?.startsWith('#version 300 es')
 
   let template = initial ?? ''
 
   for (let i = 0; i < rest.length; i++) {
-    template += `${glslSlotToString(slots[i]!, v300)}${rest[i]}`
+    template += `${resolveGlslSlotToString(slots[i]!, v300)}${rest[i]}`
   }
 
   return template
 }
 
-function glslSlotToString(slot: GLSLSlot, v300: boolean): string {
+function resolveGlslSlotToString(slot: GLSLSlot, v300: boolean): string {
   if (typeof slot !== 'object') {
     return toID(slot)
   }
 
   if (Array.isArray(slot)) {
-    return slot.map(slot => glslSlotToString(slot, v300)).join('')
+    return slot.map(slot => resolveGlslSlotToString(slot, v300)).join('')
   }
 
   if (slot.type === 'glsl') {
