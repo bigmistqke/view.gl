@@ -1,4 +1,4 @@
-import { attribute, compile, glsl, uniform } from '@bigmistqke/view.gl/tag'
+import { compile, glsl, uniform } from '../../../src/tag.ts'
 import { dom } from '../utils.ts'
 
 // Sphere data: [x, y, z, radius]
@@ -25,29 +25,35 @@ const sphereColors = [
   [0.7, 0.3, 1.0], // Purple
 ] as const
 
+// Box data: [x, y, z, size] (size is half-extents for all dimensions)
+const boxData = [
+  [2, 0, -1, 0.8], // Right box
+  [-2, 0, 1, 0.6], // Left box
+  [0, -2, -2, 0.7], // Bottom box
+] as const
+
+// Box colors (RGB)
+const boxColors = [
+  [0.8, 0.8, 0.2], // Yellow-green
+  [0.2, 0.8, 0.8], // Cyan
+  [0.8, 0.2, 0.8], // Magenta
+] as const
+
+let SHAPE_COUNTER = 0
+
 const controller = new AbortController()
 const canvas = dom('canvas', { parentElement: document.body })
 
 const gl = canvas.getContext('webgl2')!
 
-const vertex = glsl`#version 300 es
-precision mediump float;
-
-${attribute.vec2('a_vertex')}
-
-out vec2 uv;
-
-void main() {
-  uv = a_vertex;
-  gl_Position = vec4(uv, 0.0,  1.0);
-}`
-
 const NUM_SPHERES = 8
+const NUM_BOXES = 3
 
-const fragment = glsl`#version 300 es
-precision mediump float;
+const SHAPE_SPHERE = Symbol('SHAPE_SPHERE')
 
+const sphereModule = glsl`
 #define NUM_SPHERES ${NUM_SPHERES}
+#define ${SHAPE_SPHERE} ${SHAPE_COUNTER++}
 
 struct Sphere {
 	vec3 position;
@@ -56,13 +62,7 @@ struct Sphere {
 };
 
 ${uniform.vec4('sphereData', { size: NUM_SPHERES })}
-${uniform.vec3('colors', { size: NUM_SPHERES })}
-${uniform.float('aspectRatio')}
-
-in vec2 uv;
-out vec4 fragColor;
-
-vec3 lightPos = vec3(5.0, 5.0, 5.0);
+${uniform.vec3('sphereColors', { size: NUM_SPHERES })}
 
 float sphereIntersection(in vec3 rayOrigin, in vec3 rayDirection, in Sphere sphere)
 {
@@ -100,23 +100,157 @@ vec3 sphereNormal(in vec3 hitPosition, in Sphere sphere)
 	return (hitPosition - sphere.position) / sphere.radius;
 }
 
-bool intersectSpheres(in vec3 rayOrigin, in vec3 rayDirection, out float hitDistance, out Sphere hitSphere)
+// Find closest sphere intersection, returns distance and sets hitIndex and hitType
+float findClosestSphere(in vec3 rayOrigin, in vec3 rayDirection, in float maxDistance, out int hitIndex, out int hitType)
 {
-	hitDistance = 1000.0;
-	bool foundHit = false;
+	float closestDistance = maxDistance;
+	hitIndex = -1;
+	hitType = -1;
 	
 	for(int i = 0; i < NUM_SPHERES; i++) {
-		Sphere sphere = Sphere(sphereData[i].xyz, sphereData[i].w, colors[i]);
+		Sphere sphere = Sphere(sphereData[i].xyz, sphereData[i].w, sphereColors[i]);
 		float distance = sphereIntersection(rayOrigin, rayDirection, sphere);
 		
-		if(distance > 0.0 && distance < hitDistance) {
-			foundHit = true;
-			hitDistance = distance;
-			hitSphere = sphere;
+		if(distance > 0.0 && distance < closestDistance) {
+			closestDistance = distance;
+			hitIndex = i;
+			hitType = ${SHAPE_SPHERE};
 		}
 	}
 	
-	return foundHit;
+	return hitIndex >= 0 ? closestDistance : -1.0;
+}
+
+// Calculate sphere normal and color at hit point
+void calculateSphereHit(in vec3 hitPosition, in int hitIndex, out vec3 normal, out vec3 color)
+{
+	Sphere hitSphere = Sphere(sphereData[hitIndex].xyz, sphereData[hitIndex].w, sphereColors[hitIndex]);
+	normal = sphereNormal(hitPosition, hitSphere);
+	color = sphereColors[hitIndex];
+}`
+
+const SHAPE_BOX = Symbol('SHAPE_BOX')
+
+const boxModule = glsl`
+#define ${SHAPE_BOX} ${SHAPE_COUNTER++}
+#define NUM_BOXES ${NUM_BOXES}
+
+struct Box {
+	vec3 position;
+	float size;
+	vec3 color;
+};
+
+${uniform.vec4('boxData', { size: NUM_BOXES })}
+${uniform.vec3('boxColors', { size: NUM_BOXES })}
+
+float boxIntersection(in vec3 rayOrigin, in vec3 rayDirection, in Box box)
+{
+	// Ray-box intersection using slab method
+	// A box is defined by 6 planes, we find where the ray enters and exits each pair of parallel planes
+	
+	vec3 boxMin = box.position - vec3(box.size);
+	vec3 boxMax = box.position + vec3(box.size);
+	
+	// Calculate intersection distances for each axis
+	vec3 invDir = 1.0 / rayDirection;
+	vec3 t1 = (boxMin - rayOrigin) * invDir;
+	vec3 t2 = (boxMax - rayOrigin) * invDir;
+	
+	// Find the min and max for each axis (handles negative direction)
+	vec3 tMin = min(t1, t2);
+	vec3 tMax = max(t1, t2);
+	
+	// The ray enters the box at the maximum of all tMin values
+	float tNear = max(max(tMin.x, tMin.y), tMin.z);
+	
+	// The ray exits the box at the minimum of all tMax values  
+	float tFar = min(min(tMax.x, tMax.y), tMax.z);
+	
+	// If tNear > tFar, ray misses the box
+	// If tFar < 0, box is behind the ray
+	if(tNear > tFar || tFar < 0.0) {
+		return -1.0;
+	}
+	
+	// Return the nearest intersection (tNear, unless we're inside the box)
+	return tNear > 0.0 ? tNear : tFar;
+}
+
+// Calculate normal vector at hit point on box surface
+vec3 boxNormal(in vec3 hitPosition, in Box box)
+{
+	// Find which face of the box we hit by checking which coordinate is closest to the box boundary
+	vec3 localPos = hitPosition - box.position;
+	vec3 absLocal = abs(localPos);
+	
+	// Return normal for the face that's closest to the box size
+	if(absLocal.x > absLocal.y && absLocal.x > absLocal.z) {
+		return vec3(sign(localPos.x), 0.0, 0.0);
+	} else if(absLocal.y > absLocal.z) {
+		return vec3(0.0, sign(localPos.y), 0.0);
+	} else {
+		return vec3(0.0, 0.0, sign(localPos.z));
+	}
+}
+
+// Find closest box intersection, returns distance and sets hitIndex and hitType
+float findClosestBox(in vec3 rayOrigin, in vec3 rayDirection, in float maxDistance, out int hitIndex, out int hitType)
+{
+	float closestDistance = maxDistance;
+	hitIndex = -1;
+	hitType = -1;
+	
+	for(int i = 0; i < NUM_BOXES; i++) {
+		Box box = Box(boxData[i].xyz, boxData[i].w, boxColors[i]);
+		float distance = boxIntersection(rayOrigin, rayDirection, box);
+		
+		if(distance > 0.0 && distance < closestDistance) {
+			closestDistance = distance;
+			hitIndex = i;
+			hitType = ${SHAPE_BOX};
+		}
+	}
+	
+	return hitIndex >= 0 ? closestDistance : -1.0;
+}
+
+// Calculate box normal and color at hit point
+void calculateBoxHit(in vec3 hitPosition, in int hitIndex, out vec3 normal, out vec3 color)
+{
+	Box hitBox = Box(boxData[hitIndex].xyz, boxData[hitIndex].w, boxColors[hitIndex]);
+	normal = boxNormal(hitPosition, hitBox);
+	color = boxColors[hitIndex];
+}
+
+`
+
+const fragment = glsl`#version 300 es
+precision mediump float;
+
+struct HitInfo {
+	bool hit;
+	float distance;
+	vec3 position;
+	vec3 normal;
+	vec3 color;
+};
+
+${sphereModule}
+${boxModule}
+
+${uniform.float('aspectRatio')}
+
+in vec2 uv;
+out vec4 fragColor;
+
+vec3 lightPos = vec3(5.0, 5.0, 5.0);
+
+vec3 calculateLighting(in vec3 position, in vec3 normal, in vec3 color)
+{
+	vec3 lightDirection = normalize(lightPos - position);
+	float diffuse = max(0.0, dot(normal, lightDirection));
+	return color * (diffuse * 0.8 + 0.2); // 80% diffuse + 20% ambient
 }
 
 void main()
@@ -125,25 +259,48 @@ void main()
 	vec3 rayOrigin = vec3(0.0, 0.0, 4.0);
 	vec3 rayDirection = normalize(vec3(uv.x * aspectRatio, uv.y, -1.0));
 	
-	// Find closest sphere intersection
-	float hitDistance;
-	Sphere hitSphere;
-	
-	vec3 color = vec3(0.1, 0.1, 0.2); // Background color
-	
-	if(intersectSpheres(rayOrigin, rayDirection, hitDistance, hitSphere))
-	{
-		// Calculate hit position and normal
-		vec3 hitPosition = rayOrigin + hitDistance * rayDirection;
-		vec3 normal = sphereNormal(hitPosition, hitSphere);
-		
-		// Simple lighting
-		vec3 lightDirection = normalize(lightPos - hitPosition);
-		float diffuse = max(0.0, dot(normal, lightDirection));
-		
-		// Apply sphere color with lighting
-		color = hitSphere.color * (diffuse * 0.8 + 0.2); // 80% diffuse + 20% ambient
-	}
+// Find closest intersection across all shapes
+float closestDistance = 1000.0;
+int hitType = -1;
+int hitIndex = -1;
+
+// Check spheres
+int sphereIndex, sphereType;
+float sphereDistance = findClosestSphere(rayOrigin, rayDirection, closestDistance, sphereIndex, sphereType);
+if(sphereDistance > 0.0) {
+  closestDistance = sphereDistance;
+  hitType = sphereType;
+  hitIndex = sphereIndex;
+}
+
+// Check boxes
+int boxIndex, boxType;
+float boxDistance = findClosestBox(rayOrigin, rayDirection, closestDistance, boxIndex, boxType);
+if(boxDistance > 0.0) {
+  closestDistance = boxDistance;
+  hitType = boxType;
+  hitIndex = boxIndex;
+}
+
+vec3 color = vec3(0.1, 0.1, 0.2); // Background color
+
+// Calculate normal and lighting only for the closest hit
+if(hitType >= 0) {
+  vec3 hitPosition = rayOrigin + closestDistance * rayDirection;
+  vec3 normal;
+  vec3 hitColor;
+  
+  switch(hitType) {
+    case ${SHAPE_SPHERE}:
+      calculateSphereHit(hitPosition, hitIndex, normal, hitColor);
+      color = calculateLighting(hitPosition, normal, hitColor);
+      break;
+    case ${SHAPE_BOX}:
+      calculateBoxHit(hitPosition, hitIndex, normal, hitColor);
+      color = calculateLighting(hitPosition, normal, hitColor);
+      break;
+  }
+}
 	
 	// Gamma correction
 	color = pow(color, vec3(1.0 / 2.2));
@@ -151,12 +308,12 @@ void main()
 	fragColor = vec4(color, 1.0);
 }`
 
-const { program, view } = compile(gl, vertex, fragment)
+const { program, view } = compile.toQuad(gl, fragment)
 
 gl.useProgram(program)
 
-// Create triangle vertex buffer
-view.attributes.a_vertex.set(new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])).bind()
+// Bind quad buffer
+view.attributes.a_quad.bind()
 
 // Create typed arrays for sphere data and colors
 const spheresArray = new Float32Array(
@@ -169,7 +326,7 @@ const spheresArray = new Float32Array(
     }
   })(),
 )
-const colorsArray = new Float32Array(
+const sphereColorsArray = new Float32Array(
   (function* () {
     for (const color of sphereColors) {
       yield color[0]
@@ -179,9 +336,32 @@ const colorsArray = new Float32Array(
   })(),
 )
 
+// Create typed arrays for box data and colors
+const boxesArray = new Float32Array(
+  (function* () {
+    for (const box of boxData) {
+      yield box[0]
+      yield box[1]
+      yield box[2]
+      yield box[3]
+    }
+  })(),
+)
+const boxColorsArray = new Float32Array(
+  (function* () {
+    for (const color of boxColors) {
+      yield color[0]
+      yield color[1]
+      yield color[2]
+    }
+  })(),
+)
+
 // Set the uniform arrays
 view.uniforms.sphereData.set(spheresArray)
-view.uniforms.colors.set(colorsArray)
+view.uniforms.sphereColors.set(sphereColorsArray)
+view.uniforms.boxData.set(boxesArray)
+view.uniforms.boxColors.set(boxColorsArray)
 
 // Set initial aspect ratio
 view.uniforms.aspectRatio.set(canvas.width / canvas.height)
@@ -228,16 +408,26 @@ function animate(timestamp: number) {
   spheresArray[29] = -1 + Math.sin(time * 0.5) * 0.5 // y
 
   // Animate colors for more spheres
-  colorsArray[0] = 0.5 + 0.5 * Math.sin(time * 3) // Red channel of sphere 0
-  colorsArray[4] = 0.5 + 0.5 * Math.cos(time * 2) // Green channel of sphere 1
-  colorsArray[9] = 0.5 + 0.5 * Math.sin(time * 2.5) // Blue channel of sphere 3
-  colorsArray[15] = 0.3 + 0.7 * Math.abs(Math.sin(time * 1.8)) // All channels sphere 5 (pulsing cyan)
-  colorsArray[16] = 0.3 + 0.7 * Math.abs(Math.sin(time * 1.8))
-  colorsArray[17] = 0.3 + 0.7 * Math.abs(Math.sin(time * 1.8))
+  sphereColorsArray[0] = 0.5 + 0.5 * Math.sin(time * 3) // Red channel of sphere 0
+  sphereColorsArray[4] = 0.5 + 0.5 * Math.cos(time * 2) // Green channel of sphere 1
+  sphereColorsArray[9] = 0.5 + 0.5 * Math.sin(time * 2.5) // Blue channel of sphere 3
+  sphereColorsArray[15] = 0.3 + 0.7 * Math.abs(Math.sin(time * 1.8)) // All channels sphere 5 (pulsing cyan)
+  sphereColorsArray[16] = 0.3 + 0.7 * Math.abs(Math.sin(time * 1.8))
+  sphereColorsArray[17] = 0.3 + 0.7 * Math.abs(Math.sin(time * 1.8))
+
+  // Animate some boxes
+  // Box 0 - rotate around Y axis
+  boxesArray[0] = 2 + Math.cos(time * 0.7) * 0.5 // x
+  boxesArray[2] = -1 + Math.sin(time * 0.7) * 0.5 // z
+
+  // Box 1 - scale up and down
+  boxesArray[7] = 0.6 + 0.3 * Math.sin(time * 2) // size
 
   // Update the uniform arrays with the animated data
   view.uniforms.sphereData?.set(spheresArray)
-  view.uniforms.colors?.set(colorsArray)
+  view.uniforms.sphereColors?.set(sphereColorsArray)
+  view.uniforms.boxData?.set(boxesArray)
+  view.uniforms.boxColors?.set(boxColorsArray)
 }
 
 // Animation loop
@@ -258,7 +448,8 @@ new ResizeObserver(() => {
   canvas.width = window.innerWidth
   canvas.height = window.innerHeight
   gl.viewport(0, 0, canvas.width, canvas.height)
-  
+
   // Update aspect ratio uniform
   view.uniforms.aspectRatio.set(canvas.width / canvas.height)
+  draw(performance.now())
 }).observe(document.body)
