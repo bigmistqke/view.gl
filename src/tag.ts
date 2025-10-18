@@ -97,7 +97,7 @@ export function interleave<
 
 export interface CompileOptions<TSchema extends ViewSchemaPartial> {
   schema?: TSchema
-  webgl2: boolean
+  webgl2?: boolean
 }
 
 export function compile<
@@ -141,15 +141,22 @@ export function compile<
     }
   }
 
-  const program = createProgram(gl, _vertex.template, _fragment.template)
+  try {
+    const program = createProgram(gl, _vertex.template, _fragment.template)
 
-  return {
-    program,
-    schema,
-    view: view(gl, program, schema),
-    vertex: _vertex.template,
-    fragment: _fragment.template,
-  } as unknown as Prettify<CompileResult<TVertex, TFragment, TSchema>>
+    return {
+      program,
+      schema,
+      view: view(gl, program, schema),
+      vertex: _vertex.template,
+      fragment: _fragment.template,
+    } as unknown as Prettify<CompileResult<TVertex, TFragment, TSchema>>
+  } catch (error) {
+    console.error('Error while creating WebGLProgram - vertex\n\n', _vertex.template)
+    console.error('Error while creating WebGLProgram - fragment\n\n', _fragment.template)
+
+    throw error
+  }
 }
 
 function resolveGLSLTag<TTag extends GLSL>(tag: TTag, options?: { webgl2?: boolean }) {
@@ -261,16 +268,29 @@ compile.toQuad = function <TFragment extends GLSL, TSchema extends ViewSchemaPar
 ) {
   const buffer = QUAD_BUFFER_MAP.getOrInsert(gl, gl.createBuffer.bind(gl))
 
-  const vertex = glsl`#version 300 es
+  const webgl2 = options?.webgl2 ?? fragment.template[0]?.startsWith('#version 300 es')
+
+  const vertex = webgl2
+    ? glsl`#version 300 es
 precision mediump float;
 
 ${attribute.vec2('a_quad', { buffer })}
 
-out vec2 uv;
+out vec2 v_uv;
 
 void main() {
-  uv = a_quad;
-  gl_Position = vec4(uv, 0.0,  1.0);
+  v_uv = a_quad;
+  gl_Position = vec4(v_uv, 0.0, 1.0);
+}`
+    : glsl`precision mediump float;
+
+${attribute.vec2('a_quad', { buffer })}
+
+varying vec2 v_uv;
+
+void main() {
+  v_uv = a_quad;
+  gl_Position = vec4(v_uv, 0.0, 1.0);
 }`
 
   const result = compile(gl, vertex, fragment, options)
