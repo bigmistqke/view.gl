@@ -32,6 +32,7 @@
     - 📝 [attribute[kind](name, options?)](#-attributekindname-options)
     - 🔗 [interleave(name, layout, options?)](#-interleavename-layout-options)
   - ⚙️ [compile(gl, vertex, fragment)](#️-compilegl-vertex-fragment)
+    - 🔄 [compile.toQuad(gl, fragment)](#-compiletoquadgl-fragment-options)
     - 🔍 [compile.toString(shader)](#-compiletostringshader)
     - 📋 [compile.toSchema(shader)](#-compiletoschemaschader)
 - 🛠️ [Utils](#️-utils)
@@ -549,6 +550,35 @@ const vertexShader = glsl`
 ### ⚙️ compile(gl, vertex, fragment, overrideSchema?)
 
 Compiles shaders to a `WebGLProgram` and extracts typesafe schema and view.
+
+### 🔄 compile.toQuad(gl, fragment, options?)
+
+Convenient helper for fullscreen quad rendering with fragment shaders. Automatically creates a vertex shader with a quad geometry and handles vertex buffer setup.
+
+```typescript
+const { program, schema, view } = compile.toQuad(gl, fragmentShader)
+
+// Ready to render - no vertex setup required
+view.uniforms.time.set(performance.now())
+gl.drawArrays(gl.TRIANGLES, 0, 6)
+```
+
+**Perfect for:**
+- Fragment shader effects (ray-marching, post-processing, etc.)
+- Fullscreen compute-style shaders
+- Quick prototyping and experimentation
+
+**Generated vertex shader:**
+- Creates `a_quad` attribute automatically
+- Outputs `uv` varying (same as vertex position: `[-1,1]` range)
+- Sets up clip-space quad covering the entire screen
+
+**Parameters:**
+- `gl`: WebGL rendering context
+- `fragment`: Fragment shader with embedded resources
+- `options`: Optional compilation options (same as `compile()`)
+
+**Returns:** Same as `compile()` with pre-configured quad rendering
 
 ```typescript
 const { program, schema, view, vertex, fragment } = compile(gl, vertexShader, fragmentShader)
