@@ -750,20 +750,20 @@ export type GLSLSlotsToSchema<TSlots extends Array<GLSLSlot>> = {
   }
 }
 
-type FlattenSlots<T> =
-  T extends GLSL<infer TSlots>
-    ? _FlattenSlots<TSlots>
-    : T extends Array<GLSLSlot>
-      ? _FlattenSlots<T>
+export type FlattenSlots<T> =
+  T extends Array<GLSLSlot>
+    ? _FlattenSlots<T>
+    : T extends GLSL<infer TSlots>
+      ? _FlattenSlots<TSlots>
       : never
 
 type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer Rest]
   ? First extends GLSL
     ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
-    : First extends unknown[]
+    : First extends GLSLSlot[]
       ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
       : [First, ...FlattenSlots<Rest>]
-  : []
+  : T
 
 export type MergeGLSLSchema<
   TVertex extends ViewSchema,
