@@ -64,8 +64,8 @@ export function dom<T extends keyof HTMLElementTagNameMap>(
       if (typeof options.style === 'string') {
         element.style = options.style
       } else {
-        options.style
-        for (const prop of options.style!) {
+        for (const prop in options.style!) {
+          // @ts-expect-error
           element.style[prop] = options.style![prop as any]
         }
       }

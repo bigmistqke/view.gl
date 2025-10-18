@@ -1,6 +1,6 @@
 import { FramebufferDefinition } from 'src/types'
 import { createFramebuffer } from 'src/utils'
-import { attribute, compile, glsl, uniform } from 'view.gl/tag'
+import { compile, glsl, uniform } from 'view.gl/tag'
 import { dom } from '../utils'
 
 let playing = false
@@ -86,18 +86,6 @@ canvas.height = 256 * 2
 const WIDTH = canvas.width
 const HEIGHT = canvas.height
 
-// --- Shaders ---
-
-// Vertex shader (simple fullscreen quad)
-const vertex = glsl`
-  ${attribute.vec2('a_vertex')}
-  varying vec2 v_uv;
-  void main() {
-    v_uv = a_vertex * 0.5 + 0.5;
-    gl_Position = vec4(a_vertex, 0, 1);
-  }
-`
-
 // Fragment shader for Game of Life step
 // We read from u_texture the current state
 // Alive cells are red > 0.5, dead < 0.5
@@ -116,15 +104,17 @@ const stepFragment = glsl`
   }
 
   void main() {
+    vec2 uv  = v_uv * 0.5 + 0.5;
+
     int sum = 0;
     // Iterate neighbors -1,0,1
     for (int y = -1; y <= 1; y++) {
       for (int x = -1; x <= 1; x++) {
         if (x == 0 && y == 0) continue;
-        sum += getCell(v_uv + vec2(float(x), float(y)) * u_texelSize);
+        sum += getCell(uv + vec2(float(x), float(y)) * u_texelSize);
       }
     }
-    int current = getCell(v_uv);
+    int current = getCell(uv);
 
     int nextState = 0;
     if (current == 1) {
@@ -145,22 +135,14 @@ const renderFragment = glsl`
   ${uniform.sampler2D('u_texture')}
   
   void main() {
-    float cell = texture2D(u_texture, v_uv).r;
+    vec2 uv  = v_uv * 0.5 + 0.5;
+    float cell = texture2D(u_texture, uv).r;
     gl_FragColor = vec4(vec3(cell), 1.0);
   }`
 
 // --- Create programs ---
-const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment)
-const { program: renderProgram, view: renderView } = compile(gl, vertex, renderFragment, {
-  attributes: {
-    a_vertex: {
-      buffer: stepView.attributes.a_vertex.buffer,
-    },
-  },
-})
-
-// Setup quad
-stepView.attributes.a_vertex.set(new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]))
+const { program: stepProgram, view: stepView } = compile.toQuad(gl, stepFragment)
+const { program: renderProgram, view: renderView } = compile.toQuad(gl, renderFragment)
 
 // Initialize two framebuffers (with their respective texture) for ping-pong
 const framebufferOptions = {
@@ -211,7 +193,7 @@ function step() {
   stepView.uniforms.u_texture.set(0)
   stepView.uniforms.u_texelSize.set(1 / WIDTH, 1 / HEIGHT)
 
-  stepView.attributes.a_vertex.bind()
+  stepView.attributes.a_quad.bind()
 
   gl.drawArrays(gl.TRIANGLES, 0, 6)
 }
@@ -226,7 +208,7 @@ function render() {
   gl.bindTexture(gl.TEXTURE_2D, write.texture)
   renderView.uniforms.u_texture.set(0)
 
-  renderView.attributes.a_vertex.bind()
+  renderView.attributes.a_quad.bind()
 
   gl.drawArrays(gl.TRIANGLES, 0, 6)
 }

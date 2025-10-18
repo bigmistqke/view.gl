@@ -467,7 +467,9 @@ void main() {
 // --- Create programs ---
 const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment)
 const { program: renderProgram, view: renderView } = compile(gl, vertex, renderFragment, {
-  attributes: { a_vertex: { buffer: stepView.attributes.a_vertex.buffer } },
+  schema: {
+    attributes: { a_vertex: { buffer: stepView.attributes.a_vertex.buffer } },
+  },
 })
 
 gl.useProgram(renderProgram)

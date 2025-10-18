@@ -241,7 +241,7 @@ ${boxModule}
 
 ${uniform.float('aspectRatio')}
 
-in vec2 uv;
+in vec2 v_uv;
 out vec4 fragColor;
 
 vec3 lightPos = vec3(5.0, 5.0, 5.0);
@@ -257,7 +257,7 @@ void main()
 {	
 	// Ray from camera through pixel
 	vec3 rayOrigin = vec3(0.0, 0.0, 4.0);
-	vec3 rayDirection = normalize(vec3(uv.x * aspectRatio, uv.y, -1.0));
+	vec3 rayDirection = normalize(vec3(v_uv.x * aspectRatio, v_uv.y, -1.0));
 	
 // Find closest intersection across all shapes
 float closestDistance = 1000.0;
