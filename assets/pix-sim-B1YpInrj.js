@@ -1,5 +1,5 @@
-import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-9XZWngKR.js';
-import { c as createElement } from './utils-CvCgsM08.js';
+import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-B1IdZ_8z.js';
+import { d as dom } from './utils-2dzuv_bW.js';
 
 const MATERIALS = {
   SAND: {
@@ -21,29 +21,35 @@ const MATERIALS = {
 const MATERIAL_SIZE = Object.keys(MATERIALS).length;
 let playing = false;
 let currentMaterial = MATERIALS.SAND.id;
-const container = createElement("div", {
-  style: "display: flex; flex-direction: column; align-items: center; gap: 10px;",
+const container = dom("div", {
+  style: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: "10px"
+  },
   parentElement: document.body
 });
-const buttonContainer = createElement("div", {
+const buttonContainer = dom("div", {
   style: "display: flex; gap: 10px; margin-bottom: 10px;",
   parentElement: container
 });
 Object.entries(MATERIALS).forEach(([name, material]) => {
-  createElement("button", {
-    textContent: name.toLowerCase(),
+  dom("button", {
     "data-name": name,
     "data-id": material.id.toString(),
-    style: `padding: 5px 10px;
-    font-size: 14px;
-    font-family: arial;
-    cursor: pointer;
-    color: black;
-    background: ${currentMaterial === material.id ? `rgb(${material.color.map((c) => Math.floor(c * 255)).join(",")})` : `rgba(${material.color.map((c) => Math.floor(c * 255)).join(",")}, 0.75)`};
-    border-color: ${name === "SAND" ? "black" : "white"};
-    border: 2px solid rgb(${material.color.map((c) => Math.floor(c * 255)).join(",")});
-    border-radius: 2px;
-  `,
+    textContent: name.toLowerCase(),
+    style: {
+      padding: "5px 10px",
+      fontSize: "14px",
+      fontFamily: "arial",
+      cursor: "pointer",
+      color: "black",
+      background: currentMaterial === material.id ? `rgb(${material.color.map((c) => Math.floor(c * 255)).join(",")})` : `rgba(${material.color.map((c) => Math.floor(c * 255)).join(",")}, 0.75)`,
+      borderColor: name === "SAND" ? "black" : "white",
+      border: `2px solid rgb(${material.color.map((c) => Math.floor(c * 255)).join(",")})`,
+      borderRadius: "2px"
+    },
     onclick() {
       currentMaterial = material.id;
       buttonContainer.querySelectorAll("button").forEach((btn) => {
@@ -62,7 +68,7 @@ Object.entries(MATERIALS).forEach(([name, material]) => {
 function spray() {
   return Math.floor(Math.random() * 8) * (Math.random() < 0.5 ? 1 : -1);
 }
-const canvas = createElement("canvas", {
+const canvas = dom("canvas", {
   parentElement: container,
   onmousedown() {
     const rect = canvas.getBoundingClientRect();
@@ -423,7 +429,9 @@ void main() {
 }`;
 const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment);
 const { program: renderProgram, view: renderView } = compile(gl, vertex, renderFragment, {
-  attributes: { a_vertex: { buffer: stepView.attributes.a_vertex.buffer } }
+  schema: {
+    attributes: { a_vertex: { buffer: stepView.attributes.a_vertex.buffer } }
+  }
 });
 gl.useProgram(renderProgram);
 renderView.uniforms.u_palette.set(

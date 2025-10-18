@@ -31,20 +31,32 @@ function cursor(event, callback) {
   );
   return promise;
 }
-function createElement(tag, {
+function dom(tag, {
   parentElement,
   ...options
 } = {}) {
   const element = document.createElement(tag);
   for (const key in options) {
     if (key.startsWith("data-")) {
-      element.setAttribute(key, options[key]);
+      element.setAttribute(
+        key,
+        // @ts-expect-error
+        options[key]
+      );
+    } else if (key == "style") {
+      if (typeof options.style === "string") {
+        element.style = options.style;
+      } else {
+        for (const prop in options.style) {
+          element.style[prop] = options.style[prop];
+        }
+      }
     } else {
       element[key] = options[key];
     }
   }
-  (parentElement ?? document.body).appendChild(element);
+  parentElement?.appendChild(element);
   return element;
 }
 
-export { cursor as a, createElement as c };
+export { cursor as c, dom as d };

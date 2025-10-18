@@ -1,5 +1,5 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-DIxBAHsA.js","assets/tag-9XZWngKR.js","assets/utils-CvCgsM08.js","assets/game-of-life-BZwmnOlm.js","assets/glsl-composition-CGiRJFyZ.js","assets/grid-BpxJn9bi.js","assets/overview-BOc-Vrmr.js","assets/pix-sim-DoB6dACg.js","assets/symbol-R_XnRX3B.js","assets/tetris-Be8eJCyN.js"])))=>i.map(i=>d[i]);
-import { c as createElement } from './utils-CvCgsM08.js';
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/bezier-Bq26ud_J.js","assets/tag-B1IdZ_8z.js","assets/utils-2dzuv_bW.js","assets/game-of-life-BMIuaxxB.js","assets/glsl-composition-BrOgzhtJ.js","assets/grid-Dy8DSs4Z.js","assets/overview-BcYfv-l8.js","assets/pix-sim-B1YpInrj.js","assets/ray-casting-BtORvkdn.js","assets/sdf-7wym2SSb.js","assets/symbol-CfV3eTDt.js","assets/tetris-CMl6qtLV.js"])))=>i.map(i=>d[i]);
+import { d as dom } from './utils-2dzuv_bW.js';
 
 const scriptRel = 'modulepreload';const assetsURL = function(dep) { return "https://bigmistqke.github.io/view.gl/"+dep };const seen = {};const __vitePreload = function preload(baseModule, deps, importerUrl) {
 	let promise = Promise.resolve();
@@ -55,24 +55,25 @@ const css = "https://bigmistqke.github.io/view.gl/assets/index-C2N3u8wj.css";
 
 const iframe = document.querySelector("iframe");
 const nav = document.querySelector("nav");
-createElement("h3", { innerText: "Examples", parentElement: nav });
+nav.append(dom("h3", { innerText: "Examples" }));
 const urls = Object.fromEntries(
-  Object.entries(/* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-DIxBAHsA.js'),true              ?__vite__mapDeps([0,1,2]):void 0),"./examples/game-of-life.ts": () => __vitePreload(() => import('./game-of-life-BZwmnOlm.js'),true              ?__vite__mapDeps([3,1]):void 0),"./examples/glsl-composition.ts": () => __vitePreload(() => import('./glsl-composition-CGiRJFyZ.js'),true              ?__vite__mapDeps([4,1,2]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-BpxJn9bi.js'),true              ?__vite__mapDeps([5,1,2]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-BOc-Vrmr.js'),true              ?__vite__mapDeps([6,1]):void 0),"./examples/pix-sim.ts": () => __vitePreload(() => import('./pix-sim-DoB6dACg.js'),true              ?__vite__mapDeps([7,1,2]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-R_XnRX3B.js'),true              ?__vite__mapDeps([8,1,2]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-Be8eJCyN.js'),true              ?__vite__mapDeps([9,1]):void 0)})).map(([key, entry]) => {
+  Object.entries(/* #__PURE__ */ Object.assign({"./examples/bezier.ts": () => __vitePreload(() => import('./bezier-Bq26ud_J.js'),true              ?__vite__mapDeps([0,1,2]):void 0),"./examples/game-of-life.ts": () => __vitePreload(() => import('./game-of-life-BMIuaxxB.js'),true              ?__vite__mapDeps([3,1,2]):void 0),"./examples/glsl-composition.ts": () => __vitePreload(() => import('./glsl-composition-BrOgzhtJ.js'),true              ?__vite__mapDeps([4,1,2]):void 0),"./examples/grid.ts": () => __vitePreload(() => import('./grid-Dy8DSs4Z.js'),true              ?__vite__mapDeps([5,1,2]):void 0),"./examples/overview.ts": () => __vitePreload(() => import('./overview-BcYfv-l8.js'),true              ?__vite__mapDeps([6,1]):void 0),"./examples/pix-sim.ts": () => __vitePreload(() => import('./pix-sim-B1YpInrj.js'),true              ?__vite__mapDeps([7,1,2]):void 0),"./examples/ray-casting.ts": () => __vitePreload(() => import('./ray-casting-BtORvkdn.js'),true              ?__vite__mapDeps([8,1,2]):void 0),"./examples/sdf.ts": () => __vitePreload(() => import('./sdf-7wym2SSb.js'),true              ?__vite__mapDeps([9,1,2]):void 0),"./examples/symbol.ts": () => __vitePreload(() => import('./symbol-CfV3eTDt.js'),true              ?__vite__mapDeps([10,1,2]):void 0),"./examples/tetris.ts": () => __vitePreload(() => import('./tetris-CMl6qtLV.js'),true              ?__vite__mapDeps([11,1]):void 0)})).map(([key, entry]) => {
     const name = key.split("/").pop().replace(".ts", "");
     const chunk = entry.toString().match(/import\(['"]([^'"]+)['"]/)[1];
     return [name, chunk];
   })
 );
 Object.entries(urls).forEach(([name, localUrl]) => {
-  createElement("button", {
-    onclick(event) {
-      event.preventDefault();
-      load(name, localUrl);
-    },
-    innerHTML: name.replaceAll("-", " "),
-    parentElement: nav,
-    "data-route": name
-  });
+  nav.append(
+    dom("button", {
+      onclick(event) {
+        event.preventDefault();
+        load(name, localUrl);
+      },
+      innerHTML: name.replaceAll("-", " "),
+      "data-route": name
+    })
+  );
 });
 function load(name, url) {
   window.location.hash = name;

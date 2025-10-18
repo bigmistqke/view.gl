@@ -1,7 +1,11 @@
-import { a as attribute, u as uniform, g as glsl, c as compile } from './tag-9XZWngKR.js';
-import { c as createElement, a as cursor } from './utils-CvCgsM08.js';
+import { a as attribute, u as uniform, g as glsl, c as compile } from './tag-B1IdZ_8z.js';
+import { d as dom, c as cursor } from './utils-2dzuv_bW.js';
 
-const canvas = createElement("canvas", { width: window.innerWidth, height: window.innerHeight });
+const canvas = dom("canvas", {
+  width: window.innerWidth,
+  height: window.innerHeight,
+  parentElement: document.body
+});
 const gl = canvas.getContext("webgl2", { antialias: false });
 if (!gl) {
   throw new Error("WebGL not supported");
@@ -11,31 +15,33 @@ const state = {
   scale: 1,
   elements: []
 };
-const container = createElement("div");
+const container = dom("div", { parentElement: document.body });
 state.elements.push(createGridElement({ x: 100, y: 100 }));
 function createGridElement(position = { x: 0, y: 0 }) {
   position = {
     x: (position.x - state.position.x) / state.scale,
     y: (position.y - state.position.y) / state.scale
   };
-  const element = createElement("div", {
+  const div = dom("div", {
     innerText: "HALLO WORLD",
-    style: `position: fixed; 
-z-index: 10; 
-left: 0px; 
-top: 0px; 
-transform-origin: top left; 
-background: white; 
-padding: 2px; 
-border-radius: 2px;`,
+    style: {
+      position: "fixed",
+      zIndex: "10",
+      left: "0px",
+      top: "0px",
+      transformOrigin: "top left",
+      background: "white",
+      padding: "2px",
+      borderRadius: "2px"
+    },
     parentElement: container
   });
   function update() {
-    element.style.transform = `translate3d(${state.position.x + position.x * state.scale}px,${state.position.y + position.y * state.scale}px,0) scale(${state.scale})`;
+    div.style.transform = `translate3d(${state.position.x + position.x * state.scale}px,${state.position.y + position.y * state.scale}px,0) scale(${state.scale})`;
   }
   update();
   return {
-    element,
+    element: div,
     position,
     update
   };

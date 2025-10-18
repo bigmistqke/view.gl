@@ -467,9 +467,9 @@ function interleave(key, layout, { instanced, buffer } = {}) {
     buffer
   };
 }
-function compile(gl, vertex, fragment, overrideSchema) {
-  const _vertex = resolveGLSLTag(vertex);
-  const _fragment = resolveGLSLTag(fragment);
+function compile(gl, vertex, fragment, options) {
+  const _vertex = resolveGLSLTag(vertex, options);
+  const _fragment = resolveGLSLTag(fragment, options);
   const schema = {
     uniforms: {
       ..._vertex.schema.uniforms,
@@ -484,28 +484,34 @@ function compile(gl, vertex, fragment, overrideSchema) {
       ..._fragment.schema.interleavedAttributes
     }
   };
-  for (const kind in overrideSchema) {
+  for (const kind in options?.schema) {
     const schemaKind = schema[kind];
-    const overrideSchemaKind = overrideSchema[kind];
-    for (const key in overrideSchemaKind) {
+    const configSchemaKind = options?.schema[kind];
+    for (const key in configSchemaKind) {
       schemaKind[key] = {
         ...schemaKind[key],
-        ...overrideSchemaKind[key]
+        ...configSchemaKind[key]
       };
     }
   }
-  const program = createProgram(gl, _vertex.template, _fragment.template);
-  return {
-    program,
-    schema,
-    view: view(gl, program, schema),
-    vertex: _vertex.template,
-    fragment: _fragment.template
-  };
+  try {
+    const program = createProgram(gl, _vertex.template, _fragment.template);
+    return {
+      program,
+      schema,
+      view: view(gl, program, schema),
+      vertex: _vertex.template,
+      fragment: _fragment.template
+    };
+  } catch (error) {
+    console.error("Error while creating WebGLProgram - vertex\n\n", _vertex.template);
+    console.error("Error while creating WebGLProgram - fragment\n\n", _fragment.template);
+    throw error;
+  }
 }
-function resolveGLSLTag(tag) {
+function resolveGLSLTag(tag, options) {
   return {
-    template: compile.toString(tag),
+    template: compile.toString(tag, options),
     schema: compile.toSchema(tag)
   };
 }
@@ -515,12 +521,12 @@ compile.toSchema = function(tag) {
     attributes: {},
     interleavedAttributes: {}
   };
-  function handleSlot(slot) {
-    if (Array.isArray(slot)) {
-      slot.forEach(handleSlot);
+  tag.slots.forEach(function handleSlot(slot) {
+    if (typeof slot !== "object") {
       return;
     }
-    if (typeof slot !== "object") {
+    if (Array.isArray(slot)) {
+      slot.forEach(handleSlot);
       return;
     }
     if (slot.type === "glsl") {
@@ -541,40 +547,73 @@ compile.toSchema = function(tag) {
     }
     const { key: name, type, ...rest } = slot;
     result[`${type}s`][name] = rest;
-  }
-  tag.slots.forEach(handleSlot);
+  });
   return result;
 };
-compile.toString = function({ template: [initial, ...rest], slots }) {
-  const v300 = !!initial?.startsWith("#version 300 es");
+compile.toString = function({ template: [initial, ...rest], slots }, config) {
+  const v300 = config?.webgl2 ?? !!initial?.startsWith("#version 300 es");
   let template = initial ?? "";
   for (let i = 0; i < rest.length; i++) {
-    template += `${glslSlotToString(slots[i], v300)}${rest[i]}`;
+    template += `${resolveGlslSlotToString(slots[i], v300)}${rest[i]}`;
   }
   return template;
 };
-function glslSlotToString(slot, v300) {
+function resolveGlslSlotToString(slot, v300) {
   if (typeof slot !== "object") {
     return toID(slot);
   }
   if (Array.isArray(slot)) {
-    return slot.map((slot2) => glslSlotToString(slot2, v300)).join("");
+    return slot.map((slot2) => resolveGlslSlotToString(slot2, v300)).join("");
   }
-  if (slot.type === "glsl") {
-    return compile.toString(slot);
-  }
-  if (slot.type === "interleavedAttribute") {
-    return slot.layout.reduce(
-      (a, v) => v300 ? `${a}in ${v.kind} ${toID(v.key)};
+  switch (slot.type) {
+    case "glsl":
+      return compile.toString(slot);
+    case "interleavedAttribute":
+      return slot.layout.reduce(
+        (a, v) => v300 ? `${a}in ${v.kind} ${toID(v.key)};
 ` : `${a}attribute ${v.kind} ${toID(v.key)};
 `,
-      ""
-    );
+        ""
+      );
+    case "uniform":
+      if ("size" in slot) {
+        return `${slot.type} ${slot.kind} ${toID(slot.key)}[${slot.size}];`;
+      }
+      return `${slot.type} ${slot.kind} ${toID(slot.key)};`;
   }
-  if (slot.type === "uniform" && "size" in slot) {
-    return `${slot.type} ${slot.kind} ${toID(slot.key)}[${slot.size}];`;
+  if (slot.type === "attribute") {
+    return `${v300 ? "in" : slot.type} ${slot.kind} ${toID(slot.key)};`;
   }
-  return `${slot.type === "attribute" && v300 ? "in" : slot.type} ${slot.kind} ${toID(slot.key)};`;
+  throw new Error(`Unexpected slot: ${JSON.stringify(slot)}`);
 }
+const QUAD_FLOAT_ARRAY = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
+const QUAD_BUFFER_MAP = createUpsertMap(WeakMap);
+compile.toQuad = function(gl, fragment, options) {
+  const buffer = QUAD_BUFFER_MAP.getOrInsert(gl, gl.createBuffer.bind(gl));
+  const webgl2 = options?.webgl2 ?? fragment.template[0]?.startsWith("#version 300 es");
+  const vertex = webgl2 ? glsl`#version 300 es
+precision mediump float;
+
+${attribute.vec2("a_quad", { buffer })}
+
+out vec2 v_uv;
+
+void main() {
+  v_uv = a_quad;
+  gl_Position = vec4(v_uv, 0.0, 1.0);
+}` : glsl`precision mediump float;
+
+${attribute.vec2("a_quad", { buffer })}
+
+varying vec2 v_uv;
+
+void main() {
+  v_uv = a_quad;
+  gl_Position = vec4(v_uv, 0.0, 1.0);
+}`;
+  const result = compile(gl, vertex, fragment, options);
+  result.view.attributes.a_quad.set(QUAD_FLOAT_ARRAY);
+  return result;
+};
 
 export { attribute as a, createFramebuffer as b, compile as c, uniformView as d, attributeView as e, glsl as g, interleave as i, uniform as u };

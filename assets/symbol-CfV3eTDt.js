@@ -1,7 +1,7 @@
-import { a as attribute, u as uniform, g as glsl, c as compile } from './tag-9XZWngKR.js';
-import { c as createElement } from './utils-CvCgsM08.js';
+import { a as attribute, u as uniform, g as glsl, c as compile } from './tag-B1IdZ_8z.js';
+import { d as dom } from './utils-2dzuv_bW.js';
 
-const canvas = createElement("canvas", {
+const canvas = dom("canvas", {
   width: window.innerWidth,
   height: window.innerHeight,
   parentElement: document.body,

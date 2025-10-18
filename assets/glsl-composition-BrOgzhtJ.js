@@ -1,11 +1,11 @@
-import { g as glsl, u as uniform, a as attribute, c as compile } from './tag-9XZWngKR.js';
-import { c as createElement } from './utils-CvCgsM08.js';
+import { g as glsl, u as uniform, a as attribute, c as compile } from './tag-B1IdZ_8z.js';
+import { d as dom } from './utils-2dzuv_bW.js';
 
-const canvas = createElement("canvas", {
+const canvas = dom("canvas", {
   width: window.innerWidth,
   height: window.innerHeight,
   parentElement: document.body,
-  style: "width: 100%; height: 100%"
+  style: { width: "100%" }
 });
 const gl = canvas.getContext("webgl2");
 gl.viewport(0, 0, canvas.width, canvas.height);

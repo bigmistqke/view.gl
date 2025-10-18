@@ -1,7 +1,8 @@
-import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-9XZWngKR.js';
+import { b as createFramebuffer, u as uniform, g as glsl, c as compile } from './tag-B1IdZ_8z.js';
+import { d as dom } from './utils-2dzuv_bW.js';
 
 let playing = false;
-const canvas = document.createElement("canvas");
+const canvas = dom("canvas");
 const gl = canvas.getContext("webgl", { antialias: false });
 if (!gl) {
   throw new Error("WebGL not supported");
@@ -72,14 +73,6 @@ canvas.width = 256 * 2;
 canvas.height = 256 * 2;
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
-const vertex = glsl`
-  ${attribute.vec2("a_vertex")}
-  varying vec2 v_uv;
-  void main() {
-    v_uv = a_vertex * 0.5 + 0.5;
-    gl_Position = vec4(a_vertex, 0, 1);
-  }
-`;
 const stepFragment = glsl`
   precision mediump float;
   varying vec2 v_uv;
@@ -94,15 +87,17 @@ const stepFragment = glsl`
   }
 
   void main() {
+    vec2 uv  = v_uv * 0.5 + 0.5;
+
     int sum = 0;
     // Iterate neighbors -1,0,1
     for (int y = -1; y <= 1; y++) {
       for (int x = -1; x <= 1; x++) {
         if (x == 0 && y == 0) continue;
-        sum += getCell(v_uv + vec2(float(x), float(y)) * u_texelSize);
+        sum += getCell(uv + vec2(float(x), float(y)) * u_texelSize);
       }
     }
-    int current = getCell(v_uv);
+    int current = getCell(uv);
 
     int nextState = 0;
     if (current == 1) {
@@ -121,18 +116,12 @@ const renderFragment = glsl`
   ${uniform.sampler2D("u_texture")}
   
   void main() {
-    float cell = texture2D(u_texture, v_uv).r;
+    vec2 uv  = v_uv * 0.5 + 0.5;
+    float cell = texture2D(u_texture, uv).r;
     gl_FragColor = vec4(vec3(cell), 1.0);
   }`;
-const { program: stepProgram, view: stepView } = compile(gl, vertex, stepFragment);
-const { program: renderProgram, view: renderView } = compile(gl, vertex, renderFragment, {
-  attributes: {
-    a_vertex: {
-      buffer: stepView.attributes.a_vertex.buffer
-    }
-  }
-});
-stepView.attributes.a_vertex.set(new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]));
+const { program: stepProgram, view: stepView } = compile.toQuad(gl, stepFragment);
+const { program: renderProgram, view: renderView } = compile.toQuad(gl, renderFragment);
 const framebufferOptions = {
   attachment: "color",
   width: WIDTH,
@@ -172,7 +161,7 @@ function step() {
   gl.bindTexture(gl.TEXTURE_2D, read.texture);
   stepView.uniforms.u_texture.set(0);
   stepView.uniforms.u_texelSize.set(1 / WIDTH, 1 / HEIGHT);
-  stepView.attributes.a_vertex.bind();
+  stepView.attributes.a_quad.bind();
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 function render() {
@@ -182,7 +171,7 @@ function render() {
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, write.texture);
   renderView.uniforms.u_texture.set(0);
-  renderView.attributes.a_vertex.bind();
+  renderView.attributes.a_quad.bind();
   gl.drawArrays(gl.TRIANGLES, 0, 6);
 }
 function animate() {
