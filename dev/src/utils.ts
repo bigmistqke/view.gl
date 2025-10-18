@@ -69,8 +69,7 @@ export function dom<T extends keyof HTMLElementTagNameMap>(
           element.style[prop] = options.style![prop as any]
         }
       }
-    }
-    {
+    } else {
       // @ts-expect-error
       element[key] = options[key]
     }
