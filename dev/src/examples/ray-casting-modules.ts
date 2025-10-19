@@ -4,55 +4,85 @@ import { dom } from '../utils.ts'
 
 const NUM_SPHERES = 8
 const NUM_BOXES = 3
+const NUM_TORI = 4
 
-const SPHERE_DATA = {
-  // Sphere data: [x, y, z, radius]
-  data: [
-    [0, 0, 0, 1.2], // Center sphere - larger for more overlap
-    [1.5, 0.5, -1, 1.0], // Right sphere - closer to center
-    [-1.5, -0.5, 0.5, 1.0], // Left sphere - closer to center
-    [0.5, 1.5, -0.5, 0.9], // Top sphere - closer to center
-    [-1, -1.5, 1, 0.8], // Bottom sphere - closer to center
-    [2, -1, -1.5, 0.7], // Far right sphere - closer
-    [-2, 1, 1.5, 0.9], // Far left sphere - closer
-    [0, -0.5, -2, 1.0], // Back sphere - closer
-  ] as const,
-  colors: [
-    [1.0, 0.3, 0.3], // Red
-    [0.3, 1.0, 0.3], // Green
-    [0.3, 0.3, 1.0], // Blue
-    [1.0, 1.0, 0.3], // Yellow
-    [1.0, 0.3, 1.0], // Magenta
-    [0.3, 1.0, 1.0], // Cyan
-    [1.0, 0.7, 0.3], // Orange
-    [0.7, 0.3, 1.0], // Purple
-  ] as const,
-}
+// Ray casting quality control
+const RAY_MARCH_ITERATIONS = 129 // Higher = better quality but slower (default: 128)
+const RAY_HIT_THRESHOLD = 0.001 // Lower = better quality but slower (default: 0.001)
+const NORMAL_EPSILON = 0.001 // Lower = more accurate normals (default: 0.001)
 
-const BOX_DATA = {
-  // Box data: [x, y, z, size] (size is half-extents for all dimensions)
-  data: [
-    [1, 0, -0.5, 0.9], // Right box - closer to center, larger
-    [-1, 0, 0.5, 0.8], // Left box - closer to center, larger
-    [0, -1, -1, 0.9], // Bottom box - closer to center, larger
-  ] as const,
-  // Box colors (RGB)
-  colors: [
-    [0.8, 0.8, 0.2], // Yellow-green
-    [0.2, 0.8, 0.8], // Cyan
-    [0.8, 0.2, 0.8], // Magenta
-  ] as const,
-}
 // Create typed arrays for sphere data and colors
 const SPHERE_FLOAT_ARRAYS = {
-  data: new Float32Array(SPHERE_DATA.data.flat()),
-  colors: new Float32Array(SPHERE_DATA.colors.flat()),
+  positions: new Float32Array(
+    [
+      [0, 0, 0, 1.2],
+      [1.5, 0.5, -1, 1.0],
+      [-1.5, -0.5, 0.5, 1.0],
+      [0.5, 1.5, -0.5, 0.9],
+      [-1, -1.5, 1, 0.8],
+      [2, -1, -1.5, 0.7],
+      [-2, 1, 1.5, 0.9],
+      [0, -0.5, -2, 1.0],
+    ].flat(),
+  ),
+  colors: new Float32Array(
+    [
+      [1.0, 0.3, 0.3], // Red
+      [0.3, 1.0, 0.3], // Green
+      [0.3, 0.3, 1.0], // Blue
+      [1.0, 1.0, 0.3], // Yellow
+      [1.0, 0.3, 1.0], // Magenta
+      [0.3, 1.0, 1.0], // Cyan
+      [1.0, 0.7, 0.3], // Orange
+      [0.7, 0.3, 1.0], // Purple
+    ].flat(),
+  ),
 }
 
 // Create typed arrays for box data and colors
 const BOX_FLOAT_ARRAYS = {
-  data: new Float32Array(BOX_DATA.data.flat()),
-  colors: new Float32Array(BOX_DATA.colors.flat()),
+  positions: new Float32Array(
+    [
+      [1, 0, -0.5, 0.9],
+      [-1, 0, 0.5, 0.8],
+      [0, -1, -1, 0.9],
+    ].flat(),
+  ),
+  colors: new Float32Array(
+    [
+      [0.8, 0.8, 0.2], // Yellow-green
+      [0.2, 0.8, 0.8], // Cyan
+      [0.8, 0.2, 0.8], // Magenta
+    ].flat(),
+  ),
+}
+
+// Create typed arrays for torus data and colors
+const TORUS_FLOAT_ARRAYS = {
+  positions: new Float32Array(
+    [
+      [0, 1.5, 0],
+      [-1.5, 0, 0],
+      [1.5, -0.5, -0.5],
+      [0, -1.5, 1],
+    ].flat(),
+  ),
+  radii: new Float32Array(
+    [
+      [0.8, 0.3],
+      [0.6, 0.2],
+      [0.7, 0.25],
+      [0.5, 0.2],
+    ].flat(),
+  ),
+  colors: new Float32Array(
+    [
+      [0.9, 0.5, 0.2], // Orange
+      [0.2, 0.9, 0.5], // Green
+      [0.5, 0.2, 0.9], // Purple
+      [0.9, 0.9, 0.2], // Yellow
+    ].flat(),
+  ),
 }
 
 let SHAPE_COUNTER = 0
@@ -65,6 +95,18 @@ const gl = canvas.getContext('webgl2')!
 // Blending parameter
 let blendFactor = 0.8
 
+// Orbit controls state
+const orbitState = {
+  theta: 0, // Horizontal angle
+  phi: Math.PI / 4, // Vertical angle
+  radius: 6,
+  isDragging: false,
+  lastX: 0,
+  lastY: 0,
+  targetTheta: 0,
+  targetPhi: Math.PI / 4,
+}
+
 abstract class Shape {
   id = SHAPE_COUNTER++
   abstract template: GLSL
@@ -75,6 +117,8 @@ abstract class Shape {
   calculateSDF = Symbol()
   u_data = Symbol()
   u_colors = Symbol()
+  u_positions = Symbol()
+  u_radii = Symbol()
 
   setData(data: Float32Array) {
     this.view?.uniforms[this.u_data]?.set(data)
@@ -313,9 +357,109 @@ float ${this.calculateSDF}(in vec3 point, out int nearestIndex, out float minDis
 `
 }
 
+class Torus extends Shape {
+  torusIntersection = Symbol()
+  torusNormal = Symbol()
+  torusSDF = Symbol()
+
+  setData(positions: Float32Array, radii: Float32Array) {
+    this.view?.uniforms[this.u_positions]?.set(positions)
+    this.view?.uniforms[this.u_radii]?.set(radii)
+    return this
+  }
+
+  template = glsl`
+
+#define NUM_TORI ${NUM_TORI}
+
+struct Torus {
+	vec3 position;
+	float majorRadius;
+	float minorRadius;
+	vec3 color;
+};
+
+${uniform.vec3(this.u_positions, { size: NUM_TORI })}
+${uniform.vec2(this.u_radii, { size: NUM_TORI })}
+${uniform.vec3(this.u_colors, { size: NUM_TORI })}
+
+// Signed distance function for torus
+float ${this.torusSDF}(in vec3 point, in vec3 center, in float majorRadius, in float minorRadius)
+{
+	vec3 p = point - center;
+	vec2 q = vec2(length(p.xz) - majorRadius, p.y);
+	return length(q) - minorRadius;
+}
+
+// Calculate SDF for all tori
+float ${this.calculateSDF}(in vec3 point, out int nearestIndex, out float minDistance)
+{
+	minDistance = 1000.0;
+	nearestIndex = -1;
+	
+	for(int i = 0; i < ${NUM_TORI}; i++) {
+		float distance = ${this.torusSDF}(point, ${this.u_positions}[i], ${this.u_radii}[i].x, ${this.u_radii}[i].y);
+		
+		if(distance < minDistance) {
+			minDistance = distance;
+			nearestIndex = i;
+		}
+	}
+	
+	return minDistance;
+}
+
+// Torus intersection for fallback rendering
+float ${this.torusIntersection}(in vec3 rayOrigin, in vec3 rayDirection, in Torus torus)
+{
+	// Simplified intersection - not exact but good enough for fallback
+	return ${this.torusSDF}(rayOrigin, torus.position, torus.majorRadius, torus.minorRadius);
+}
+
+// Calculate torus normal
+vec3 ${this.torusNormal}(in vec3 hitPosition, in Torus torus)
+{
+	vec3 p = hitPosition - torus.position;
+	float len = length(vec2(p.x, p.z));
+	vec3 d = vec3(p.x, 0.0, p.z) / len;
+	return normalize(p - d * torus.majorRadius);
+}
+
+// Find closest torus intersection
+float ${this.calculateIntersection}(in vec3 rayOrigin, in vec3 rayDirection, in float maxDistance, out int hitIndex, out int hitType)
+{
+	float closestDistance = maxDistance;
+	hitIndex = -1;
+	hitType = -1;
+	
+	for(int i = 0; i < ${NUM_TORI}; i++) {
+		Torus torus = Torus(${this.u_positions}[i], ${this.u_radii}[i].x, ${this.u_radii}[i].y, ${this.u_colors}[i]);
+		float distance = ${this.torusIntersection}(rayOrigin, rayDirection, torus);
+		
+		if(distance > 0.0 && distance < closestDistance) {
+			closestDistance = distance;
+			hitIndex = i;
+			hitType = ${this.id};
+		}
+	}
+	
+	return hitIndex >= 0 ? closestDistance : -1.0;
+}
+
+// Calculate torus normal and color at hit point
+void ${this.calculateColor}(in vec3 hitPosition, in int hitIndex, out vec3 normal, out vec3 color)
+{
+	Torus hitTorus = Torus(${this.u_positions}[hitIndex], ${this.u_radii}[hitIndex].x, ${this.u_radii}[hitIndex].y, ${this.u_colors}[hitIndex]);
+	normal = ${this.torusNormal}(hitPosition, hitTorus);
+	color = ${this.u_colors}[hitIndex];
+}
+`
+}
+
 const box = new Box()
 const sphere = new Sphere()
-const shapes = [box, sphere]
+const torus = new Torus()
+const shapes = [box, sphere, torus]
 
 const { program, view } = compile.toQuad(
   gl,
@@ -334,6 +478,10 @@ ${shapes.map(shape => shape.template)}
 
 ${uniform.float('aspectRatio')}
 ${uniform.float('u_blendFactor')}
+${uniform.vec3('u_cameraPos')}
+${uniform.vec3('u_cameraDir')}
+${uniform.vec3('u_cameraUp')}
+${uniform.vec3('u_cameraRight')}
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -346,50 +494,70 @@ float smoothMin(float a, float b, float k) {
 	return min(a, b) - h * h * 0.25 / k;
 }
 
-// Combined SDF function that blends all shapes
-float combinedSDF(in vec3 point, out int nearestShapeType, out int nearestIndex)
+// Structure to hold shape contribution info
+struct ShapeContribution {
+	float distance;
+	int shapeType;
+	int index;
+	float weight;
+};
+
+// Combined SDF function that blends all shapes and calculates color weights
+float combinedSDF(in vec3 point, out vec3 blendedColor)
 {
-	float minDistance = 1000.0;
-	nearestShapeType = -1;
-	nearestIndex = -1;
+	ShapeContribution shapes[${shapes.length}];
+	float totalWeight = 0.0;
+	blendedColor = vec3(0.0);
 	
 	${shapes.map((shape, i) => {
-		const index = Symbol()
-		const minDist = Symbol()
-		const sdf = Symbol()
-		return glsl`
+    const index = Symbol()
+    const minDist = Symbol()
+    return glsl`
 	int ${index};
 	float ${minDist};
-	float ${sdf} = ${shape.calculateSDF}(point, ${index}, ${minDist});
+	shapes[${i}].distance = ${shape.calculateSDF}(point, ${index}, ${minDist});
+	shapes[${i}].shapeType = ${shape.id};
+	shapes[${i}].index = ${index};
+	`
+  })}
 	
-	if(${i} == 0) {
-		minDistance = ${sdf};
-		nearestShapeType = ${shape.id};
-		nearestIndex = ${index};
-	} else {
-		float oldMin = minDistance;
-		minDistance = smoothMin(minDistance, ${sdf}, u_blendFactor);
-		
-		// Update nearest shape info based on which shape contributes more to the blend
-		if(abs(${sdf} - minDistance) < abs(oldMin - minDistance)) {
-			nearestShapeType = ${shape.id};
-			nearestIndex = ${index};
-		}
-	}`
-	})}
+	// Calculate blended distance using smooth minimum
+	float blendedDist = shapes[0].distance;
+	for(int i = 1; i < ${shapes.length}; i++) {
+		blendedDist = smoothMin(blendedDist, shapes[i].distance, u_blendFactor);
+	}
 	
-	return minDistance;
+	// Calculate weights based on how close each shape is to the blended surface
+	for(int i = 0; i < ${shapes.length}; i++) {
+		float diff = abs(shapes[i].distance - blendedDist);
+		// Use exponential falloff with sharper cutoff for more vibrant colors
+		shapes[i].weight = exp(-diff * 20.0 / u_blendFactor);
+		totalWeight += shapes[i].weight;
+	}
+	
+	// Normalize weights and blend colors
+	if(totalWeight > 0.0) {
+		${shapes.map(
+      (shape, i) => glsl`
+		if(shapes[${i}].index >= 0) {
+			vec3 shapeColor = ${shape.u_colors}[shapes[${i}].index];
+			blendedColor += shapeColor * (shapes[${i}].weight / totalWeight);
+		}`,
+    )}
+	}
+	
+	return blendedDist;
 }
 
 // Calculate normal using gradient of SDF
 vec3 calculateSDFNormal(in vec3 point) {
-	const float eps = 0.001;
-	int dummy1, dummy2;
+	const float eps = ${NORMAL_EPSILON};
+	vec3 dummyColor;
 	
-	float center = combinedSDF(point, dummy1, dummy2);
-	float dx = combinedSDF(point + vec3(eps, 0.0, 0.0), dummy1, dummy2) - center;
-	float dy = combinedSDF(point + vec3(0.0, eps, 0.0), dummy1, dummy2) - center;
-	float dz = combinedSDF(point + vec3(0.0, 0.0, eps), dummy1, dummy2) - center;
+	float center = combinedSDF(point, dummyColor);
+	float dx = combinedSDF(point + vec3(eps, 0.0, 0.0), dummyColor) - center;
+	float dy = combinedSDF(point + vec3(0.0, eps, 0.0), dummyColor) - center;
+	float dz = combinedSDF(point + vec3(0.0, 0.0, eps), dummyColor) - center;
 	
 	return normalize(vec3(dx, dy, dz));
 }
@@ -402,14 +570,14 @@ vec3 calculateLighting(in vec3 position, in vec3 normal, in vec3 color)
 }
 
 // Raymarching with SDF
-bool raymarch(in vec3 rayOrigin, in vec3 rayDirection, out vec3 hitPosition, out int hitType, out int hitIndex)
+bool raymarch(in vec3 rayOrigin, in vec3 rayDirection, out vec3 hitPosition, out vec3 hitColor)
 {
 	float t = 0.0;
-	for(int i = 0; i < 128; i++) {
+	for(int i = 0; i < ${RAY_MARCH_ITERATIONS}; i++) {
 		hitPosition = rayOrigin + t * rayDirection;
-		float dist = combinedSDF(hitPosition, hitType, hitIndex);
+		float dist = combinedSDF(hitPosition, hitColor);
 		
-		if(dist < 0.001) {
+		if(dist < ${RAY_HIT_THRESHOLD}) {
 			return true;
 		}
 		
@@ -424,30 +592,20 @@ bool raymarch(in vec3 rayOrigin, in vec3 rayDirection, out vec3 hitPosition, out
 
 void main()
 {	
-	// Ray from camera through pixel
-	vec3 rayOrigin = vec3(0.0, 0.0, 4.0);
-	vec3 rayDirection = normalize(vec3(v_uv.x * aspectRatio, v_uv.y, -1.0));
+	// Ray from camera through pixel using camera vectors
+	vec3 rayOrigin = u_cameraPos;
+	vec3 rayDirection = normalize(u_cameraDir + v_uv.x * u_cameraRight * aspectRatio + v_uv.y * u_cameraUp);
 	
 	vec3 color = vec3(0.1, 0.1, 0.2); // Background color
 	
 	vec3 hitPosition;
-	int hitType, hitIndex;
+	vec3 hitColor;
 	
-	if(raymarch(rayOrigin, rayDirection, hitPosition, hitType, hitIndex)) {
+	if(raymarch(rayOrigin, rayDirection, hitPosition, hitColor)) {
 		// Calculate normal using SDF gradient
 		vec3 normal = calculateSDFNormal(hitPosition);
 		
-		// Get color from the nearest shape
-		vec3 hitColor;
-		switch(hitType) {
-			${shapes.map(shape => glsl`
-			case ${shape.id}:
-				hitColor = ${shape.u_colors}[hitIndex];
-				break;`)}
-			default:
-				hitColor = vec3(1.0, 0.0, 1.0); // Error color
-		}
-		
+		// Use the blended color from raymarch
 		color = calculateLighting(hitPosition, normal, hitColor);
 	}
 	
@@ -461,58 +619,107 @@ void main()
 gl.useProgram(program)
 
 // Set view for all shapes
-shapes.forEach(shape => shape.view = view)
+shapes.forEach(shape => (shape.view = view))
 
 // Bind quad buffer
 view.attributes.a_quad.bind()
 
-sphere.setData(SPHERE_FLOAT_ARRAYS.data).setColors(SPHERE_FLOAT_ARRAYS.colors)
-box.setData(BOX_FLOAT_ARRAYS.data).setColors(BOX_FLOAT_ARRAYS.colors)
+sphere.setData(SPHERE_FLOAT_ARRAYS.positions).setColors(SPHERE_FLOAT_ARRAYS.colors)
+box.setData(BOX_FLOAT_ARRAYS.positions).setColors(BOX_FLOAT_ARRAYS.colors)
+torus
+  .setData(TORUS_FLOAT_ARRAYS.positions, TORUS_FLOAT_ARRAYS.radii)
+  .setColors(TORUS_FLOAT_ARRAYS.colors)
 
 // Set initial aspect ratio
 view.uniforms.aspectRatio.set(canvas.width / canvas.height)
 view.uniforms.u_blendFactor.set(blendFactor)
+
+// Initialize camera uniforms
+function updateCamera() {
+  // Calculate camera position from spherical coordinates
+  const x = orbitState.radius * Math.sin(orbitState.phi) * Math.cos(orbitState.theta)
+  const y = orbitState.radius * Math.cos(orbitState.phi)
+  const z = orbitState.radius * Math.sin(orbitState.phi) * Math.sin(orbitState.theta)
+
+  const cameraPos = [x, y, z] as const
+  const target = [0, 0, 0] as const
+
+  // Calculate camera direction (looking at origin)
+  const dir = [
+    target[0] - cameraPos[0],
+    target[1] - cameraPos[1],
+    target[2] - cameraPos[2],
+  ] as const
+  const dirLength = Math.sqrt(dir[0] ** 2 + dir[1] ** 2 + dir[2] ** 2)
+  dir[0] /= dirLength
+  dir[1] /= dirLength
+  dir[2] /= dirLength
+
+  // Calculate up vector
+  const up = [0, 1, 0] as const
+
+  // Calculate right vector (cross product of dir and up)
+  const right = [
+    dir[1] * up[2] - dir[2] * up[1],
+    dir[2] * up[0] - dir[0] * up[2],
+    dir[0] * up[1] - dir[1] * up[0],
+  ] as const
+
+  // Recalculate up vector (cross product of right and dir)
+  const finalUp = [
+    right[1] * dir[2] - right[2] * dir[1],
+    right[2] * dir[0] - right[0] * dir[2],
+    right[0] * dir[1] - right[1] * dir[0],
+  ] as const
+
+  view.uniforms.u_cameraPos.set(cameraPos[0], cameraPos[1], cameraPos[2])
+  view.uniforms.u_cameraDir.set(dir[0], dir[1], dir[2])
+  view.uniforms.u_cameraUp.set(finalUp[0], finalUp[1], finalUp[2])
+  view.uniforms.u_cameraRight.set(right[0], right[1], right[2])
+}
+
+updateCamera()
 
 function animate(timestamp: number) {
   const time = timestamp / 1000
 
   // Make the center sphere pulse
   const pulseFactor = 1.0 + 0.3 * Math.sin(time * 2)
-  SPHERE_FLOAT_ARRAYS.data[3] = pulseFactor // Update radius of sphere 0
+  SPHERE_FLOAT_ARRAYS.positions[3] = pulseFactor // Update radius of sphere 0
 
   // Orbit some spheres - smaller radius for more overlap
   const orbitRadius = 1.5
 
   // Update sphere 1 - slower movement
-  SPHERE_FLOAT_ARRAYS.data[4] = 1.5 + Math.cos(time * 0.4) * orbitRadius * 0.5
-  SPHERE_FLOAT_ARRAYS.data[5] = 0.5 + Math.sin(time * 0.6) * 0.8
-  SPHERE_FLOAT_ARRAYS.data[6] = -1 + Math.sin(time * 0.4) * orbitRadius * 0.5
+  SPHERE_FLOAT_ARRAYS.positions[4] = 1.5 + Math.cos(time * 0.4) * orbitRadius * 0.5
+  SPHERE_FLOAT_ARRAYS.positions[5] = 0.5 + Math.sin(time * 0.6) * 0.8
+  SPHERE_FLOAT_ARRAYS.positions[6] = -1 + Math.sin(time * 0.4) * orbitRadius * 0.5
 
   // Update sphere 2 - slower movement
-  SPHERE_FLOAT_ARRAYS.data[8] = -1.5 + Math.cos(time * 0.3 + Math.PI) * orbitRadius * 0.5
-  SPHERE_FLOAT_ARRAYS.data[9] = -0.5 + Math.cos(time * 0.5) * 0.6
-  SPHERE_FLOAT_ARRAYS.data[10] = 0.5 + Math.sin(time * 0.3 + Math.PI) * orbitRadius * 0.5
+  SPHERE_FLOAT_ARRAYS.positions[8] = -1.5 + Math.cos(time * 0.3 + Math.PI) * orbitRadius * 0.5
+  SPHERE_FLOAT_ARRAYS.positions[9] = -0.5 + Math.cos(time * 0.5) * 0.6
+  SPHERE_FLOAT_ARRAYS.positions[10] = 0.5 + Math.sin(time * 0.3 + Math.PI) * orbitRadius * 0.5
 
   // Sphere 3 - gentle vertical motion near boxes
-  SPHERE_FLOAT_ARRAYS.data[13] = 1.5 + Math.sin(time * 0.8) * 0.5 // y position
+  SPHERE_FLOAT_ARRAYS.positions[13] = 1.5 + Math.sin(time * 0.8) * 0.5 // y position
 
   // Sphere 4 - small circular motion
-  SPHERE_FLOAT_ARRAYS.data[16] = -1 + Math.sin(time * 0.4) * 0.8 // x
-  SPHERE_FLOAT_ARRAYS.data[17] = -1.5 + Math.sin(time * 0.6) * 0.5 // y
-  SPHERE_FLOAT_ARRAYS.data[18] = 1 + Math.cos(time * 0.4) * 0.3 // z
+  SPHERE_FLOAT_ARRAYS.positions[16] = -1 + Math.sin(time * 0.4) * 0.8 // x
+  SPHERE_FLOAT_ARRAYS.positions[17] = -1.5 + Math.sin(time * 0.6) * 0.5 // y
+  SPHERE_FLOAT_ARRAYS.positions[18] = 1 + Math.cos(time * 0.4) * 0.3 // z
 
   // Sphere 5 - gentle motion + size change
-  SPHERE_FLOAT_ARRAYS.data[20] = 2 + Math.cos(time * 0.3) * 0.7 // x
-  SPHERE_FLOAT_ARRAYS.data[22] = -1.5 + Math.sin(time * 0.3) * 0.5 // z
-  SPHERE_FLOAT_ARRAYS.data[23] = 0.7 + 0.2 * Math.sin(time * 2) // radius
+  SPHERE_FLOAT_ARRAYS.positions[20] = 2 + Math.cos(time * 0.3) * 0.7 // x
+  SPHERE_FLOAT_ARRAYS.positions[22] = -1.5 + Math.sin(time * 0.3) * 0.5 // z
+  SPHERE_FLOAT_ARRAYS.positions[23] = 0.7 + 0.2 * Math.sin(time * 2) // radius
 
   // Sphere 6 - slow wave motion
-  SPHERE_FLOAT_ARRAYS.data[24] = -2 + Math.sin(time * 0.4) * 0.5 // x
-  SPHERE_FLOAT_ARRAYS.data[25] = 1 + Math.sin(time * 0.6) * 0.4 // y
+  SPHERE_FLOAT_ARRAYS.positions[24] = -2 + Math.sin(time * 0.4) * 0.5 // x
+  SPHERE_FLOAT_ARRAYS.positions[25] = 1 + Math.sin(time * 0.6) * 0.4 // y
 
   // Sphere 7 - gentle rotation
-  SPHERE_FLOAT_ARRAYS.data[28] = Math.cos(time * 0.3) * 1.2 // x
-  SPHERE_FLOAT_ARRAYS.data[29] = -0.5 + Math.sin(time * 0.3) * 0.3 // y
+  SPHERE_FLOAT_ARRAYS.positions[28] = Math.cos(time * 0.3) * 1.2 // x
+  SPHERE_FLOAT_ARRAYS.positions[29] = -0.5 + Math.sin(time * 0.3) * 0.3 // y
 
   // Animate colors for more spheres
   SPHERE_FLOAT_ARRAYS.colors[0] = 0.5 + 0.5 * Math.sin(time * 3) // Red channel of sphere 0
@@ -524,28 +731,116 @@ function animate(timestamp: number) {
 
   // Animate some boxes
   // Box 0 - gentle motion near spheres
-  BOX_FLOAT_ARRAYS.data[0] = 1 + Math.cos(time * 0.35) * 0.3 // x
-  BOX_FLOAT_ARRAYS.data[2] = -0.5 + Math.sin(time * 0.35) * 0.3 // z
+  BOX_FLOAT_ARRAYS.positions[0] = 1 + Math.cos(time * 0.35) * 0.3 // x
+  BOX_FLOAT_ARRAYS.positions[2] = -0.5 + Math.sin(time * 0.35) * 0.3 // z
 
   // Box 1 - scale pulsing
-  BOX_FLOAT_ARRAYS.data[7] = 0.8 + 0.2 * Math.sin(time * 1.5) // size
+  BOX_FLOAT_ARRAYS.positions[7] = 0.8 + 0.2 * Math.sin(time * 1.5) // size
 
   // Box 2 - gentle vertical motion
-  BOX_FLOAT_ARRAYS.data[9] = -1 + Math.sin(time * 0.4) * 0.3 // y
+  BOX_FLOAT_ARRAYS.positions[9] = -1 + Math.sin(time * 0.4) * 0.3 // y
+
+  // Animate tori
+  // Torus 0 - rotate major radius
+  TORUS_FLOAT_ARRAYS.radii[0] = 0.8 + 0.2 * Math.sin(time * 1.2) // major radius
+
+  // Torus 1 - orbit around center
+  TORUS_FLOAT_ARRAYS.positions[3] = -1.5 + Math.cos(time * 0.5) * 0.5 // x
+  TORUS_FLOAT_ARRAYS.positions[5] = Math.sin(time * 0.5) * 0.5 // z
+
+  // Torus 2 - vertical motion
+  TORUS_FLOAT_ARRAYS.positions[7] = -0.5 + Math.sin(time * 0.7) * 0.3 // y
+
+  // Torus 3 - pulsing minor radius
+  TORUS_FLOAT_ARRAYS.radii[7] = 0.2 + 0.1 * Math.sin(time * 2) // minor radius
 
   // Update the uniform arrays with the animated data
-  sphere.setData(SPHERE_FLOAT_ARRAYS.data).setColors(SPHERE_FLOAT_ARRAYS.colors)
-  box.setData(BOX_FLOAT_ARRAYS.data).setColors(BOX_FLOAT_ARRAYS.colors)
+  sphere.setData(SPHERE_FLOAT_ARRAYS.positions).setColors(SPHERE_FLOAT_ARRAYS.colors)
+  box.setData(BOX_FLOAT_ARRAYS.positions).setColors(BOX_FLOAT_ARRAYS.colors)
+  torus
+    .setData(TORUS_FLOAT_ARRAYS.positions, TORUS_FLOAT_ARRAYS.radii)
+    .setColors(TORUS_FLOAT_ARRAYS.colors)
 
   // Animate blend factor with larger variation for more visible blending
   blendFactor = 0.5 + 0.4 * Math.sin(time * 0.3)
   view.uniforms.u_blendFactor.set(blendFactor)
 }
 
+// Mouse controls
+canvas.addEventListener('mousedown', e => {
+  orbitState.isDragging = true
+  orbitState.lastX = e.clientX
+  orbitState.lastY = e.clientY
+})
+
+canvas.addEventListener('mousemove', e => {
+  if (!orbitState.isDragging) return
+
+  const deltaX = e.clientX - orbitState.lastX
+  const deltaY = e.clientY - orbitState.lastY
+
+  orbitState.targetTheta += deltaX * 0.01
+  orbitState.targetPhi = Math.max(
+    0.1,
+    Math.min(Math.PI - 0.1, orbitState.targetPhi - deltaY * 0.01),
+  )
+
+  orbitState.lastX = e.clientX
+  orbitState.lastY = e.clientY
+})
+
+canvas.addEventListener('mouseup', () => {
+  orbitState.isDragging = false
+})
+
+canvas.addEventListener('mouseleave', () => {
+  orbitState.isDragging = false
+})
+
+// Mouse wheel for zoom
+canvas.addEventListener('wheel', e => {
+  e.preventDefault()
+  orbitState.radius = Math.max(2, Math.min(15, orbitState.radius + e.deltaY * 0.01))
+})
+
+// Touch controls
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    orbitState.isDragging = true
+    orbitState.lastX = e.touches[0].clientX
+    orbitState.lastY = e.touches[0].clientY
+  }
+})
+
+canvas.addEventListener('touchmove', e => {
+  if (!orbitState.isDragging || e.touches.length !== 1) return
+
+  const deltaX = e.touches[0].clientX - orbitState.lastX
+  const deltaY = e.touches[0].clientY - orbitState.lastY
+
+  orbitState.targetTheta += deltaX * 0.01
+  orbitState.targetPhi = Math.max(
+    0.1,
+    Math.min(Math.PI - 0.1, orbitState.targetPhi - deltaY * 0.01),
+  )
+
+  orbitState.lastX = e.touches[0].clientX
+  orbitState.lastY = e.touches[0].clientY
+})
+
+canvas.addEventListener('touchend', () => {
+  orbitState.isDragging = false
+})
+
 // Animation loop
 function draw(timestamp: number) {
   if (controller.signal.aborted) return
 
+  // Smooth camera rotation
+  orbitState.theta += (orbitState.targetTheta - orbitState.theta) * 0.1
+  orbitState.phi += (orbitState.targetPhi - orbitState.phi) * 0.1
+
+  updateCamera()
   animate(timestamp)
 
   gl.drawArrays(gl.TRIANGLES, 0, 6)
