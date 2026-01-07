@@ -10,6 +10,10 @@
     "./tag": {
       "import": "./dist/tag.mjs",
       "types": "./dist/tag.d.mts"
+    },
+    "./gl": {
+      "import": "./dist/gl.mjs",
+      "types": "./dist/gl.d.mts"
     }
   },
   "scripts": {
@@ -19,7 +23,7 @@
     "dev:watch": "concurrently \"pnpm dev:preview\" \"vite dev:build --watch\"",
     "dev": "vite serve dev",
     "format": "prettier -w \"src/**/*.{js,ts,json,css,tsx,jsx}\" \"dev/**/*.{js,ts,json,css,tsx,jsx}\"",
-    "prepublish": "pnpm build",
+    "prepublish": "pnpm test && pnpm build",
     "test": "vitest --run",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",

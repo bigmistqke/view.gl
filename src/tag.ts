@@ -1,4 +1,5 @@
 import { toID, view } from '.'
+import { createProgram } from './gl'
 import type { Prettify } from './type-utils'
 import type {
   AttributeDefinition,
@@ -17,7 +18,7 @@ import type {
   ViewSchema,
   ViewSchemaPartial,
 } from './types'
-import { createProgram, createUpsertMap } from './utils'
+import { createUpsertMap } from './utils'
 
 export function glsl<TSlot extends GLSLSlot, TSlots extends TSlot[]>(
   template: TemplateStringsArray,

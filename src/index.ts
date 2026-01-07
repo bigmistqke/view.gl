@@ -22,9 +22,9 @@ import {
   isSamplerKind,
   kindToSize,
   kindToUniformFnName,
-  ObjectUtils,
 } from './utils'
 export * from './types'
+import * as ObjectUtils from "./utils/object"
 
 /**********************************************************************************/
 /*                                                                                */
