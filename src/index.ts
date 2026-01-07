@@ -24,7 +24,7 @@ import {
   kindToUniformFnName,
 } from './utils'
 export * from './types'
-import * as ObjectUtils from "./utils/object"
+import * as ObjectUtils from './utils/object'
 
 /**********************************************************************************/
 /*                                                                                */

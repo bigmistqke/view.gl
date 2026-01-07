@@ -1,5 +1,5 @@
-import { RemoveSuffix } from "./type-utils"
-import { GL } from "./types"
+import { RemoveSuffix } from './type-utils'
+import { GL } from './types'
 
 export function createShader(gl: GL, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type)
