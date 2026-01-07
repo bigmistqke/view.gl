@@ -1,3 +1,36 @@
+function createShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("Failed to create shader");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    throw new Error(
+      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
+    );
+  }
+  return shader;
+}
+function createProgram(gl, vertexSource, fragmentSource) {
+  const program = gl.createProgram();
+  if (!program) throw new Error("Failed to create WebGL program");
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    throw new Error(`Failed to link program: ${info}`);
+  }
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+  return program;
+}
 const INSTANCED_ARRAYS_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
 function getInstancedArrays(gl) {
   if (gl instanceof WebGL2RenderingContext) return gl;
@@ -388,40 +421,6 @@ function bufferView(gl, schema, { signal } = {}) {
     forEach(buffers, (value) => value.dispose());
   });
   return buffers;
-}
-
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  if (!shader) throw new Error("Failed to create shader");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error(
-      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
-    );
-  }
-  return shader;
-}
-function createProgram(gl, vertexSource, fragmentSource) {
-  const program = gl.createProgram();
-  if (!program) throw new Error("Failed to create WebGL program");
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(program);
-    gl.deleteProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    throw new Error(`Failed to link program: ${info}`);
-  }
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-  return program;
 }
 
 function glsl(template, ...slots) {
