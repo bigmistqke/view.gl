@@ -1,4 +1,4 @@
-import { getInstancedArrays, getVertexArrayObject } from './features'
+import { getInstancedArrays, getVertexArrayObject } from './gl'
 import type {
   AttributeMethods,
   AttributeSchema,
