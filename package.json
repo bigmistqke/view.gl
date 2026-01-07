@@ -27,7 +27,8 @@
     "test": "vitest --run",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
-    "lint:types": "tsc --noEmit"
+    "lint:types": "tsc --noEmit",
+    "bump": "bumpp"
   },
   "keywords": [
     "WebGL"
@@ -44,6 +45,7 @@
     "typescript": "^5.8.3",
     "vite": "^7.0.2",
     "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "bumpp": "^10.3.2"
   }
 }
