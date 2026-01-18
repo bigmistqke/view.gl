@@ -1,6 +1,6 @@
 {
   "name": "@bigmistqke/view.gl",
-  "version": "0.1.9",
+  "version": "0.1.11",
   "description": "👀 Utilities for managing WebGL resources.",
   "exports": {
     ".": {
@@ -14,16 +14,17 @@
   },
   "scripts": {
     "build": "tsup",
+    "bump": "bumpp",
     "dev:build": "vite build dev",
     "dev:preview": "vite preview dev",
     "dev:watch": "concurrently \"pnpm dev:preview\" \"vite dev:build --watch\"",
     "dev": "vite serve dev",
     "format": "prettier -w \"src/**/*.{js,ts,json,css,tsx,jsx}\" \"dev/**/*.{js,ts,json,css,tsx,jsx}\"",
+    "lint:types": "tsc --noEmit",
     "prepublish": "pnpm build",
-    "test": "vitest --run",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
-    "lint:types": "tsc --noEmit"
+    "test": "vitest --run"
   },
   "keywords": [
     "WebGL"
@@ -33,6 +34,7 @@
   "packageManager": "pnpm@10.5.1",
   "devDependencies": {
     "@vitest/ui": "^3.2.4",
+    "bumpp": "^10.4.0",
     "concurrently": "^9.2.1",
     "happy-dom": "^20.0.0",
     "prettier": "^3.6.2",
