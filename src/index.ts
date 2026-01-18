@@ -93,12 +93,12 @@ export function uniformView<T extends UniformSchema>(
   program: WebGLProgram,
   schema: T,
 ): InferUniformView<T> {
+  // @ts-expect-error - conditional return type based on size is hard to infer
   return ObjectUtils.map(schema, ({ kind, size }, key) => {
     const name = toID(key)
 
-    const location = gl.getUniformLocation(program, name)
-
     if (isSamplerKind(kind)) {
+      const location = gl.getUniformLocation(program, name)
       return {
         set(arg: number) {
           gl.uniform1i(location, arg)
@@ -106,7 +106,39 @@ export function uniformView<T extends UniformSchema>(
       }
     }
 
-    const fnName = `uniform${kindToUniformFnName(kind)}${size ? 'v' : ''}`
+    // Array uniform - support both bulk set and indexed access
+    if (size) {
+      const bulkFnName = `uniform${kindToUniformFnName(kind)}v`
+      // @ts-ignore FIX WEBGL/WEBGL2 TYPES
+      const bulkFn = gl[bulkFnName].bind(gl)
+      const bulkLocation = gl.getUniformLocation(program, name)
+
+      const elementFnName = `uniform${kindToUniformFnName(kind)}`
+      // @ts-ignore FIX WEBGL/WEBGL2 TYPES
+      const elementFn = gl[elementFnName].bind(gl)
+
+      // Build array of element setters
+      const elements: Array<{ set(...args: any[]): void }> = []
+      for (let i = 0; i < size; i++) {
+        const location = gl.getUniformLocation(program, `${name}[${i}]`)
+        elements[i] = {
+          set(...args: any[]) {
+            elementFn(location, ...args)
+          },
+        }
+      }
+
+      // Return array-like object with bulk set
+      return Object.assign(elements, {
+        set(arg: Float32Array) {
+          bulkFn(bulkLocation, arg)
+        },
+      })
+    }
+
+    // Non-array uniform
+    const location = gl.getUniformLocation(program, name)
+    const fnName = `uniform${kindToUniformFnName(kind)}`
 
     // @ts-ignore FIX WEBGL/WEBGL2 TYPES
     const fn = gl[fnName].bind(gl)

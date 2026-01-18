@@ -1,5 +1,11 @@
 import { DeepMerge, Prettify, ShallowMerge } from './type-utils'
 
+/**********************************************************************************/
+/*                                                                                */
+/*                                 WebGL Constants                                */
+/*                                                                                */
+/**********************************************************************************/
+
 export type GL = WebGLRenderingContext | WebGL2RenderingContext
 
 export type GLTarget = 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
@@ -134,201 +140,70 @@ export interface KIND_TO_SIZE_MAP {
 /*                                                                                */
 /**********************************************************************************/
 
-export type UniformFnName =
-  | '1f'
-  | '2f'
-  | '3f'
-  | '4f'
-  | '1i'
-  | '2i'
-  | '3i'
-  | '4i'
-  | '1ui'
-  | '2ui'
-  | '3ui'
-  | '4ui'
-  | 'mat2'
-  | 'mat3'
-  | 'mat4'
-  | 'mat2x3'
-  | 'mat2x4'
-  | 'mat3x2'
-  | 'mat3x4'
-  | 'mat4x2'
-  | 'mat4x3'
-  | 'sampler2D'
-  | 'samplerCube'
-  | 'sampler2DArray'
-  | 'isampler2D'
-  | 'isamplerCube'
-  | 'isampler2DArray'
-  | 'usampler2D'
-  | 'usamplerCube'
-  | 'usampler2DArray'
+export type UniformFnName = KIND_TO_UNIFORM_FN_NAME_MAP[keyof KIND_TO_UNIFORM_FN_NAME_MAP]
 
-export type UniformKind =
-  | 'float'
-  | 'vec2'
-  | 'vec3'
-  | 'vec4'
-  | 'int'
-  | 'ivec2'
-  | 'ivec3'
-  | 'ivec4'
-  | 'bool'
-  | 'bvec2'
-  | 'bvec3'
-  | 'bvec4'
-  | 'mat2'
-  | 'mat3'
-  | 'mat4'
-  | 'sampler2D'
-  | 'samplerCube'
-  // webgl2
-  | 'uint'
-  | 'uvec2'
-  | 'uvec3'
-  | 'uvec4'
-  | 'mat2x3'
-  | 'mat2x4'
-  | 'mat3x2'
-  | 'mat3x4'
-  | 'mat4x2'
-  | 'mat4x3'
-  | 'sampler3D'
-  | 'sampler2DArray'
-  | 'sampler2DShadow'
-  | 'samplerCubeShadow'
-  | 'sampler2DArrayShadow'
-  | 'isampler2D'
-  | 'isampler3D'
-  | 'isamplerCube'
-  | 'isampler2DArray'
-  | 'usampler2D'
-  | 'usampler3D'
-  | 'usamplerCube'
-  | 'usampler2DArray'
+export type UniformKind = keyof KIND_TO_UNIFORM_FN_NAME_MAP
 
-// prettier-ignore
+type MatrixArray<Size extends number> = [Float32Array] | number[]
+
 interface UniformKindMap {
   // Float scalars and vectors
-  float: [number];
-  vec2: [number, number];
-  vec3: [number, number, number];
-  vec4: [number, number, number, number];
+  float: [number]
+  vec2: [number, number]
+  vec3: [number, number, number]
+  vec4: [number, number, number, number]
 
   // Signed integer scalars and vectors
-  int: [number];
-  ivec2: [number, number];
-  ivec3: [number, number, number];
-  ivec4: [number, number, number, number];
+  int: [number]
+  ivec2: [number, number]
+  ivec3: [number, number, number]
+  ivec4: [number, number, number, number]
 
   // Booleans (set with uniform1i)
-  bool: [number];
-  bvec2: [number, number];
-  bvec3: [number, number, number];
-  bvec4: [number, number, number, number];
+  bool: [number]
+  bvec2: [number, number]
+  bvec3: [number, number, number]
+  bvec4: [number, number, number, number]
 
   // Unsigned integer scalars and vectors (WebGL2)
-  uint: [number];
-  uvec2: [number, number];
-  uvec3: [number, number, number];
-  uvec4: [number, number, number, number];
+  uint: [number]
+  uvec2: [number, number]
+  uvec3: [number, number, number]
+  uvec4: [number, number, number, number]
 
-  // Matrices (float arrays or explicit numbers)
-  mat2:
-    | [Float32Array]
-    | [
-        number, number,
-        number, number
-      ];
-
-  mat3:
-    | [Float32Array]
-    | [
-        number, number, number,
-        number, number, number,
-        number, number, number
-      ];
-
-  mat4:
-    | [Float32Array]
-    | [
-        number, number, number, number,
-        number, number, number, number,
-        number, number, number, number,
-        number, number, number, number
-      ];
+  // Matrices
+  mat2: MatrixArray<4>
+  mat3: MatrixArray<9>
+  mat4: MatrixArray<16>
 
   // WebGL2 extended matrix types
-  mat2x3:
-    | [Float32Array]
-    | [
-        number, number, number,
-        number, number, number
-      ];
-
-  mat2x4:
-    | [Float32Array]
-    | [
-        number, number, number, number,
-        number, number, number, number
-      ];
-
-  mat3x2:
-    | [Float32Array]
-    | [
-        number, number,
-        number, number,
-        number, number
-      ];
-
-  mat3x4:
-    | [Float32Array]
-    | [
-        number, number, number, number,
-        number, number, number, number,
-        number, number, number, number
-      ];
-
-  mat4x2:
-    | [Float32Array]
-    | [
-        number, number,
-        number, number,
-        number, number,
-        number, number
-      ];
-
-  mat4x3:
-    | [Float32Array]
-    | [
-        number, number, number,
-        number, number, number,
-        number, number, number,
-        number, number, number
-      ];
+  mat2x3: MatrixArray<6>
+  mat2x4: MatrixArray<8>
+  mat3x2: MatrixArray<6>
+  mat3x4: MatrixArray<12>
+  mat4x2: MatrixArray<8>
+  mat4x3: MatrixArray<12>
 
   // Samplers — always a single number (texture unit)
-  sampler2D: [number];
-  samplerCube: [number];
-  sampler3D: [number];             // WebGL2
-  sampler2DArray: [number];        // WebGL2
-  sampler2DShadow: [number];       // WebGL2
-  samplerCubeShadow: [number];     // WebGL2
-  sampler2DArrayShadow: [number];  // WebGL2
+  sampler2D: [number]
+  samplerCube: [number]
+  sampler3D: [number]             // WebGL2
+  sampler2DArray: [number]        // WebGL2
+  sampler2DShadow: [number]       // WebGL2
+  samplerCubeShadow: [number]     // WebGL2
+  sampler2DArrayShadow: [number]  // WebGL2
 
   // Integer samplers (WebGL2)
-  isampler2D: [number];
-  isampler3D: [number];
-  isamplerCube: [number];
-  isampler2DArray: [number];
+  isampler2D: [number]
+  isampler3D: [number]
+  isamplerCube: [number]
+  isampler2DArray: [number]
 
   // Unsigned integer samplers (WebGL2)
-  usampler2D: [number];
-  usampler3D: [number];
-  usamplerCube: [number];
-  usampler2DArray: [number];
+  usampler2D: [number]
+  usampler3D: [number]
+  usamplerCube: [number]
+  usampler2DArray: [number]
 }
 
 export interface UniformDefinition {
@@ -337,16 +212,23 @@ export interface UniformDefinition {
 }
 
 export type UniformSchema = Record<string | symbol, UniformDefinition>
-export type UniformSchemaPartial = Record<string | symbol, Partial<UniformDefinition>>
+
+/** Methods for a single uniform element */
+export type UniformElementMethods<TKind extends UniformKind> = {
+  set(...args: UniformKindMap[TKind]): void
+}
+
+/** Methods for array uniforms - supports both bulk set and indexed access */
+export type UniformArrayMethods<TKind extends UniformKind, TSize extends number> =
+  Array<UniformElementMethods<TKind>> & {
+    /** Bulk set all elements at once */
+    set(arg: Float32Array): void
+  }
 
 export type UniformMethods<TDefinition extends UniformDefinition> =
   TDefinition['size'] extends number
-    ? {
-        set(arg: Float32Array): void
-      }
-    : {
-        set(...args: UniformKindMap[TDefinition['kind']]): void
-      }
+    ? UniformArrayMethods<TDefinition['kind'], TDefinition['size']>
+    : UniformElementMethods<TDefinition['kind']>
 
 export type UniformView<T extends UniformSchema> = {
   [K in keyof T]: UniformMethods<T[K]>
@@ -507,7 +389,7 @@ export interface Framebuffer {
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                   Texture View                                 */
+/*                                     Textures                                   */
 /*                                                                                */
 /**********************************************************************************/
 
@@ -625,11 +507,15 @@ export interface ViewSchema {
   buffers?: BufferSchema
 }
 
+type PartialSchema<T> = T extends Record<string | symbol, infer V>
+  ? Record<string | symbol, Partial<V>>
+  : never
+
 export interface ViewSchemaPartial {
-  uniforms?: Record<string | symbol, Partial<UniformDefinition>>
-  attributes?: Record<string | symbol, Partial<AttributeDefinition>>
-  interleavedAttributes?: Record<string | symbol, Partial<InterleavedAttributeDefinition>>
-  buffers?: Record<string | symbol, Partial<BufferDefinition>>
+  uniforms?: PartialSchema<UniformSchema>
+  attributes?: PartialSchema<AttributeSchema>
+  interleavedAttributes?: PartialSchema<InterleavedAttributeSchema>
+  buffers?: PartialSchema<BufferSchema>
 }
 
 export type View<T extends ViewSchema = ViewSchema> = {
@@ -645,7 +531,7 @@ export type View<T extends ViewSchema = ViewSchema> = {
 
 /**********************************************************************************/
 /*                                                                                */
-/*                                       Tags                                     */
+/*                                  GLSL System                                   */
 /*                                                                                */
 /**********************************************************************************/
 
@@ -653,6 +539,12 @@ export interface GLSLResult {
   program: WebGLProgram
   schema: ViewSchema
 }
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                   GLSL Tokens                                  */
+/*                                                                                */
+/**********************************************************************************/
 
 type GLSLSlotItem =
   | GLSL
@@ -730,40 +622,72 @@ export type InterleaveToken<
 }
 
 export type GLSLToSchema<T extends GLSL> =
-  FlattenSlots<T> extends infer TSlots
-    ? TSlots extends Array<any>
-      ? GLSLSlotsToSchema<TSlots>
+  T extends GLSL<infer TSlots>
+    ? FlattenSlots<TSlots> extends infer TFlatSlots extends Array<GLSLSlot>
+      ? GLSLSlotsToSchema<TFlatSlots>
       : never
     : never
 
 export type GLSLToView<T extends GLSL> = View<GLSLToSchema<T>>
 
+type ExtractTokens<TSlots extends Array<GLSLSlot>, TTokenType> = 
+  TSlots[number] extends infer U 
+    ? U extends TTokenType 
+      ? U 
+      : never 
+    : never
+
 export type GLSLSlotsToSchema<TSlots extends Array<GLSLSlot>> = {
   uniforms: {
-    [K in Extract<TSlots[number], UniformToken> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+    [K in ExtractTokens<TSlots, UniformToken> as K['key']]: Omit<K, 'type'>
   }
   attributes: {
-    [K in Extract<TSlots[number], AttributeToken> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+    [K in ExtractTokens<TSlots, AttributeToken> as K['key']]: Omit<K, 'type'>
   }
   interleavedAttributes: {
-    [K in Extract<TSlots[number], InterleaveToken> as K['key']]: Prettify<Omit<K, 'name' | 'type'>>
+    [K in ExtractTokens<TSlots, InterleaveToken> as K['key']]: Omit<K, 'type'>
   }
 }
 
-export type FlattenSlots<T> =
+export type FlattenSlots<T, MaxDepth extends Depth = 10> =
   T extends Array<GLSLSlot>
-    ? _FlattenSlots<T>
+    ? _FlattenSlots<T, [], MaxDepth>
     : T extends GLSL<infer TSlots>
-      ? _FlattenSlots<TSlots>
+      ? _FlattenSlots<TSlots, [], MaxDepth>
       : never
 
-type _FlattenSlots<T extends Array<GLSLSlot>> = T extends [infer First, ...infer Rest]
-  ? First extends GLSL
-    ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
-    : First extends GLSLSlot[]
-      ? [...FlattenSlots<First>, ...FlattenSlots<Rest>]
-      : [First, ...FlattenSlots<Rest>]
-  : T
+type _FlattenSlots<
+  T extends Array<GLSLSlot>,
+  Acc extends Array<any> = [],
+  CurrentDepth extends Depth = 10
+> = CurrentDepth extends 0
+  ? [...Acc, ...T]
+  : T extends [infer First, ...infer Rest extends Array<GLSLSlot>]
+    ? First extends GLSL<infer TSlots>
+      ? _FlattenSlots<Rest, [...Acc, ..._FlattenSlots<TSlots, [], Dec<CurrentDepth>>], Dec<CurrentDepth>>
+      : First extends GLSLSlot[]
+        ? _FlattenSlots<Rest, [...Acc, ..._FlattenSlots<First, [], Dec<CurrentDepth>>], Dec<CurrentDepth>>
+        : _FlattenSlots<Rest, [...Acc, First], Dec<CurrentDepth>>
+    : [...Acc, ...T]
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                Type Utilities                                  */
+/*                                                                                */
+/**********************************************************************************/
+
+type Depth = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
+type Dec<T extends number> = T extends 10 ? 9
+  : T extends 9 ? 8
+  : T extends 8 ? 7
+  : T extends 7 ? 6
+  : T extends 6 ? 5
+  : T extends 5 ? 4
+  : T extends 4 ? 3
+  : T extends 3 ? 2
+  : T extends 2 ? 1
+  : T extends 1 ? 0
+  : 0
 
 export type MergeGLSLSchema<
   TVertex extends ViewSchema,
