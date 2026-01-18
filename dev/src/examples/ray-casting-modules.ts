@@ -87,6 +87,106 @@ const TORUS_FLOAT_ARRAYS = {
 
 let SHAPE_COUNTER = 0
 
+class Camera {
+  private theta = 0 // Horizontal angle
+  private phi = Math.PI / 4 // Vertical angle
+  private targetTheta = 0
+  private targetPhi = Math.PI / 4
+  radius = 6
+
+  private isDragging = false
+  private lastX = 0
+  private lastY = 0
+
+  private position = [0, 0, 0] as [number, number, number]
+  private direction = [0, 0, -1] as [number, number, number]
+  private up = [0, 1, 0] as [number, number, number]
+  private right = [1, 0, 0] as [number, number, number]
+
+  template = glsl`
+${uniform.vec3('u_cameraPos')}
+${uniform.vec3('u_cameraDir')}
+${uniform.vec3('u_cameraUp')}
+${uniform.vec3('u_cameraRight')}`
+
+  view?: GLSLToView<typeof this.template>
+
+  startDrag(x: number, y: number) {
+    this.isDragging = true
+    this.lastX = x
+    this.lastY = y
+  }
+
+  drag(x: number, y: number) {
+    if (!this.isDragging) return
+
+    const deltaX = x - this.lastX
+    const deltaY = y - this.lastY
+
+    this.targetTheta += deltaX * 0.01
+    this.targetPhi = Math.max(0.1, Math.min(Math.PI - 0.1, this.targetPhi - deltaY * 0.01))
+
+    this.lastX = x
+    this.lastY = y
+  }
+
+  endDrag() {
+    this.isDragging = false
+  }
+
+  zoom(delta: number) {
+    this.radius = Math.max(2, Math.min(15, this.radius + delta * 0.01))
+  }
+
+  update() {
+    // Smooth camera rotation
+    this.theta += (this.targetTheta - this.theta) * 0.1
+    this.phi += (this.targetPhi - this.phi) * 0.1
+
+    // Calculate camera position from spherical coordinates
+    const x = this.radius * Math.sin(this.phi) * Math.cos(this.theta)
+    const y = this.radius * Math.cos(this.phi)
+    const z = this.radius * Math.sin(this.phi) * Math.sin(this.theta)
+
+    this.position = [x, y, z]
+    const target = [0, 0, 0] as const
+
+    // Calculate camera direction (looking at origin)
+    const dir = [
+      target[0] - this.position[0],
+      target[1] - this.position[1],
+      target[2] - this.position[2],
+    ] as const
+    const dirLength = Math.sqrt(dir[0] ** 2 + dir[1] ** 2 + dir[2] ** 2)
+    this.direction = [dir[0] / dirLength, dir[1] / dirLength, dir[2] / dirLength]
+
+    // Calculate up vector
+    const up = [0, 1, 0] as const
+
+    // Calculate right vector (cross product of dir and up)
+    this.right = [
+      this.direction[1] * up[2] - this.direction[2] * up[1],
+      this.direction[2] * up[0] - this.direction[0] * up[2],
+      this.direction[0] * up[1] - this.direction[1] * up[0],
+    ] as const
+
+    // Recalculate up vector (cross product of right and dir)
+    this.up = [
+      this.right[1] * this.direction[2] - this.right[2] * this.direction[1],
+      this.right[2] * this.direction[0] - this.right[0] * this.direction[2],
+      this.right[0] * this.direction[1] - this.right[1] * this.direction[0],
+    ] as const
+
+    // Update uniforms
+    if (this.view) {
+      this.view.uniforms.u_cameraPos.set(this.position[0], this.position[1], this.position[2])
+      this.view.uniforms.u_cameraDir.set(this.direction[0], this.direction[1], this.direction[2])
+      this.view.uniforms.u_cameraUp.set(this.up[0], this.up[1], this.up[2])
+      this.view.uniforms.u_cameraRight.set(this.right[0], this.right[1], this.right[2])
+    }
+  }
+}
+
 const controller = new AbortController()
 const canvas = dom('canvas', { parentElement: document.body })
 
@@ -94,18 +194,6 @@ const gl = canvas.getContext('webgl2')!
 
 // Blending parameter
 let blendFactor = 0.8
-
-// Orbit controls state
-const orbitState = {
-  theta: 0, // Horizontal angle
-  phi: Math.PI / 4, // Vertical angle
-  radius: 6,
-  isDragging: false,
-  lastX: 0,
-  lastY: 0,
-  targetTheta: 0,
-  targetPhi: Math.PI / 4,
-}
 
 abstract class Shape {
   id = SHAPE_COUNTER++
@@ -459,6 +547,8 @@ void ${this.calculateColor}(in vec3 hitPosition, in int hitIndex, out vec3 norma
 const box = new Box()
 const sphere = new Sphere()
 const torus = new Torus()
+const camera = new Camera()
+
 const shapes = [box, sphere, torus]
 
 const { program, view } = compile.toQuad(
@@ -476,12 +566,9 @@ struct HitInfo {
 
 ${shapes.map(shape => shape.template)}
 
+${camera.template}
 ${uniform.float('aspectRatio')}
 ${uniform.float('u_blendFactor')}
-${uniform.vec3('u_cameraPos')}
-${uniform.vec3('u_cameraDir')}
-${uniform.vec3('u_cameraUp')}
-${uniform.vec3('u_cameraRight')}
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -610,7 +697,7 @@ void main()
 	}
 	
 	// Gamma correction
-	color = pow(color, vec3(1.0 / 2.2));
+	// color = pow(color, vec3(1.0 / 2.2));
 	
 	fragColor = vec4(color, 1.0);
 }`,
@@ -634,51 +721,9 @@ torus
 view.uniforms.aspectRatio.set(canvas.width / canvas.height)
 view.uniforms.u_blendFactor.set(blendFactor)
 
-// Initialize camera uniforms
-function updateCamera() {
-  // Calculate camera position from spherical coordinates
-  const x = orbitState.radius * Math.sin(orbitState.phi) * Math.cos(orbitState.theta)
-  const y = orbitState.radius * Math.cos(orbitState.phi)
-  const z = orbitState.radius * Math.sin(orbitState.phi) * Math.sin(orbitState.theta)
-
-  const cameraPos = [x, y, z] as const
-  const target = [0, 0, 0] as const
-
-  // Calculate camera direction (looking at origin)
-  const dir = [
-    target[0] - cameraPos[0],
-    target[1] - cameraPos[1],
-    target[2] - cameraPos[2],
-  ] as const
-  const dirLength = Math.sqrt(dir[0] ** 2 + dir[1] ** 2 + dir[2] ** 2)
-  dir[0] /= dirLength
-  dir[1] /= dirLength
-  dir[2] /= dirLength
-
-  // Calculate up vector
-  const up = [0, 1, 0] as const
-
-  // Calculate right vector (cross product of dir and up)
-  const right = [
-    dir[1] * up[2] - dir[2] * up[1],
-    dir[2] * up[0] - dir[0] * up[2],
-    dir[0] * up[1] - dir[1] * up[0],
-  ] as const
-
-  // Recalculate up vector (cross product of right and dir)
-  const finalUp = [
-    right[1] * dir[2] - right[2] * dir[1],
-    right[2] * dir[0] - right[0] * dir[2],
-    right[0] * dir[1] - right[1] * dir[0],
-  ] as const
-
-  view.uniforms.u_cameraPos.set(cameraPos[0], cameraPos[1], cameraPos[2])
-  view.uniforms.u_cameraDir.set(dir[0], dir[1], dir[2])
-  view.uniforms.u_cameraUp.set(finalUp[0], finalUp[1], finalUp[2])
-  view.uniforms.u_cameraRight.set(right[0], right[1], right[2])
-}
-
-updateCamera()
+// Set view for camera
+camera.view = view
+camera.update()
 
 function animate(timestamp: number) {
   const time = timestamp / 1000
@@ -768,79 +813,49 @@ function animate(timestamp: number) {
 
 // Mouse controls
 canvas.addEventListener('mousedown', e => {
-  orbitState.isDragging = true
-  orbitState.lastX = e.clientX
-  orbitState.lastY = e.clientY
+  camera.startDrag(e.clientX, e.clientY)
 })
 
 canvas.addEventListener('mousemove', e => {
-  if (!orbitState.isDragging) return
-
-  const deltaX = e.clientX - orbitState.lastX
-  const deltaY = e.clientY - orbitState.lastY
-
-  orbitState.targetTheta += deltaX * 0.01
-  orbitState.targetPhi = Math.max(
-    0.1,
-    Math.min(Math.PI - 0.1, orbitState.targetPhi - deltaY * 0.01),
-  )
-
-  orbitState.lastX = e.clientX
-  orbitState.lastY = e.clientY
+  camera.drag(e.clientX, e.clientY)
 })
 
 canvas.addEventListener('mouseup', () => {
-  orbitState.isDragging = false
+  camera.endDrag()
 })
 
 canvas.addEventListener('mouseleave', () => {
-  orbitState.isDragging = false
+  camera.endDrag()
 })
 
 // Mouse wheel for zoom
 canvas.addEventListener('wheel', e => {
   e.preventDefault()
-  orbitState.radius = Math.max(2, Math.min(15, orbitState.radius + e.deltaY * 0.01))
+  camera.zoom(e.deltaY)
 })
 
 // Touch controls
 canvas.addEventListener('touchstart', e => {
   if (e.touches.length === 1) {
-    orbitState.isDragging = true
-    orbitState.lastX = e.touches[0].clientX
-    orbitState.lastY = e.touches[0].clientY
+    camera.startDrag(e.touches[0].clientX, e.touches[0].clientY)
   }
 })
 
 canvas.addEventListener('touchmove', e => {
-  if (!orbitState.isDragging || e.touches.length !== 1) return
-
-  const deltaX = e.touches[0].clientX - orbitState.lastX
-  const deltaY = e.touches[0].clientY - orbitState.lastY
-
-  orbitState.targetTheta += deltaX * 0.01
-  orbitState.targetPhi = Math.max(
-    0.1,
-    Math.min(Math.PI - 0.1, orbitState.targetPhi - deltaY * 0.01),
-  )
-
-  orbitState.lastX = e.touches[0].clientX
-  orbitState.lastY = e.touches[0].clientY
+  if (e.touches.length === 1) {
+    camera.drag(e.touches[0].clientX, e.touches[0].clientY)
+  }
 })
 
 canvas.addEventListener('touchend', () => {
-  orbitState.isDragging = false
+  camera.endDrag()
 })
 
 // Animation loop
 function draw(timestamp: number) {
   if (controller.signal.aborted) return
 
-  // Smooth camera rotation
-  orbitState.theta += (orbitState.targetTheta - orbitState.theta) * 0.1
-  orbitState.phi += (orbitState.targetPhi - orbitState.phi) * 0.1
-
-  updateCamera()
+  camera.update()
   animate(timestamp)
 
   gl.drawArrays(gl.TRIANGLES, 0, 6)
