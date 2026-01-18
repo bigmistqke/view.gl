@@ -146,7 +146,7 @@ export type UniformKind = keyof KIND_TO_UNIFORM_FN_NAME_MAP
 
 type MatrixArray<Size extends number> = [Float32Array] | number[]
 
-interface UniformKindMap {
+export interface UniformKindMap {
   // Float scalars and vectors
   float: [number]
   vec2: [number, number]
@@ -187,11 +187,11 @@ interface UniformKindMap {
   // Samplers — always a single number (texture unit)
   sampler2D: [number]
   samplerCube: [number]
-  sampler3D: [number]             // WebGL2
-  sampler2DArray: [number]        // WebGL2
-  sampler2DShadow: [number]       // WebGL2
-  samplerCubeShadow: [number]     // WebGL2
-  sampler2DArrayShadow: [number]  // WebGL2
+  sampler3D: [number] // WebGL2
+  sampler2DArray: [number] // WebGL2
+  sampler2DShadow: [number] // WebGL2
+  samplerCubeShadow: [number] // WebGL2
+  sampler2DArrayShadow: [number] // WebGL2
 
   // Integer samplers (WebGL2)
   isampler2D: [number]
@@ -219,11 +219,12 @@ export type UniformElementMethods<TKind extends UniformKind> = {
 }
 
 /** Methods for array uniforms - supports both bulk set and indexed access */
-export type UniformArrayMethods<TKind extends UniformKind, TSize extends number> =
-  Array<UniformElementMethods<TKind>> & {
-    /** Bulk set all elements at once */
-    set(arg: Float32Array): void
-  }
+export type UniformArrayMethods<TKind extends UniformKind, TSize extends number> = Array<
+  UniformElementMethods<TKind>
+> & {
+  /** Bulk set all elements at once */
+  set(arg: Float32Array): void
+}
 
 export type UniformMethods<TDefinition extends UniformDefinition> =
   TDefinition['size'] extends number
@@ -507,9 +508,8 @@ export interface ViewSchema {
   buffers?: BufferSchema
 }
 
-type PartialSchema<T> = T extends Record<string | symbol, infer V>
-  ? Record<string | symbol, Partial<V>>
-  : never
+type PartialSchema<T> =
+  T extends Record<string | symbol, infer V> ? Record<string | symbol, Partial<V>> : never
 
 export interface ViewSchemaPartial {
   uniforms?: PartialSchema<UniformSchema>
@@ -630,12 +630,11 @@ export type GLSLToSchema<T extends GLSL> =
 
 export type GLSLToView<T extends GLSL> = View<GLSLToSchema<T>>
 
-type ExtractTokens<TSlots extends Array<GLSLSlot>, TTokenType> = 
-  TSlots[number] extends infer U 
-    ? U extends TTokenType 
-      ? U 
-      : never 
+type ExtractTokens<TSlots extends Array<GLSLSlot>, TTokenType> = TSlots[number] extends infer U
+  ? U extends TTokenType
+    ? U
     : never
+  : never
 
 export type GLSLSlotsToSchema<TSlots extends Array<GLSLSlot>> = {
   uniforms: {
@@ -659,14 +658,22 @@ export type FlattenSlots<T, MaxDepth extends Depth = 10> =
 type _FlattenSlots<
   T extends Array<GLSLSlot>,
   Acc extends Array<any> = [],
-  CurrentDepth extends Depth = 10
+  CurrentDepth extends Depth = 10,
 > = CurrentDepth extends 0
   ? [...Acc, ...T]
   : T extends [infer First, ...infer Rest extends Array<GLSLSlot>]
     ? First extends GLSL<infer TSlots>
-      ? _FlattenSlots<Rest, [...Acc, ..._FlattenSlots<TSlots, [], Dec<CurrentDepth>>], Dec<CurrentDepth>>
+      ? _FlattenSlots<
+          Rest,
+          [...Acc, ..._FlattenSlots<TSlots, [], Dec<CurrentDepth>>],
+          Dec<CurrentDepth>
+        >
       : First extends GLSLSlot[]
-        ? _FlattenSlots<Rest, [...Acc, ..._FlattenSlots<First, [], Dec<CurrentDepth>>], Dec<CurrentDepth>>
+        ? _FlattenSlots<
+            Rest,
+            [...Acc, ..._FlattenSlots<First, [], Dec<CurrentDepth>>],
+            Dec<CurrentDepth>
+          >
         : _FlattenSlots<Rest, [...Acc, First], Dec<CurrentDepth>>
     : [...Acc, ...T]
 
@@ -677,17 +684,27 @@ type _FlattenSlots<
 /**********************************************************************************/
 
 type Depth = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10
-type Dec<T extends number> = T extends 10 ? 9
-  : T extends 9 ? 8
-  : T extends 8 ? 7
-  : T extends 7 ? 6
-  : T extends 6 ? 5
-  : T extends 5 ? 4
-  : T extends 4 ? 3
-  : T extends 3 ? 2
-  : T extends 2 ? 1
-  : T extends 1 ? 0
-  : 0
+type Dec<T extends number> = T extends 10
+  ? 9
+  : T extends 9
+    ? 8
+    : T extends 8
+      ? 7
+      : T extends 7
+        ? 6
+        : T extends 6
+          ? 5
+          : T extends 5
+            ? 4
+            : T extends 4
+              ? 3
+              : T extends 3
+                ? 2
+                : T extends 2
+                  ? 1
+                  : T extends 1
+                    ? 0
+                    : 0
 
 export type MergeGLSLSchema<
   TVertex extends ViewSchema,
