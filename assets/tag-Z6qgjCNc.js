@@ -1,36 +1,3 @@
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  if (!shader) throw new Error("Failed to create shader");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error(
-      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
-    );
-  }
-  return shader;
-}
-function createProgram(gl, vertexSource, fragmentSource) {
-  const program = gl.createProgram();
-  if (!program) throw new Error("Failed to create WebGL program");
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(program);
-    gl.deleteProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    throw new Error(`Failed to link program: ${info}`);
-  }
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-  return program;
-}
 const INSTANCED_ARRAYS_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
 function getInstancedArrays(gl) {
   if (gl instanceof WebGL2RenderingContext) return gl;
@@ -62,9 +29,61 @@ function getVertexArrayObject(gl) {
   return wrapper;
 }
 
+function forEach(value, callback) {
+  let index = 0;
+  for (const key in value) {
+    callback(value[key], key, index);
+    index++;
+  }
+  for (const key of Object.getOwnPropertySymbols(value)) {
+    callback(value[key], key, index);
+    index++;
+  }
+}
+function map(value, callback) {
+  const result = {};
+  forEach(value, (value2, key, index) => {
+    result[key] = callback(value2, key, index);
+  });
+  return result;
+}
+
 function assertedNotNullish(value, message) {
   if (value === void 0 || value === null) throw new Error(message);
   return value;
+}
+function createGLShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("Failed to create shader");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    throw new Error(
+      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
+    );
+  }
+  return shader;
+}
+function createProgram(gl, vertexSource, fragmentSource) {
+  const program = gl.createProgram();
+  if (!program) throw new Error("Failed to create WebGL program");
+  const vertexShader = createGLShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createGLShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    throw new Error(`Failed to link program: ${info}`);
+  }
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+  return program;
 }
 const kindToUniformFnName = (kind) => {
   switch (kind[0]) {
@@ -215,29 +234,18 @@ function createUpsertMap(constructor) {
   });
 }
 
-function forEach(value, callback) {
-  let index = 0;
-  for (const key in value) {
-    callback(value[key], key, index);
-    index++;
-  }
-  for (const key of Object.getOwnPropertySymbols(value)) {
-    callback(value[key], key, index);
-    index++;
-  }
-}
-function map(value, callback) {
-  const result = {};
-  forEach(value, (value2, key, index) => {
-    result[key] = callback(value2, key, index);
-  });
-  return result;
-}
-
 let index = 0;
 const PREFIX = "VIEW_GL_ALIAS";
-const IS_FIREFOX = navigator.userAgent.toLowerCase().indexOf("firefox") >= 0;
-const SYMBOL_MAP = createUpsertMap(IS_FIREFOX ? Map : WeakMap);
+const HAS_WEAK_SYMBOL = (() => {
+  try {
+    const symbol = Symbol();
+    (/* @__PURE__ */ new WeakMap()).set(symbol, "");
+    return true;
+  } catch {
+    return false;
+  }
+})();
+const SYMBOL_MAP = createUpsertMap(HAS_WEAK_SYMBOL ? WeakMap : Map);
 function toID(key) {
   if (typeof key === "string") {
     return key;
@@ -258,15 +266,37 @@ function view(gl, program, schema, options) {
 function uniformView(gl, program, schema) {
   return map(schema, ({ kind, size }, key) => {
     const name = toID(key);
-    const location = gl.getUniformLocation(program, name);
     if (isSamplerKind(kind)) {
+      const location2 = gl.getUniformLocation(program, name);
       return {
         set(arg) {
-          gl.uniform1i(location, arg);
+          gl.uniform1i(location2, arg);
         }
       };
     }
-    const fnName = `uniform${kindToUniformFnName(kind)}${size ? "v" : ""}`;
+    if (size) {
+      const bulkFnName = `uniform${kindToUniformFnName(kind)}v`;
+      const bulkFn = gl[bulkFnName].bind(gl);
+      const bulkLocation = gl.getUniformLocation(program, name);
+      const elementFnName = `uniform${kindToUniformFnName(kind)}`;
+      const elementFn = gl[elementFnName].bind(gl);
+      const elements = [];
+      for (let i = 0; i < size; i++) {
+        const location2 = gl.getUniformLocation(program, `${name}[${i}]`);
+        elements[i] = {
+          set(...args) {
+            elementFn(location2, ...args);
+          }
+        };
+      }
+      return Object.assign(elements, {
+        set(arg) {
+          bulkFn(bulkLocation, arg);
+        }
+      });
+    }
+    const location = gl.getUniformLocation(program, name);
+    const fnName = `uniform${kindToUniformFnName(kind)}`;
     const fn = gl[fnName].bind(gl);
     if (isMatKind(kind)) {
       return {
