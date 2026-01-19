@@ -235,6 +235,8 @@ export type UniformView<T extends UniformSchema> = {
   [K in keyof T]: UniformMethods<T[K]>
 }
 
+export type UniformValue = UniformKindMap[UniformKind]
+
 /**********************************************************************************/
 /*                                                                                */
 /*                                   Attributes                                   */
