@@ -1,3 +1,36 @@
+function createShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("Failed to create shader");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    throw new Error(
+      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
+    );
+  }
+  return shader;
+}
+function createProgram(gl, vertexSource, fragmentSource) {
+  const program = gl.createProgram();
+  if (!program) throw new Error("Failed to create WebGL program");
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    throw new Error(`Failed to link program: ${info}`);
+  }
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+  return program;
+}
 const INSTANCED_ARRAYS_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
 function getInstancedArrays(gl) {
   if (gl instanceof WebGL2RenderingContext) return gl;
@@ -29,61 +62,9 @@ function getVertexArrayObject(gl) {
   return wrapper;
 }
 
-function forEach(value, callback) {
-  let index = 0;
-  for (const key in value) {
-    callback(value[key], key, index);
-    index++;
-  }
-  for (const key of Object.getOwnPropertySymbols(value)) {
-    callback(value[key], key, index);
-    index++;
-  }
-}
-function map(value, callback) {
-  const result = {};
-  forEach(value, (value2, key, index) => {
-    result[key] = callback(value2, key, index);
-  });
-  return result;
-}
-
 function assertedNotNullish(value, message) {
   if (value === void 0 || value === null) throw new Error(message);
   return value;
-}
-function createGLShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  if (!shader) throw new Error("Failed to create shader");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error(
-      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
-    );
-  }
-  return shader;
-}
-function createProgram(gl, vertexSource, fragmentSource) {
-  const program = gl.createProgram();
-  if (!program) throw new Error("Failed to create WebGL program");
-  const vertexShader = createGLShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = createGLShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(program);
-    gl.deleteProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    throw new Error(`Failed to link program: ${info}`);
-  }
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-  return program;
 }
 const kindToUniformFnName = (kind) => {
   switch (kind[0]) {
@@ -233,6 +214,24 @@ function createUpsertMap(constructor) {
     }
   });
 }
+function forEachObject(value, callback) {
+  let index = 0;
+  for (const key in value) {
+    callback(value[key], key, index);
+    index++;
+  }
+  for (const key of Object.getOwnPropertySymbols(value)) {
+    callback(value[key], key, index);
+    index++;
+  }
+}
+function mapObject(value, callback) {
+  const result = {};
+  forEachObject(value, (value2, key, index) => {
+    result[key] = callback(value2, key, index);
+  });
+  return result;
+}
 
 let index = 0;
 const PREFIX = "VIEW_GL_ALIAS";
@@ -264,7 +263,7 @@ function view(gl, program, schema, options) {
   };
 }
 function uniformView(gl, program, schema) {
-  return map(schema, ({ kind, size }, key) => {
+  return mapObject(schema, ({ kind, size }, key) => {
     const name = toID(key);
     if (isSamplerKind(kind)) {
       const location2 = gl.getUniformLocation(program, name);
@@ -320,7 +319,7 @@ function handleAttribute(gl, location, size, stride, offset, type, instanced) {
   }
 }
 function attributeView(gl, program, schema, { signal } = {}) {
-  const attributes = map(
+  const attributes = mapObject(
     schema,
     ({ kind, instanced, buffer = assertedNotNullish(gl.createBuffer()) }, key) => {
       const name = toID(key);
@@ -348,12 +347,12 @@ function attributeView(gl, program, schema, { signal } = {}) {
     }
   );
   signal?.addEventListener("abort", function dispose() {
-    forEach(attributes, (value) => value.dispose());
+    forEachObject(attributes, (value) => value.dispose());
   });
   return attributes;
 }
 function interleavedAttributeView(gl, program, schema, { signal } = {}) {
-  const interleavedAttributes = map(schema, ({ layout, instanced }) => {
+  const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
     let index2 = 0;
     const handles = layout.map((layout2) => {
       const name = toID(layout2.key);
@@ -426,12 +425,12 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
     };
   });
   signal?.addEventListener("abort", function dispose() {
-    forEach(interleavedAttributes, (value) => value.dispose());
+    forEachObject(interleavedAttributes, (value) => value.dispose());
   });
   return interleavedAttributes;
 }
 function bufferView(gl, schema, { signal } = {}) {
-  const buffers = map(schema, ({ target = "ARRAY_BUFFER", usage = "STATIC_DRAW" }) => {
+  const buffers = mapObject(schema, ({ target = "ARRAY_BUFFER", usage = "STATIC_DRAW" }) => {
     const buffer = assertedNotNullish(gl.createBuffer());
     return {
       bind() {
@@ -447,7 +446,7 @@ function bufferView(gl, schema, { signal } = {}) {
     };
   });
   signal?.addEventListener("abort", function dispose() {
-    forEach(buffers, (value) => value.dispose());
+    forEachObject(buffers, (value) => value.dispose());
   });
   return buffers;
 }

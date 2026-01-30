@@ -1,4 +1,4 @@
-import { a as attribute, g as glsl, u as uniform, c as compile } from './tag-DFejuBi3.js';
+import { a as attribute, g as glsl, u as uniform, c as compile } from './tag-DswdCY4l.js';
 import { d as dom } from './utils-2dzuv_bW.js';
 
 function createModule(callback) {
