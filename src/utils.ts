@@ -6,57 +6,11 @@ import type {
   KIND_TO_UNIFORM_FN_NAME_MAP,
   TextureDefinition,
   UniformKind,
-} from '../types'
-
-export * as ObjectUtils from './object'
+} from './types'
 
 export function assertedNotNullish<T>(value: T, message?: string): NonNullable<T> {
   if (value === undefined || value === null) throw new Error(message)
   return value
-}
-
-function createGLShader(gl: GL, type: number, source: string): WebGLShader {
-  const shader = gl.createShader(type)
-  if (!shader) throw new Error('Failed to create shader')
-
-  gl.shaderSource(shader, source)
-  gl.compileShader(shader)
-
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader)
-    gl.deleteShader(shader)
-    throw new Error(
-      `Failed to compile ${type === gl.VERTEX_SHADER ? 'vertex' : 'fragment'} shader: ${info}`,
-    )
-  }
-
-  return shader
-}
-
-export function createProgram(gl: GL, vertexSource: string, fragmentSource: string): WebGLProgram {
-  const program = gl.createProgram()
-  if (!program) throw new Error('Failed to create WebGL program')
-
-  const vertexShader = createGLShader(gl, gl.VERTEX_SHADER, vertexSource)
-  const fragmentShader = createGLShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
-
-  gl.attachShader(program, vertexShader)
-  gl.attachShader(program, fragmentShader)
-  gl.linkProgram(program)
-
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(program)
-    gl.deleteProgram(program)
-    gl.deleteShader(vertexShader)
-    gl.deleteShader(fragmentShader)
-    throw new Error(`Failed to link program: ${info}`)
-  }
-
-  // Clean up shaders after linking
-  gl.deleteShader(vertexShader)
-  gl.deleteShader(fragmentShader)
-
-  return program
 }
 
 /**********************************************************************************/
@@ -291,4 +245,32 @@ export function createUpsertMap<T extends UpsertMapKind<any, any> = Map<any, any
       return result
     },
   })
+}
+
+export function forEachObject<T extends Record<string, any>>(
+  value: T,
+  callback: (value: T[keyof T], key: keyof T, index: number) => void,
+) {
+  let index = 0
+  for (const key in value) {
+    callback(value[key], key, index)
+    index++
+  }
+  for (const key of Object.getOwnPropertySymbols(value)) {
+    callback(value[key as keyof T], key as keyof T, index)
+    index++
+  }
+}
+
+export function mapObject<T extends Record<string, any>, TReturn>(
+  value: T,
+  callback: (value: T[keyof T], key: keyof T, index: number) => TReturn,
+): { [TKey in keyof T]: TReturn } {
+  const result = {} as { [TKey in keyof T]: TReturn }
+
+  forEachObject(value, (value, key, index) => {
+    result[key] = callback(value, key, index)
+  })
+
+  return result
 }

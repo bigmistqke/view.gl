@@ -1,4 +1,4 @@
-import { getInstancedArrays, getVertexArrayObject } from './features'
+import { getInstancedArrays, getVertexArrayObject } from './gl'
 import type {
   AttributeMethods,
   AttributeSchema,
@@ -15,15 +15,8 @@ import type {
   ViewOptions,
   ViewSchema,
 } from './types'
-import {
-  assertedNotNullish,
-  createUpsertMap,
-  isMatKind,
-  isSamplerKind,
-  kindToSize,
-  kindToUniformFnName,
-  ObjectUtils,
-} from './utils'
+import { isSamplerKind, kindToUniformFnName, isMatKind, assertedNotNullish, kindToSize, forEachObject } from './utils'
+import { createUpsertMap, mapObject } from './utils'
 export * from './types'
 
 /**********************************************************************************/
@@ -94,7 +87,7 @@ export function uniformView<T extends UniformSchema>(
   schema: T,
 ): InferUniformView<T> {
   // @ts-expect-error - conditional return type based on size is hard to infer
-  return ObjectUtils.map(schema, ({ kind, size }, key) => {
+  return mapObject(schema, ({ kind, size }, key) => {
     const name = toID(key)
 
     if (isSamplerKind(kind)) {
@@ -191,7 +184,7 @@ export function attributeView<T extends AttributeSchema>(
   schema: T,
   { signal }: ViewOptions = {},
 ): AttributeView<T> {
-  const attributes = ObjectUtils.map(
+  const attributes = mapObject(
     schema,
     (
       { kind, instanced, buffer = assertedNotNullish(gl.createBuffer()) },
@@ -226,7 +219,7 @@ export function attributeView<T extends AttributeSchema>(
   )
 
   signal?.addEventListener('abort', function dispose() {
-    ObjectUtils.forEach(attributes, value => value.dispose())
+    forEachObject(attributes, value => value.dispose())
   })
 
   return attributes
@@ -245,7 +238,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   { signal }: ViewOptions = {},
 ): InterleavedAttributeView<T> {
   // Initialize interleaved attributes
-  const interleavedAttributes = ObjectUtils.map(schema, ({ layout, instanced }) => {
+  const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
     // Increment number to keep track of offset
     let index = 0
 
@@ -336,7 +329,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   })
 
   signal?.addEventListener('abort', function dispose() {
-    ObjectUtils.forEach(interleavedAttributes, value => value.dispose())
+    forEachObject(interleavedAttributes, value => value.dispose())
   })
 
   return interleavedAttributes
@@ -354,7 +347,7 @@ export function bufferView<T extends BufferSchema>(
   { signal }: ViewOptions = {},
 ): BufferView<T> {
   // Initialize buffers
-  const buffers = ObjectUtils.map(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
+  const buffers = mapObject(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
     const buffer = assertedNotNullish(gl.createBuffer())
     return {
       bind() {
@@ -371,7 +364,7 @@ export function bufferView<T extends BufferSchema>(
   })
 
   signal?.addEventListener('abort', function dispose() {
-    ObjectUtils.forEach(buffers, value => value.dispose())
+    forEachObject(buffers, value => value.dispose())
   })
 
   return buffers
