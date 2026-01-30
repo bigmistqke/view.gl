@@ -1,6 +1,6 @@
 {
   "name": "@bigmistqke/view.gl",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "👀 Utilities for managing WebGL resources.",
   "exports": {
     ".": {
