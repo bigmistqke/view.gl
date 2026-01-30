@@ -15,7 +15,14 @@ import type {
   ViewOptions,
   ViewSchema,
 } from './types'
-import { isSamplerKind, kindToUniformFnName, isMatKind, assertedNotNullish, kindToSize, forEachObject } from './utils'
+import {
+  isSamplerKind,
+  kindToUniformFnName,
+  isMatKind,
+  assertedNotNullish,
+  kindToSize,
+  forEachObject,
+} from './utils'
 import { createUpsertMap, mapObject } from './utils'
 export * from './types'
 
