@@ -416,9 +416,8 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
       set(value, usage = "STATIC_DRAW") {
         if (vao) {
           vao.bind();
-        } else {
-          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         }
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage]);
         if (vao) {
           vao.unbind();
