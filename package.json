@@ -25,7 +25,7 @@
     "dev": "vite serve dev",
     "format": "prettier -w \"src/**/*.{js,ts,json,css,tsx,jsx}\" \"dev/**/*.{js,ts,json,css,tsx,jsx}\"",
     "lint:types": "tsc --noEmit",
-    "prepublish": "pnpm build",
+    "prepublish": "pnpm test && pnpm build",
     "test:coverage": "vitest run --coverage",
     "test:ui": "vitest --ui",
     "test": "vitest --run"
