@@ -1,3 +1,6 @@
+function isWebGL2RenderingContext(gl) {
+  return typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+}
 function createShader(gl, type, source) {
   const shader = gl.createShader(type);
   if (!shader) throw new Error("Failed to create shader");
@@ -33,7 +36,7 @@ function createProgram(gl, vertexSource, fragmentSource) {
 }
 const INSTANCED_ARRAYS_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
 function getInstancedArrays(gl) {
-  if (gl instanceof WebGL2RenderingContext) return gl;
+  if (isWebGL2RenderingContext(gl)) return gl;
   const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl);
   if (cached) return cached;
   const ext = gl.getExtension("ANGLE_instanced_arrays");
@@ -48,7 +51,7 @@ function getInstancedArrays(gl) {
 }
 const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
 function getVertexArrayObject(gl) {
-  if (gl instanceof WebGL2RenderingContext) return gl;
+  if (isWebGL2RenderingContext(gl)) return gl;
   const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl);
   if (cached) return cached;
   const ext = gl.getExtension("OES_vertex_array_object");

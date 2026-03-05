@@ -1,4 +1,4 @@
-import { i as interleave, u as uniform, a as attribute, g as glsl, c as compile } from './tag-DswdCY4l.js';
+import { i as interleave, u as uniform, a as attribute, g as glsl, c as compile } from './tag-Cg3HhUMF.js';
 import { d as dom, c as cursor } from './utils-2dzuv_bW.js';
 
 const canvas = dom("canvas", { parentElement: document.body });

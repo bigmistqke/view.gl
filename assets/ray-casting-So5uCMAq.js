@@ -1,4 +1,4 @@
-import { u as uniform, g as glsl, c as compile } from './tag-DswdCY4l.js';
+import { u as uniform, g as glsl, c as compile } from './tag-Cg3HhUMF.js';
 import { d as dom } from './utils-2dzuv_bW.js';
 
 const sphereData = [
