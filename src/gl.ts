@@ -1,6 +1,10 @@
 import { RemoveSuffix } from './type-utils'
 import type { GL } from './types'
 
+function isWebGL2RenderingContext(gl: WebGLRenderingContext | WebGL2RenderingContext): gl is WebGL2RenderingContext {
+  return typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext
+}
+
 /**********************************************************************************/
 /*                                                                                */
 /*                                 Create Shader                                  */
@@ -74,7 +78,7 @@ const INSTANCED_ARRAYS_WRAPPER_MAP = new WeakMap<
   > | null
 >()
 export function getInstancedArrays(gl: GL) {
-  if (gl instanceof WebGL2RenderingContext) return gl
+  if (isWebGL2RenderingContext(gl)) return gl
 
   const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl)
   if (cached) return cached
@@ -109,7 +113,7 @@ const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = new WeakMap<
   > | null
 >()
 export function getVertexArrayObject(gl: GL) {
-  if (gl instanceof WebGL2RenderingContext) return gl
+  if (isWebGL2RenderingContext(gl)) return gl
 
   const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl)
   if (cached) return cached
