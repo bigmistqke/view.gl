@@ -173,11 +173,15 @@ function handleAttribute(
   size: number,
   stride: number,
   offset: number,
-  type: 'FLOAT' | 'INT',
+  type: 'FLOAT' | 'INT' | 'UNSIGNED_INT',
   instanced?: boolean,
 ) {
   gl.enableVertexAttribArray(location)
-  gl.vertexAttribPointer(location, size, gl[type], false, stride, offset)
+  if (type === 'INT' || type === 'UNSIGNED_INT') {
+    ;(gl as WebGL2RenderingContext).vertexAttribIPointer(location, size, gl[type], stride, offset)
+  } else {
+    gl.vertexAttribPointer(location, size, gl[type], false, stride, offset)
+  }
 
   if (instanced) {
     // Get instanced-arrays-feature: extension if webgl, gl if webgl2
@@ -205,7 +209,7 @@ export function attributeView<T extends AttributeSchema>(
       }
 
       const size = kindToSize(kind)
-      const type = kind.startsWith('i') ? 'INT' : 'FLOAT'
+      const type = kind.startsWith('u') ? 'UNSIGNED_INT' : kind.startsWith('i') ? 'INT' : 'FLOAT'
 
       return {
         buffer,
@@ -261,7 +265,11 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
 
       const size = kindToSize(layout.kind)
       const offset = index
-      const type = layout.kind.startsWith('i') ? 'INT' : 'FLOAT'
+      const type = layout.kind.startsWith('u')
+        ? 'UNSIGNED_INT'
+        : layout.kind.startsWith('i')
+          ? 'INT'
+          : 'FLOAT'
       index += size * 4
 
       return () => handleAttribute(gl, location, size, stride, offset, type, instanced)

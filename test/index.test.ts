@@ -449,21 +449,66 @@ describe('attributeView', () => {
     const attributes = attributeView(gl, program, schema)
 
     attributes.a_index.bind()
-    expect(gl.vertexAttribPointer).toHaveBeenCalledWith(
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
       expect.any(Number),
       1, // size for int
       gl.INT,
-      false,
       0,
       0,
     )
 
     attributes.a_indices.bind()
-    expect(gl.vertexAttribPointer).toHaveBeenCalledWith(
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
       expect.any(Number),
       2, // size for ivec2
       gl.INT,
-      false,
+      0,
+      0,
+    )
+  })
+
+  it('should handle unsigned integer attributes', () => {
+    const schema = {
+      a_sorted_index: { kind: 'uint' },
+      a_uindices2: { kind: 'uvec2' },
+      a_uindices3: { kind: 'uvec3' },
+      a_uindices4: { kind: 'uvec4' },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    attributes.a_sorted_index.bind()
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      1, // size for uint
+      gl.UNSIGNED_INT,
+      0,
+      0,
+    )
+
+    attributes.a_uindices2.bind()
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      2, // size for uvec2
+      gl.UNSIGNED_INT,
+      0,
+      0,
+    )
+
+    attributes.a_uindices3.bind()
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      3, // size for uvec3
+      gl.UNSIGNED_INT,
+      0,
+      0,
+    )
+
+    attributes.a_uindices4.bind()
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      4, // size for uvec4
+      gl.UNSIGNED_INT,
       0,
       0,
     )
@@ -687,12 +732,14 @@ describe('interleavedAttributeView', () => {
 
     interleavedAttributes.data.bind()
 
-    const calls = (gl.vertexAttribPointer as any).mock.calls
+    const floatCalls = (gl.vertexAttribPointer as any).mock.calls
+    const intCalls = (gl.vertexAttribIPointer as any).mock.calls
 
-    // Check that integer attributes use INT type
-    expect(calls[0][2]).toBe(gl.FLOAT) // vec2
-    expect(calls[1][2]).toBe(gl.INT) // int
-    expect(calls[2][2]).toBe(gl.INT) // ivec2
+    // Float attributes use vertexAttribPointer
+    expect(floatCalls[0][2]).toBe(gl.FLOAT) // vec2
+    // Integer attributes use vertexAttribIPointer
+    expect(intCalls[0][2]).toBe(gl.INT) // int
+    expect(intCalls[1][2]).toBe(gl.INT) // ivec2
   })
 
   it('should set buffer data', () => {

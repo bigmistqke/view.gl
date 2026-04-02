@@ -42,6 +42,7 @@ export function createMockGL() {
     DYNAMIC_DRAW: 0x88e8,
     FLOAT: 0x1406,
     INT: 0x1404,
+    UNSIGNED_INT: 0x1405,
     UNSIGNED_BYTE: 0x1401,
     TRIANGLES: 0x0004,
     LINES: 0x0001,
@@ -120,6 +121,7 @@ export function createMockGL() {
 
     enableVertexAttribArray: vi.fn(),
     vertexAttribPointer: vi.fn(),
+    vertexAttribIPointer: vi.fn(),
     vertexAttribDivisor: vi.fn(),
 
     // Uniform methods
