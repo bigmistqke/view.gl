@@ -237,7 +237,13 @@ export function attributeView<T extends AttributeSchema>(
   const attributes = mapObject(
     schema,
     (
-      { kind, format, normalized = false, instanced, buffer = assertedNotNullish(gl.createBuffer()) },
+      {
+        kind,
+        format,
+        normalized = false,
+        instanced,
+        buffer = assertedNotNullish(gl.createBuffer()),
+      },
       key,
     ): AttributeMethods => {
       const name = toID(key)
@@ -312,7 +318,18 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       const normalized = layout.normalized ?? false
       index += size * FORMAT_BYTE_SIZE[resolvedFormat]
 
-      return () => handleAttribute(gl, location, size, stride, offset, glType, isIntKind, normalized, instanced)
+      return () =>
+        handleAttribute(
+          gl,
+          location,
+          size,
+          stride,
+          offset,
+          glType,
+          isIntKind,
+          normalized,
+          instanced,
+        )
     })
 
     // Set stride to final index

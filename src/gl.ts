@@ -1,7 +1,9 @@
 import { RemoveSuffix } from './type-utils'
 import type { GL } from './types'
 
-function isWebGL2RenderingContext(gl: WebGLRenderingContext | WebGL2RenderingContext): gl is WebGL2RenderingContext {
+function isWebGL2RenderingContext(
+  gl: WebGLRenderingContext | WebGL2RenderingContext,
+): gl is WebGL2RenderingContext {
   return typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext
 }
 

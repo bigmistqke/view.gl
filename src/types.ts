@@ -285,14 +285,7 @@ export type AttributeKind =
   | 'uvec3'
   | 'uvec4'
 
-export type AttributeFormat =
-  | 'float32'
-  | 'int32'
-  | 'uint32'
-  | 'int16'
-  | 'uint16'
-  | 'int8'
-  | 'uint8'
+export type AttributeFormat = 'float32' | 'int32' | 'uint32' | 'int16' | 'uint16' | 'int8' | 'uint8'
 
 export interface AttributeDefinition {
   kind: AttributeKind
@@ -313,7 +306,9 @@ type DefaultFormat<K extends AttributeKind> = K extends IntKind
     ? 'uint32'
     : 'float32'
 
-type ResolvedFormat<T extends AttributeDefinition> = T extends { format: infer F extends AttributeFormat }
+type ResolvedFormat<T extends AttributeDefinition> = T extends {
+  format: infer F extends AttributeFormat
+}
   ? F
   : DefaultFormat<T['kind']>
 
