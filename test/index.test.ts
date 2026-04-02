@@ -434,7 +434,74 @@ describe('attributeView', () => {
       expect.any(Number),
       1, // size for float
       gl.FLOAT,
-      false,
+      false, // normalized
+      0,
+      0,
+    )
+  })
+
+  it('should use format to override the GL buffer type', () => {
+    const schema = {
+      a_color: { kind: 'vec4', format: 'uint8', normalized: true },
+      a_normal: { kind: 'vec3', format: 'int8', normalized: true },
+      a_uv: { kind: 'vec2', format: 'uint16', normalized: true },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    attributes.a_color.bind()
+    expect(gl.vertexAttribPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      4,
+      gl.UNSIGNED_BYTE,
+      true,
+      0,
+      0,
+    )
+
+    attributes.a_normal.bind()
+    expect(gl.vertexAttribPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      3,
+      gl.BYTE,
+      true,
+      0,
+      0,
+    )
+
+    attributes.a_uv.bind()
+    expect(gl.vertexAttribPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      2,
+      gl.UNSIGNED_SHORT,
+      true,
+      0,
+      0,
+    )
+  })
+
+  it('should use int16/uint16 format for integer attribute kinds', () => {
+    const schema = {
+      a_index: { kind: 'int', format: 'int16' },
+      a_flags: { kind: 'uint', format: 'uint8' },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    attributes.a_index.bind()
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      1,
+      gl.SHORT,
+      0,
+      0,
+    )
+
+    attributes.a_flags.bind()
+    expect(gl.vertexAttribIPointer).toHaveBeenCalledWith(
+      expect.any(Number),
+      1,
+      gl.UNSIGNED_BYTE,
       0,
       0,
     )
@@ -740,6 +807,43 @@ describe('interleavedAttributeView', () => {
     // Integer attributes use vertexAttribIPointer
     expect(intCalls[0][2]).toBe(gl.INT) // int
     expect(intCalls[1][2]).toBe(gl.INT) // ivec2
+  })
+
+  it('should use format byte size for stride and use normalized flag', () => {
+    const schema = {
+      data: {
+        layout: [
+          { key: 'a_position', kind: 'vec2' },               // 2 * 4 = 8 bytes
+          { key: 'a_color', kind: 'vec4', format: 'uint8', normalized: true },  // 4 * 1 = 4 bytes
+          { key: 'a_normal', kind: 'vec2', format: 'int16', normalized: true }, // 2 * 2 = 4 bytes
+        ],
+        instanced: false,
+      },
+    } satisfies InterleavedAttributeSchema
+
+    const interleavedAttributes = interleavedAttributeView(gl, program, schema)
+    interleavedAttributes.data.bind()
+
+    const calls = (gl.vertexAttribPointer as any).mock.calls
+    const stride = 16 // 8 + 4 + 4
+
+    // a_position: float32, not normalized
+    expect(calls[0][2]).toBe(gl.FLOAT)
+    expect(calls[0][3]).toBe(false)
+    expect(calls[0][4]).toBe(stride)
+    expect(calls[0][5]).toBe(0)
+
+    // a_color: uint8, normalized
+    expect(calls[1][2]).toBe(gl.UNSIGNED_BYTE)
+    expect(calls[1][3]).toBe(true)
+    expect(calls[1][4]).toBe(stride)
+    expect(calls[1][5]).toBe(8)
+
+    // a_normal: int16, normalized
+    expect(calls[2][2]).toBe(gl.SHORT)
+    expect(calls[2][3]).toBe(true)
+    expect(calls[2][4]).toBe(stride)
+    expect(calls[2][5]).toBe(12)
   })
 
   it('should set buffer data', () => {

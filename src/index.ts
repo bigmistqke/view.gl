@@ -1,5 +1,7 @@
 import { getInstancedArrays, getVertexArrayObject } from './gl'
 import type {
+  AttributeFormat,
+  AttributeKind,
   AttributeMethods,
   AttributeSchema,
   AttributeView,
@@ -165,6 +167,41 @@ export function uniformView<T extends UniformSchema>(
 /*                                                                                */
 /**********************************************************************************/
 
+type GLType =
+  | 'FLOAT'
+  | 'INT'
+  | 'UNSIGNED_INT'
+  | 'SHORT'
+  | 'UNSIGNED_SHORT'
+  | 'BYTE'
+  | 'UNSIGNED_BYTE'
+
+const FORMAT_TO_GL_TYPE: Record<AttributeFormat, GLType> = {
+  float32: 'FLOAT',
+  int32: 'INT',
+  uint32: 'UNSIGNED_INT',
+  int16: 'SHORT',
+  uint16: 'UNSIGNED_SHORT',
+  int8: 'BYTE',
+  uint8: 'UNSIGNED_BYTE',
+}
+
+const FORMAT_BYTE_SIZE: Record<AttributeFormat, number> = {
+  float32: 4,
+  int32: 4,
+  uint32: 4,
+  int16: 2,
+  uint16: 2,
+  int8: 1,
+  uint8: 1,
+}
+
+function defaultFormat(kind: AttributeKind): AttributeFormat {
+  if (kind.startsWith('u')) return 'uint32'
+  if (kind.startsWith('i')) return 'int32'
+  return 'float32'
+}
+
 // Shared attribute helper functions
 // between attributeView and interleavedAttributeView
 function handleAttribute(
@@ -173,14 +210,16 @@ function handleAttribute(
   size: number,
   stride: number,
   offset: number,
-  type: 'FLOAT' | 'INT' | 'UNSIGNED_INT',
+  glType: GLType,
+  isIntegerKind: boolean,
+  normalized: boolean,
   instanced?: boolean,
 ) {
   gl.enableVertexAttribArray(location)
-  if (type === 'INT' || type === 'UNSIGNED_INT') {
-    ;(gl as WebGL2RenderingContext).vertexAttribIPointer(location, size, gl[type], stride, offset)
+  if (isIntegerKind) {
+    ;(gl as WebGL2RenderingContext).vertexAttribIPointer(location, size, gl[glType], stride, offset)
   } else {
-    gl.vertexAttribPointer(location, size, gl[type], false, stride, offset)
+    gl.vertexAttribPointer(location, size, gl[glType], normalized, stride, offset)
   }
 
   if (instanced) {
@@ -198,7 +237,7 @@ export function attributeView<T extends AttributeSchema>(
   const attributes = mapObject(
     schema,
     (
-      { kind, instanced, buffer = assertedNotNullish(gl.createBuffer()) },
+      { kind, format, normalized = false, instanced, buffer = assertedNotNullish(gl.createBuffer()) },
       key,
     ): AttributeMethods => {
       const name = toID(key)
@@ -209,13 +248,15 @@ export function attributeView<T extends AttributeSchema>(
       }
 
       const size = kindToSize(kind)
-      const type = kind.startsWith('u') ? 'UNSIGNED_INT' : kind.startsWith('i') ? 'INT' : 'FLOAT'
+      const resolvedFormat = format ?? defaultFormat(kind)
+      const glType = FORMAT_TO_GL_TYPE[resolvedFormat]
+      const isIntKind = kind.startsWith('i') || kind.startsWith('u')
 
       return {
         buffer,
         bind() {
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-          handleAttribute(gl, location, size, 0, 0, type, instanced)
+          handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced)
         },
         dispose() {
           gl.deleteBuffer(buffer)
@@ -265,14 +306,13 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
 
       const size = kindToSize(layout.kind)
       const offset = index
-      const type = layout.kind.startsWith('u')
-        ? 'UNSIGNED_INT'
-        : layout.kind.startsWith('i')
-          ? 'INT'
-          : 'FLOAT'
-      index += size * 4
+      const resolvedFormat = layout.format ?? defaultFormat(layout.kind)
+      const glType = FORMAT_TO_GL_TYPE[resolvedFormat]
+      const isIntKind = layout.kind.startsWith('i') || layout.kind.startsWith('u')
+      const normalized = layout.normalized ?? false
+      index += size * FORMAT_BYTE_SIZE[resolvedFormat]
 
-      return () => handleAttribute(gl, location, size, stride, offset, type, instanced)
+      return () => handleAttribute(gl, location, size, stride, offset, glType, isIntKind, normalized, instanced)
     })
 
     // Set stride to final index

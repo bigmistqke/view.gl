@@ -285,8 +285,19 @@ export type AttributeKind =
   | 'uvec3'
   | 'uvec4'
 
+export type AttributeFormat =
+  | 'float32'
+  | 'int32'
+  | 'uint32'
+  | 'int16'
+  | 'uint16'
+  | 'int8'
+  | 'uint8'
+
 export interface AttributeDefinition {
   kind: AttributeKind
+  format?: AttributeFormat
+  normalized?: boolean
   instanced?: boolean
   buffer?: WebGLBuffer
 }
@@ -295,21 +306,36 @@ export type AttributeSchema = Record<string | symbol, AttributeDefinition>
 
 type IntKind = 'int' | 'ivec2' | 'ivec3' | 'ivec4'
 type UintKind = 'uint' | 'uvec2' | 'uvec3' | 'uvec4'
-type AttributeData<T extends AttributeKind> = T extends IntKind
-  ? Int32Array
-  : T extends UintKind
-    ? Uint32Array
-    : Float32Array
 
-export interface AttributeMethods<T extends AttributeKind = AttributeKind> {
+type DefaultFormat<K extends AttributeKind> = K extends IntKind
+  ? 'int32'
+  : K extends UintKind
+    ? 'uint32'
+    : 'float32'
+
+type ResolvedFormat<T extends AttributeDefinition> = T extends { format: infer F extends AttributeFormat }
+  ? F
+  : DefaultFormat<T['kind']>
+
+type FormatToArray = {
+  float32: Float32Array
+  int32: Int32Array
+  uint32: Uint32Array
+  int16: Int16Array
+  uint16: Uint16Array
+  int8: Int8Array
+  uint8: Uint8Array
+}
+
+export interface AttributeMethods<T extends AttributeDefinition = AttributeDefinition> {
   buffer: WebGLBuffer
   bind(): void
-  set(data: AttributeData<T>, usage?: GLUsage): { bind(): void }
+  set(data: FormatToArray[ResolvedFormat<T>], usage?: GLUsage): { bind(): void }
   dispose(): void
 }
 
 export type AttributeView<T extends AttributeSchema> = {
-  [K in keyof T]: Prettify<AttributeMethods<T[K]['kind']>>
+  [K in keyof T]: Prettify<AttributeMethods<T[K]>>
 }
 
 /**********************************************************************************/
@@ -321,6 +347,8 @@ export type AttributeView<T extends AttributeSchema> = {
 export interface InterleavedAttributeLayout {
   key: string | symbol
   kind: AttributeKind
+  format?: AttributeFormat
+  normalized?: boolean
 }
 
 export interface InterleavedAttributeDefinition {
