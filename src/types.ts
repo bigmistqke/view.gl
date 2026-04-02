@@ -293,10 +293,18 @@ export interface AttributeDefinition {
 
 export type AttributeSchema = Record<string | symbol, AttributeDefinition>
 
-export interface AttributeMethods<T = AttributeKind> {
+type IntKind = 'int' | 'ivec2' | 'ivec3' | 'ivec4'
+type UintKind = 'uint' | 'uvec2' | 'uvec3' | 'uvec4'
+type AttributeData<T extends AttributeKind> = T extends IntKind
+  ? Int32Array
+  : T extends UintKind
+    ? Uint32Array
+    : Float32Array
+
+export interface AttributeMethods<T extends AttributeKind = AttributeKind> {
   buffer: WebGLBuffer
   bind(): void
-  set(data: ArrayBufferView, usage?: GLUsage): { bind(): void }
+  set(data: AttributeData<T>, usage?: GLUsage): { bind(): void }
   dispose(): void
 }
 
