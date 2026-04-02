@@ -1,4 +1,4 @@
-import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-Cg3HhUMF.js';
+import { b as createFramebuffer, a as attribute, g as glsl, u as uniform, c as compile } from './tag-D94fSugr.js';
 import { d as dom } from './utils-2dzuv_bW.js';
 
 const MATERIALS = {

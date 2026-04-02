@@ -314,9 +314,36 @@ function uniformView(gl, program, schema) {
     };
   });
 }
-function handleAttribute(gl, location, size, stride, offset, type, instanced) {
+const FORMAT_TO_GL_TYPE = {
+  float32: "FLOAT",
+  int32: "INT",
+  uint32: "UNSIGNED_INT",
+  int16: "SHORT",
+  uint16: "UNSIGNED_SHORT",
+  int8: "BYTE",
+  uint8: "UNSIGNED_BYTE"
+};
+const FORMAT_BYTE_SIZE = {
+  float32: 4,
+  int32: 4,
+  uint32: 4,
+  int16: 2,
+  uint16: 2,
+  int8: 1,
+  uint8: 1
+};
+function defaultFormat(kind) {
+  if (kind.startsWith("u")) return "uint32";
+  if (kind.startsWith("i")) return "int32";
+  return "float32";
+}
+function handleAttribute(gl, location, size, stride, offset, glType, isIntegerKind, normalized, instanced) {
   gl.enableVertexAttribArray(location);
-  gl.vertexAttribPointer(location, size, gl[type], false, stride, offset);
+  if (isIntegerKind) {
+    gl.vertexAttribIPointer(location, size, gl[glType], stride, offset);
+  } else {
+    gl.vertexAttribPointer(location, size, gl[glType], normalized, stride, offset);
+  }
   if (instanced) {
     assertedNotNullish(getInstancedArrays(gl)).vertexAttribDivisor(location, 1);
   }
@@ -324,19 +351,21 @@ function handleAttribute(gl, location, size, stride, offset, type, instanced) {
 function attributeView(gl, program, schema, { signal } = {}) {
   const attributes = mapObject(
     schema,
-    ({ kind, instanced, buffer = assertedNotNullish(gl.createBuffer()) }, key) => {
+    ({ kind, format, normalized = false, instanced, buffer = assertedNotNullish(gl.createBuffer()) }, key) => {
       const name = toID(key);
       const location = gl.getAttribLocation(program, name);
       if (location < 0) {
         throw new Error(`Attribute '${name}' not found`);
       }
       const size = kindToSize(kind);
-      const type = kind.startsWith("i") ? "INT" : "FLOAT";
+      const resolvedFormat = format ?? defaultFormat(kind);
+      const glType = FORMAT_TO_GL_TYPE[resolvedFormat];
+      const isIntKind = kind.startsWith("i") || kind.startsWith("u");
       return {
         buffer,
         bind() {
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-          handleAttribute(gl, location, size, 0, 0, type, instanced);
+          handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced);
         },
         dispose() {
           gl.deleteBuffer(buffer);
@@ -365,9 +394,12 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
       }
       const size = kindToSize(layout2.kind);
       const offset = index2;
-      const type = layout2.kind.startsWith("i") ? "INT" : "FLOAT";
-      index2 += size * 4;
-      return () => handleAttribute(gl, location, size, stride, offset, type, instanced);
+      const resolvedFormat = layout2.format ?? defaultFormat(layout2.kind);
+      const glType = FORMAT_TO_GL_TYPE[resolvedFormat];
+      const isIntKind = layout2.kind.startsWith("i") || layout2.kind.startsWith("u");
+      const normalized = layout2.normalized ?? false;
+      index2 += size * FORMAT_BYTE_SIZE[resolvedFormat];
+      return () => handleAttribute(gl, location, size, stride, offset, glType, isIntKind, normalized, instanced);
     });
     const stride = index2;
     const buffer = assertedNotNullish(gl.createBuffer());
