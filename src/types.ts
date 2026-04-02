@@ -296,7 +296,7 @@ export type AttributeSchema = Record<string | symbol, AttributeDefinition>
 export interface AttributeMethods<T = AttributeKind> {
   buffer: WebGLBuffer
   bind(): void
-  set(data: Float32Array, usage?: GLUsage): { bind(): void }
+  set(data: ArrayBufferView, usage?: GLUsage): { bind(): void }
   dispose(): void
 }
 
