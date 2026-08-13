@@ -409,6 +409,64 @@ describe('attributeView', () => {
     expect(gl.vertexAttribDivisor).toHaveBeenCalledWith(expect.any(Number), 1)
   })
 
+  it('should return a disposer from bind that clears the instancing divisor', () => {
+    const schema = {
+      a_instancePosition: { kind: 'vec3', instanced: true },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    // The divisor is global to the location rather than to the program, so
+    // leaving it at 1 makes the next non-instanced attribute bound there read
+    // a single value for every vertex.
+    const unbind = attributes.a_instancePosition.bind()
+    expect(gl.vertexAttribDivisor).toHaveBeenCalledWith(expect.any(Number), 1)
+
+    unbind()
+    expect(gl.vertexAttribDivisor).toHaveBeenLastCalledWith(expect.any(Number), 0)
+  })
+
+  it('should state a zero divisor for non-instanced attributes rather than inherit one', () => {
+    const schema = {
+      a_position: { kind: 'vec2' },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    // A location left at 1 by an earlier instanced attribute would otherwise
+    // feed a single value to every vertex here.
+    attributes.a_position.bind()
+    expect(gl.vertexAttribDivisor).toHaveBeenCalledWith(expect.any(Number), 0)
+  })
+
+  it('should restore the previous divisor rather than assume it was zero', () => {
+    const schema = {
+      a_instancePosition: { kind: 'vec3', instanced: true },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+    ;(gl.getVertexAttrib as any).mockReturnValue(2)
+
+    const unbind = attributes.a_instancePosition.bind()
+    unbind()
+    expect(gl.vertexAttribDivisor).toHaveBeenLastCalledWith(expect.any(Number), 2)
+  })
+
+  it('should return a disposer that only restores once', () => {
+    const schema = {
+      a_instancePosition: { kind: 'vec3', instanced: true },
+    } satisfies AttributeSchema
+
+    const attributes = attributeView(gl, program, schema)
+
+    const unbind = attributes.a_instancePosition.bind()
+    unbind()
+    const callsAfterFirst = (gl.vertexAttribDivisor as any).mock.calls.length
+    // Undoing twice would put back state a later bind() is relying on.
+    unbind()
+    expect((gl.vertexAttribDivisor as any).mock.calls).toHaveLength(callsAfterFirst)
+  })
+
   it('should use custom buffer if provided', () => {
     const customBuffer = gl.createBuffer()!
     const schema = {
@@ -724,6 +782,34 @@ describe('interleavedAttributeView', () => {
     expect(interleavedAttributes.vertexData.unbind).toBeInstanceOf(Function)
     expect(interleavedAttributes.vertexData.dispose).toBeInstanceOf(Function)
     expect(interleavedAttributes.vertexData.set).toBeInstanceOf(Function)
+  })
+
+  it('should return a disposer from bind that restores the default vertex array', () => {
+    const schema = {
+      vertexData: {
+        layout: [
+          { key: 'a_position', kind: 'vec3' },
+          { key: 'a_color', kind: 'vec4' },
+        ],
+        instanced: true,
+      },
+    } satisfies InterleavedAttributeSchema
+
+    const interleavedAttributes = interleavedAttributeView(gl, program, schema)
+
+    // A bound vertex array stays selected for everything drawn afterwards, so
+    // the next draw would write its own attributes into THIS array and corrupt
+    // the layer that owns it. The disposer hands the default back.
+    // Restoring the previous array rather than null keeps nested binds working.
+    const previous = { id: 'previously-bound-vao' }
+    ;(gl.getParameter as any).mockReturnValue(previous)
+
+    const unbind = interleavedAttributes.vertexData.bind()
+    expect(unbind).toBeInstanceOf(Function)
+
+    ;(gl.bindVertexArray as any).mockClear()
+    unbind()
+    expect(gl.bindVertexArray).toHaveBeenCalledWith(previous)
   })
 
   it('should calculate correct stride and offsets', () => {
@@ -1078,6 +1164,26 @@ describe('bufferView', () => {
 
     buffers.indices.bind()
     expect(gl.bindBuffer).toHaveBeenCalledWith(gl.ELEMENT_ARRAY_BUFFER, expect.any(Object))
+  })
+
+  it('should return a disposer from bind that releases the target', () => {
+    const schema = {
+      indices: { target: 'ELEMENT_ARRAY_BUFFER' },
+    } satisfies BufferSchema
+
+    const buffers = bufferView(gl, schema)
+
+    // An ELEMENT_ARRAY_BUFFER binding is recorded in whichever vertex array is
+    // bound, so restoring the previous buffer rather than null keeps the
+    // disposer from stripping the index buffer off an array we do not own.
+    const previous = { id: 'previously-bound' }
+    ;(gl.getParameter as any).mockReturnValue(previous)
+
+    const unbind = buffers.indices.bind()
+    expect(unbind).toBeInstanceOf(Function)
+
+    unbind()
+    expect(gl.bindBuffer).toHaveBeenLastCalledWith(gl.ELEMENT_ARRAY_BUFFER, previous)
   })
 
   it('should set buffer data with specified usage', () => {

@@ -222,9 +222,38 @@ function handleAttribute(
     gl.vertexAttribPointer(location, size, gl[glType], normalized, stride, offset)
   }
 
+  // Always stated, never inherited: the divisor belongs to the location rather
+  // than to the program, so a location left at 1 by an earlier instanced
+  // attribute would feed one value to every vertex here.
+  // Get instanced-arrays-feature: extension if webgl, gl if webgl2
+  const instancedArrays = getInstancedArrays(gl)
   if (instanced) {
-    // Get instanced-arrays-feature: extension if webgl, gl if webgl2
-    assertedNotNullish(getInstancedArrays(gl)).vertexAttribDivisor(location, 1)
+    assertedNotNullish(instancedArrays).vertexAttribDivisor(location, 1)
+  } else if (instancedArrays) {
+    instancedArrays.vertexAttribDivisor(location, 0)
+  }
+}
+
+// Same enum in webgl2 and in the webgl1 extensions, which expose no constants
+const VERTEX_ATTRIB_ARRAY_DIVISOR = 0x88fe
+const VERTEX_ARRAY_BINDING = 0x85b5
+
+// Reads the divisor currently attached to a location, 0 where instancing is
+// unavailable and nothing can have set one
+function readDivisor(gl: GL, location: number): number {
+  return getInstancedArrays(gl)
+    ? (gl.getVertexAttrib(location, VERTEX_ATTRIB_ARRAY_DIVISOR) as number)
+    : 0
+}
+
+// Wraps a restore so it runs once: a disposer is per bind() and undoing twice
+// would put back state a later bind() is relying on
+function once(restore: () => void): () => void {
+  let done = false
+  return () => {
+    if (done) return
+    done = true
+    restore()
   }
 }
 
@@ -261,8 +290,13 @@ export function attributeView<T extends AttributeSchema>(
       return {
         buffer,
         bind() {
+          // Snapshot before the change, restore in the disposer
+          const previousDivisor = readDivisor(gl, location)
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
           handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced)
+          return once(() => {
+            getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor)
+          })
         },
         dispose() {
           gl.deleteBuffer(buffer)
@@ -301,6 +335,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
     let index = 0
 
     // Calculate layout information
+    const locations: number[] = []
     const handles = layout.map(layout => {
       const name = toID(layout.key)
 
@@ -309,6 +344,8 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       if (location < 0) {
         throw new Error(`Attribute '${name}' not found`)
       }
+
+      locations.push(location)
 
       const size = kindToSize(layout.kind)
       const offset = index
@@ -364,8 +401,24 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       }
     }
 
+    // A selected vertex array stays selected for every later draw, which would
+    // then write its own attributes into this one
+    const unbind = () => {
+      if (vao) {
+        vao.unbind()
+      }
+    }
+
     return {
       bind() {
+        // Snapshot before the change, restore in the disposer
+        const previousVertexArray = feature
+          ? (gl.getParameter(VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null)
+          : null
+        const previousDivisors = vao
+          ? []
+          : locations.map(location => [location, readDivisor(gl, location)] as const)
+
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
         if (vao) {
           vao.bind()
@@ -375,12 +428,22 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
             handle()
           }
         }
+
+        return once(() => {
+          if (feature) {
+            feature.bindVertexArray(previousVertexArray)
+          }
+          // Without a vertex array the manual setup wrote divisors straight to
+          // the locations, so they are ours to put back
+          if (!vao) {
+            const instancedArrays = getInstancedArrays(gl)
+            previousDivisors.forEach(([location, divisor]) => {
+              instancedArrays?.vertexAttribDivisor(location, divisor)
+            })
+          }
+        })
       },
-      unbind() {
-        if (vao) {
-          vao.unbind()
-        }
-      },
+      unbind,
       dispose() {
         gl.deleteBuffer(buffer)
         if (vao) {
@@ -421,9 +484,18 @@ export function bufferView<T extends BufferSchema>(
   // Initialize buffers
   const buffers = mapObject(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
     const buffer = assertedNotNullish(gl.createBuffer())
+
     return {
       bind() {
+        // Snapshot before the change, restore in the disposer. Restoring the
+        // previous buffer rather than null matters for ELEMENT_ARRAY_BUFFER,
+        // whose binding is recorded in the bound vertex array: clearing it
+        // would strip the index buffer from an array the caller may not own.
+        const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]) as WebGLBuffer | null
         gl.bindBuffer(gl[target], buffer)
+        return once(() => {
+          gl.bindBuffer(gl[target], previousBuffer)
+        })
       },
       dispose() {
         gl.deleteBuffer(buffer)

@@ -204,6 +204,18 @@ attributes.instanceOffset.set(instanceData).bind()
 gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 ```
 
+`bind()` returns a disposer that restores the state it changed — here the
+instancing divisor, which belongs to the attribute location rather than to the
+program, and so is inherited by whatever binds there next. Ignore it when the
+view owns its locations for the lifetime of the program; call it when they are
+shared:
+
+```typescript
+const unbind = attributes.instanceOffset.set(instanceData).bind()
+gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
+unbind()
+```
+
 ##### 📋 AttributeSchema
 
 A mapping of attribute names to their configuration.
@@ -258,6 +270,16 @@ const interleavedAttributes = interleavedAttributeView(gl, program, {
 interleavedAttributes.vertexData.set(interleavedVertexData).bind()
 ```
 
+Where vertex array objects are available this binds one, and it stays selected
+for every later draw — which would then write its own attributes into it. The
+disposer returned by `bind()` selects the previous array again:
+
+```typescript
+const unbind = interleavedAttributes.vertexData.bind()
+gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, 0)
+unbind()
+```
+
 ##### 📋 InterleavedAttributeSchema
 
 A mapping of interleaved buffer names to their layout configuration. Each layout defines multiple attributes packed into a single buffer.
@@ -296,6 +318,10 @@ const buffers = bufferView(gl, {
 
 buffers.indices.set(indexData).bind()
 buffers.data.set(dynamicData).bind()
+
+// bind() returns a disposer restoring the previous binding for that target.
+// Worth calling for ELEMENT_ARRAY_BUFFER, whose binding is recorded in the
+// bound vertex array object.
 ```
 
 ##### 📋 BufferSchema

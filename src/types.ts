@@ -324,8 +324,9 @@ type FormatToArray = {
 
 export interface AttributeMethods<T extends AttributeDefinition = AttributeDefinition> {
   buffer: WebGLBuffer
-  bind(): void
-  set(data: FormatToArray[ResolvedFormat<T>], usage?: GLUsage): { bind(): void }
+  /** Binds the attribute, returning a disposer that restores the divisor */
+  bind(): () => void
+  set(data: FormatToArray[ResolvedFormat<T>], usage?: GLUsage): { bind(): () => void }
   dispose(): void
 }
 
@@ -356,7 +357,8 @@ export type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttr
 export interface InterleavedAttributeMethods<
   T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
 > {
-  bind(): void
+  /** Binds the vertex array, returning a disposer that restores the previous one */
+  bind(): () => void
   unbind(): void
   set(data: Float32Array, usage?: GLUsage): void
   dispose(): void
@@ -381,7 +383,8 @@ export type BufferSchema = Record<string | symbol, BufferDefinition>
 
 export interface BufferMethods {
   set(data: Float32Array | Uint16Array | Uint32Array): void
-  bind(): void
+  /** Binds the buffer, returning a disposer that restores the previous binding */
+  bind(): () => void
   dispose(): void
 }
 

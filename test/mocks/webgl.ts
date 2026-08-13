@@ -38,6 +38,8 @@ export function createMockGL() {
     // Constants
     ARRAY_BUFFER: 0x8892,
     ELEMENT_ARRAY_BUFFER: 0x8893,
+    ARRAY_BUFFER_BINDING: 0x8894,
+    ELEMENT_ARRAY_BUFFER_BINDING: 0x8895,
     STATIC_DRAW: 0x88e4,
     DYNAMIC_DRAW: 0x88e8,
     FLOAT: 0x1406,
@@ -126,6 +128,12 @@ export function createMockGL() {
     vertexAttribPointer: vi.fn(),
     vertexAttribIPointer: vi.fn(),
     vertexAttribDivisor: vi.fn(),
+
+    // State queries. Real contexts always have these; the disposers returned by
+    // bind() snapshot through them. Default to "nothing bound / no divisor",
+    // which tests override where the previous value is what is under test.
+    getParameter: vi.fn(() => null),
+    getVertexAttrib: vi.fn(() => 0),
 
     // Uniform methods
     getUniformLocation: vi.fn((program: MockWebGLProgram, name: string) => {
