@@ -344,14 +344,36 @@ function handleAttribute(gl, location, size, stride, offset, glType, isIntegerKi
   } else {
     gl.vertexAttribPointer(location, size, gl[glType], normalized, stride, offset);
   }
+  const instancedArrays = getInstancedArrays(gl);
   if (instanced) {
-    assertedNotNullish(getInstancedArrays(gl)).vertexAttribDivisor(location, 1);
+    assertedNotNullish(instancedArrays).vertexAttribDivisor(location, 1);
+  } else if (instancedArrays) {
+    instancedArrays.vertexAttribDivisor(location, 0);
   }
+}
+const VERTEX_ATTRIB_ARRAY_DIVISOR = 35070;
+const VERTEX_ARRAY_BINDING = 34229;
+function readDivisor(gl, location) {
+  return getInstancedArrays(gl) ? gl.getVertexAttrib(location, VERTEX_ATTRIB_ARRAY_DIVISOR) : 0;
+}
+function once(restore) {
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    restore();
+  };
 }
 function attributeView(gl, program, schema, { signal } = {}) {
   const attributes = mapObject(
     schema,
-    ({ kind, format, normalized = false, instanced, buffer = assertedNotNullish(gl.createBuffer()) }, key) => {
+    ({
+      kind,
+      format,
+      normalized = false,
+      instanced,
+      buffer = assertedNotNullish(gl.createBuffer())
+    }, key) => {
       const name = toID(key);
       const location = gl.getAttribLocation(program, name);
       if (location < 0) {
@@ -364,8 +386,12 @@ function attributeView(gl, program, schema, { signal } = {}) {
       return {
         buffer,
         bind() {
+          const previousDivisor = readDivisor(gl, location);
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
           handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced);
+          return once(() => {
+            getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor);
+          });
         },
         dispose() {
           gl.deleteBuffer(buffer);
@@ -386,12 +412,14 @@ function attributeView(gl, program, schema, { signal } = {}) {
 function interleavedAttributeView(gl, program, schema, { signal } = {}) {
   const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
     let index2 = 0;
+    const locations = [];
     const handles = layout.map((layout2) => {
       const name = toID(layout2.key);
       const location = gl.getAttribLocation(program, name);
       if (location < 0) {
         throw new Error(`Attribute '${name}' not found`);
       }
+      locations.push(location);
       const size = kindToSize(layout2.kind);
       const offset = index2;
       const resolvedFormat = layout2.format ?? defaultFormat(layout2.kind);
@@ -399,7 +427,17 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
       const isIntKind = layout2.kind.startsWith("i") || layout2.kind.startsWith("u");
       const normalized = layout2.normalized ?? false;
       index2 += size * FORMAT_BYTE_SIZE[resolvedFormat];
-      return () => handleAttribute(gl, location, size, stride, offset, glType, isIntKind, normalized, instanced);
+      return () => handleAttribute(
+        gl,
+        location,
+        size,
+        stride,
+        offset,
+        glType,
+        isIntKind,
+        normalized,
+        instanced
+      );
     });
     const stride = index2;
     const buffer = assertedNotNullish(gl.createBuffer());
@@ -425,8 +463,15 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
         }
       };
     }
+    const unbind = () => {
+      if (vao) {
+        vao.unbind();
+      }
+    };
     return {
       bind() {
+        const previousVertexArray = feature ? gl.getParameter(VERTEX_ARRAY_BINDING) : null;
+        const previousDivisors = vao ? [] : locations.map((location) => [location, readDivisor(gl, location)]);
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         if (vao) {
           vao.bind();
@@ -435,12 +480,19 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
             handle();
           }
         }
+        return once(() => {
+          if (feature) {
+            feature.bindVertexArray(previousVertexArray);
+          }
+          if (!vao) {
+            const instancedArrays = getInstancedArrays(gl);
+            previousDivisors.forEach(([location, divisor]) => {
+              instancedArrays?.vertexAttribDivisor(location, divisor);
+            });
+          }
+        });
       },
-      unbind() {
-        if (vao) {
-          vao.unbind();
-        }
-      },
+      unbind,
       dispose() {
         gl.deleteBuffer(buffer);
         if (vao) {
@@ -469,7 +521,11 @@ function bufferView(gl, schema, { signal } = {}) {
     const buffer = assertedNotNullish(gl.createBuffer());
     return {
       bind() {
+        const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]);
         gl.bindBuffer(gl[target], buffer);
+        return once(() => {
+          gl.bindBuffer(gl[target], previousBuffer);
+        });
       },
       dispose() {
         gl.deleteBuffer(buffer);

@@ -1,4 +1,4 @@
-import { c as compile, u as uniform, g as glsl } from './tag-D94fSugr.js';
+import { c as compile, u as uniform, g as glsl } from './tag-Bq_oNuuj.js';
 import { d as dom } from './utils-2dzuv_bW.js';
 
 const NUM_SPHERES = 8;
