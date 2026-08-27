@@ -4,6 +4,7 @@ import {
   bufferView,
   interleavedAttributeView,
   uniformView,
+  vaoView,
   view,
 } from '../src/index'
 import type {
@@ -965,21 +966,9 @@ describe('interleavedAttributeView', () => {
     expect(gl.bufferData).toHaveBeenCalledWith(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
   })
 
-  it('should use VAO when available', () => {
-    const vertexArray = { id: 1 }
-    const vaoExt = {
-      createVertexArrayOES: vi.fn(() => vertexArray),
-      bindVertexArrayOES: vi.fn(),
-      deleteVertexArrayOES: vi.fn(),
-    }
-
-    // Override the getExtension method for this test
-    const originalGetExtension = gl.getExtension
-    gl.getExtension = vi.fn((name: string) => {
-      if (name === 'OES_vertex_array_object') return vaoExt as any
-      return originalGetExtension.call(gl, name)
-    }) as any
-
+  it('does not create a vertex array of its own', () => {
+    // A layout used to make one here, which is why the other participants in a
+    // draw had to be bound after it to be included. Arrays are vao()'s job.
     const schema = {
       vertexData: {
         layout: [{ key: 'a_position', kind: 'vec2' }],
@@ -987,26 +976,9 @@ describe('interleavedAttributeView', () => {
       },
     } satisfies InterleavedAttributeSchema
 
-    const interleavedAttributes = interleavedAttributeView(gl as any, program, schema)
+    interleavedAttributeView(gl as any, program, schema)
 
-    expect(vaoExt.createVertexArrayOES).toHaveBeenCalled()
-    expect(vaoExt.bindVertexArrayOES).toHaveBeenCalledWith(vertexArray)
-    expect(vaoExt.bindVertexArrayOES).toHaveBeenCalledWith(null) // unbind after setup
-
-    // Test bind
-    interleavedAttributes.vertexData.bind()
-    expect(vaoExt.bindVertexArrayOES).toHaveBeenCalledWith(vertexArray)
-
-    // Test unbind
-    interleavedAttributes.vertexData.unbind()
-    expect(vaoExt.bindVertexArrayOES).toHaveBeenCalledWith(null)
-
-    // Test dispose
-    interleavedAttributes.vertexData.dispose()
-    expect(vaoExt.deleteVertexArrayOES).toHaveBeenCalledWith(vertexArray)
-
-    // Restore original method
-    gl.getExtension = originalGetExtension
+    expect(gl.createVertexArray).not.toHaveBeenCalled()
   })
 
   it('should dispose buffers', () => {
@@ -1270,5 +1242,128 @@ describe('bufferView', () => {
 
     buffers[data_symbol].set(data)
     expect(gl.bufferData).toHaveBeenCalledWith(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW)
+  })
+})
+
+describe('vaoView', () => {
+  let gl: WebGL2RenderingContext
+  let program: WebGLProgram
+  beforeEach(() => {
+    const mock = createMockCanvas()
+    gl = mock.gl
+    program = gl.createProgram()!
+  })
+
+  function participants() {
+    const attributes = attributeView(gl as any, program, {
+      a_corner: { kind: 'vec2' },
+    } satisfies AttributeSchema)
+    const interleaved = interleavedAttributeView(gl as any, program, {
+      a_instance: {
+        layout: [{ key: 'a_position', kind: 'vec2' }],
+      },
+    } satisfies InterleavedAttributeSchema)
+    const buffers = bufferView(gl as any, {
+      b_index: { target: 'ELEMENT_ARRAY_BUFFER' },
+    } satisfies BufferSchema)
+    return { attributes, interleaved, buffers }
+  }
+
+  it('writes every participant into one array, at construction', () => {
+    const { attributes, interleaved, buffers } = participants()
+    const vertexArray = { id: 'vao' } as unknown as WebGLVertexArrayObject
+    gl.createVertexArray = vi.fn(() => vertexArray) as any
+
+    const calls: string[] = []
+    gl.bindVertexArray = vi.fn(v => calls.push(v === vertexArray ? 'bind' : 'unbind')) as any
+    gl.vertexAttribPointer = vi.fn(() => calls.push('pointer')) as any
+    gl.bindBuffer = vi.fn((target: number) =>
+      calls.push(target === gl.ELEMENT_ARRAY_BUFFER ? 'indices' : 'array'),
+    ) as any
+
+    vaoView(gl as any, [attributes.a_corner, interleaved.a_instance, buffers.b_index])
+
+    // Every participant's state is written while the new array is bound —
+    // that is the whole contract, and what call order used to decide.
+    const bound = calls.indexOf('bind')
+    const unbound = calls.lastIndexOf('unbind')
+    expect(bound).toBeGreaterThanOrEqual(0)
+    expect(calls.indexOf('pointer')).toBeGreaterThan(bound)
+    expect(calls.indexOf('indices')).toBeGreaterThan(bound)
+    expect(unbound).toBeGreaterThan(calls.lastIndexOf('indices'))
+  })
+
+  it('binds and restores, and disposes the array', () => {
+    const { attributes } = participants()
+    const vertexArray = { id: 'vao' } as unknown as WebGLVertexArrayObject
+    const foreign = { id: 'foreign' } as unknown as WebGLVertexArrayObject
+    // Swapped before the first getVertexArrayObject call: on a context without
+    // native vertex arrays the extension wrapper binds these once, up front.
+    gl.createVertexArray = vi.fn(() => vertexArray) as any
+    const bindVertexArray = vi.fn()
+    gl.bindVertexArray = bindVertexArray as any
+    gl.getParameter = vi.fn(() => foreign) as any
+
+    const vao = vaoView(gl as any, [attributes.a_corner])
+    bindVertexArray.mockClear()
+
+    const restore = vao.bind()
+    expect(bindVertexArray).toHaveBeenLastCalledWith(vertexArray)
+    restore()
+    expect(bindVertexArray).toHaveBeenLastCalledWith(foreign)
+
+    vao.dispose()
+    expect(gl.deleteVertexArray).toHaveBeenCalledWith(vertexArray)
+  })
+
+  it('re-applies each participant per bind when the context has no vertex arrays', () => {
+    // WebGL1 without OES_vertex_array_object: nowhere to keep the state, so
+    // the array is emulated by doing the work again on every bind.
+    const mock = createMockGL()
+    const gl1 = mock as any
+    gl1.createVertexArray = undefined
+    gl1.getExtension = vi.fn(() => null)
+    const program1 = gl1.createProgram()
+
+    const attributes = attributeView(gl1, program1, {
+      a_corner: { kind: 'vec2' },
+    } satisfies AttributeSchema)
+
+    const vao = vaoView(gl1, [attributes.a_corner])
+    expect(gl1.vertexAttribPointer).not.toHaveBeenCalled()
+
+    vao.bind()
+    expect(gl1.vertexAttribPointer).toHaveBeenCalledTimes(1)
+    vao.bind()
+    expect(gl1.vertexAttribPointer).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('binding a participant on its own', () => {
+  let gl: WebGL2RenderingContext
+  let program: WebGLProgram
+  beforeEach(() => {
+    const mock = createMockCanvas()
+    gl = mock.gl
+    program = gl.createProgram()!
+  })
+
+  it('targets the default vertex array, not whichever one is current', () => {
+    // The pointer calls name no destination. Without binding first, this would
+    // edit a caller's array — and an array keeps what it is given, so the
+    // damage would outlive the call.
+    const foreign = { id: 'foreign' } as unknown as WebGLVertexArrayObject
+    gl.getParameter = vi.fn(() => foreign) as any
+    const bindVertexArray = vi.fn()
+    gl.bindVertexArray = bindVertexArray as any
+
+    const attributes = attributeView(gl as any, program, {
+      a_corner: { kind: 'vec2' },
+    } satisfies AttributeSchema)
+
+    const restore = attributes.a_corner.bind()
+    expect(bindVertexArray).toHaveBeenCalledWith(null)
+    restore()
+    expect(bindVertexArray).toHaveBeenLastCalledWith(foreign)
   })
 })

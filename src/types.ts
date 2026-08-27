@@ -322,9 +322,35 @@ type FormatToArray = {
   uint8: Uint8Array
 }
 
-export interface AttributeMethods<T extends AttributeDefinition = AttributeDefinition> {
+/**
+ * What a participant contributes to a vertex array.
+ *
+ * `enableVertexAttribArray`, `vertexAttribPointer`, `vertexAttribDivisor` and
+ * the `ELEMENT_ARRAY_BUFFER` binding all write into whichever vertex array is
+ * bound when they run — they name no destination of their own. That is what
+ * makes them a participant in something rather than a property of themselves,
+ * and why `vao()` exists: it binds the array first, then asks each participant
+ * to write itself in.
+ *
+ * The returned function undoes the write. It is only used where there is no
+ * vertex array to hold the state — a WebGL1 context without
+ * `OES_vertex_array_object` — since a real vertex array is thrown away whole.
+ */
+export interface VertexArrayParticipant {
+  applyToVertexArray(): () => void
+}
+
+export interface AttributeMethods<T extends AttributeDefinition = AttributeDefinition>
+  extends VertexArrayParticipant {
   buffer: WebGLBuffer
-  /** Binds the attribute, returning a disposer that restores the divisor */
+  /**
+   * Apply this attribute to the DEFAULT vertex array, returning a disposer.
+   *
+   * Explicitly the default one: these calls have no destination of their own,
+   * so without binding first this would edit whichever array happened to be
+   * bound — and a vertex array keeps what it is given, so the damage would
+   * outlive the call. Use `vao()` to build an array of your own.
+   */
   bind(): () => void
   set(data: FormatToArray[ResolvedFormat<T>], usage?: GLUsage): { bind(): () => void }
   dispose(): void
@@ -356,11 +382,22 @@ export type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttr
 
 export interface InterleavedAttributeMethods<
   T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
-> {
-  /** Binds the vertex array, returning a disposer that restores the previous one */
+> extends VertexArrayParticipant {
+  /**
+   * Apply this layout to the DEFAULT vertex array, returning a disposer. See
+   * `AttributeMethods.bind` — and prefer `vao()`, which is the only way to get
+   * this layout and its fellow participants into an array of their own.
+   */
   bind(): () => void
   unbind(): void
   set(data: Float32Array, usage?: GLUsage): void
+  dispose(): void
+}
+
+export interface VertexArrayMethods {
+  /** Binds the vertex array, returning a disposer that restores the previous one */
+  bind(): () => void
+  unbind(): void
   dispose(): void
 }
 
@@ -381,7 +418,7 @@ export interface BufferDefinition {
 
 export type BufferSchema = Record<string | symbol, BufferDefinition>
 
-export interface BufferMethods {
+export interface BufferMethods extends VertexArrayParticipant {
   set(data: Float32Array | Uint16Array | Uint32Array): void
   /** Binds the buffer, returning a disposer that restores the previous binding */
   bind(): () => void
@@ -563,6 +600,16 @@ export type View<T extends ViewSchema = ViewSchema> = {
     : {}
   buffers: T['buffers'] extends BufferSchema ? Prettify<BufferView<T['buffers']>> : {}
   uniforms: T['uniforms'] extends UniformSchema ? Prettify<UniformView<T['uniforms']>> : {}
+  /**
+   * Build a vertex array from the participants one draw needs — its attributes,
+   * its interleaved layouts, its element buffer.
+   *
+   * This is the one member the schema cannot declare, because its input is the
+   * schema's own output. It is also the only place a vertex array is created:
+   * the participants no longer make one each, so which array they end up in is
+   * something you say rather than something you inherit from call order.
+   */
+  vao(participants: VertexArrayParticipant[]): VertexArrayMethods
 }
 
 /**********************************************************************************/

@@ -13,6 +13,8 @@ import type {
   InterleavedAttributeSchema,
   InterleavedAttributeView,
   UniformSchema,
+  VertexArrayMethods,
+  VertexArrayParticipant,
   View,
   ViewOptions,
   ViewSchema,
@@ -81,7 +83,91 @@ export function view<TSchema extends ViewSchema>(
       ? undefined
       : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
     buffers: !schema.buffers ? undefined : bufferView(gl, schema.buffers),
+    vao(participants: VertexArrayParticipant[]) {
+      return vaoView(gl, participants, options)
+    },
   } as View<TSchema>
+}
+
+/**********************************************************************************/
+/*                                                                                */
+/*                                    Vertex Array                                */
+/*                                                                                */
+/**********************************************************************************/
+
+/**
+ * Bind the default vertex array, returning a disposer that puts the previous
+ * one back. The pointer calls name no destination, so anything applied without
+ * a vertex array of its own has to say which one it means — and a vertex array
+ * keeps what it is given, so writing into a caller's array by accident would
+ * outlive the call that did it.
+ */
+function bindDefaultVertexArray(gl: GL): () => void {
+  const feature = getVertexArrayObject(gl)
+  if (!feature) {
+    return () => {}
+  }
+  const previous = gl.getParameter(VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null
+  feature.bindVertexArray(null)
+  return () => feature.bindVertexArray(previous)
+}
+
+/**
+ * A vertex array over the participants one draw needs.
+ *
+ * Where the context has vertex arrays, each participant writes itself in once,
+ * here, and `bind()` is a single `bindVertexArray`. Where it does not — WebGL1
+ * without `OES_vertex_array_object` — there is nowhere to keep the state, so
+ * `bind()` re-applies every participant and the disposer puts back what they
+ * displaced. Same contract, and the emulation is why the name still fits.
+ */
+export function vaoView(
+  gl: GL,
+  participants: VertexArrayParticipant[],
+  { signal }: ViewOptions = {},
+): VertexArrayMethods {
+  const feature = getVertexArrayObject(gl)
+
+  const methods: VertexArrayMethods = !feature
+    ? {
+        bind() {
+          const restores = participants.map(participant => participant.applyToVertexArray())
+          return once(() => restores.forEach(restore => restore()))
+        },
+        unbind() {},
+        dispose() {},
+      }
+    : (() => {
+        const vertexArray = assertedNotNullish(feature.createVertexArray())
+        const previous = gl.getParameter(VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null
+        feature.bindVertexArray(vertexArray)
+        // Discarding the restorers is the point: the state lives in this array
+        // now, and the array is thrown away whole.
+        for (const participant of participants) {
+          participant.applyToVertexArray()
+        }
+        feature.bindVertexArray(previous)
+
+        return {
+          bind() {
+            const previousVertexArray = gl.getParameter(
+              VERTEX_ARRAY_BINDING,
+            ) as WebGLVertexArrayObject | null
+            feature.bindVertexArray(vertexArray)
+            return once(() => feature.bindVertexArray(previousVertexArray))
+          },
+          unbind() {
+            feature.bindVertexArray(null)
+          },
+          dispose() {
+            feature.deleteVertexArray(vertexArray)
+          },
+        }
+      })()
+
+  signal?.addEventListener('abort', () => methods.dispose())
+
+  return methods
 }
 
 /**********************************************************************************/
@@ -287,15 +373,28 @@ export function attributeView<T extends AttributeSchema>(
       const glType = FORMAT_TO_GL_TYPE[resolvedFormat]
       const isIntKind = kind.startsWith('i') || kind.startsWith('u')
 
+      function applyToVertexArray() {
+        // Snapshot before the change, restore in the disposer
+        const previousDivisor = readDivisor(gl, location)
+        // vertexAttribPointer captures whatever is bound to ARRAY_BUFFER when
+        // it runs, so this binding is the setup for the pointer, not a lasting
+        // part of the vertex array's state.
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+        handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced)
+        return once(() => {
+          getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor)
+        })
+      }
+
       return {
         buffer,
+        applyToVertexArray,
         bind() {
-          // Snapshot before the change, restore in the disposer
-          const previousDivisor = readDivisor(gl, location)
-          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-          handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced)
+          const restoreVertexArray = bindDefaultVertexArray(gl)
+          const restore = applyToVertexArray()
           return once(() => {
-            getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor)
+            restore()
+            restoreVertexArray()
           })
         },
         dispose() {
@@ -375,90 +474,47 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
     // Create a buffer
     const buffer = assertedNotNullish(gl.createBuffer())
 
-    // Create VAO to cache attribute state
-    let vao: { unbind(): void; bind(): void; dispose(): void } | undefined = undefined
-
-    // Get VAO-feature: extension if webgl1, gl if webgl2
-    const feature = getVertexArrayObject(gl)
-    if (feature) {
-      const vertexArray = feature.createVertexArray()
-      feature.bindVertexArray(vertexArray)
+    // This layout used to create a vertex array of its own, here, which is why
+    // the other participants in a draw had to be bound after it to be included
+    // — the array they landed in was whichever one happened to be current.
+    // Arrays are `vao()`'s job now; a layout is a layout and a buffer.
+    function applyToVertexArray() {
+      const previousDivisors = locations.map(
+        location => [location, readDivisor(gl, location)] as const,
+      )
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
       for (const handle of handles) {
         handle()
       }
-      feature.bindVertexArray(null)
-      vao = {
-        unbind() {
-          feature.bindVertexArray(null)
-        },
-        bind() {
-          feature.bindVertexArray(vertexArray)
-        },
-        dispose() {
-          feature.deleteVertexArray(vertexArray)
-        },
-      }
-    }
-
-    // A selected vertex array stays selected for every later draw, which would
-    // then write its own attributes into this one
-    const unbind = () => {
-      if (vao) {
-        vao.unbind()
-      }
+      return once(() => {
+        const instancedArrays = getInstancedArrays(gl)
+        previousDivisors.forEach(([location, divisor]) => {
+          instancedArrays?.vertexAttribDivisor(location, divisor)
+        })
+      })
     }
 
     return {
+      applyToVertexArray,
       bind() {
-        // Snapshot before the change, restore in the disposer
-        const previousVertexArray = feature
-          ? (gl.getParameter(VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null)
-          : null
-        const previousDivisors = vao
-          ? []
-          : locations.map(location => [location, readDivisor(gl, location)] as const)
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        if (vao) {
-          vao.bind()
-        } else {
-          // Fallback: manual attribute setup
-          for (const handle of handles) {
-            handle()
-          }
-        }
-
+        const restoreVertexArray = bindDefaultVertexArray(gl)
+        const restore = applyToVertexArray()
         return once(() => {
-          if (feature) {
-            feature.bindVertexArray(previousVertexArray)
-          }
-          // Without a vertex array the manual setup wrote divisors straight to
-          // the locations, so they are ours to put back
-          if (!vao) {
-            const instancedArrays = getInstancedArrays(gl)
-            previousDivisors.forEach(([location, divisor]) => {
-              instancedArrays?.vertexAttribDivisor(location, divisor)
-            })
-          }
+          restore()
+          restoreVertexArray()
         })
       },
-      unbind,
+      unbind() {
+        getVertexArrayObject(gl)?.bindVertexArray(null)
+      },
       dispose() {
         gl.deleteBuffer(buffer)
-        if (vao) {
-          vao.dispose()
-        }
       },
       set(value, usage = 'STATIC_DRAW') {
-        if (vao) {
-          vao.bind()
-        }
+        // Uploading is storage, not binding: ARRAY_BUFFER is not vertex-array
+        // state, so this touches no array, whichever one is bound.
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
         gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage])
-        if (vao) {
-          vao.unbind()
-        }
       },
     } satisfies InterleavedAttributeMethods
   })
@@ -485,16 +541,29 @@ export function bufferView<T extends BufferSchema>(
   const buffers = mapObject(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
     const buffer = assertedNotNullish(gl.createBuffer())
 
+    function applyToVertexArray() {
+      // Snapshot before the change, restore in the disposer. Restoring the
+      // previous buffer rather than null matters for ELEMENT_ARRAY_BUFFER,
+      // whose binding is recorded in the bound vertex array: clearing it
+      // would strip the index buffer from an array the caller may not own.
+      const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]) as WebGLBuffer | null
+      gl.bindBuffer(gl[target], buffer)
+      return once(() => {
+        gl.bindBuffer(gl[target], previousBuffer)
+      })
+    }
+
     return {
+      applyToVertexArray,
       bind() {
-        // Snapshot before the change, restore in the disposer. Restoring the
-        // previous buffer rather than null matters for ELEMENT_ARRAY_BUFFER,
-        // whose binding is recorded in the bound vertex array: clearing it
-        // would strip the index buffer from an array the caller may not own.
-        const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]) as WebGLBuffer | null
-        gl.bindBuffer(gl[target], buffer)
+        // ELEMENT_ARRAY_BUFFER's binding belongs to the bound vertex array, so
+        // like the attributes this has to say which array it means. ARRAY_BUFFER
+        // is context state and unaffected either way.
+        const restoreVertexArray = bindDefaultVertexArray(gl)
+        const restore = applyToVertexArray()
         return once(() => {
-          gl.bindBuffer(gl[target], previousBuffer)
+          restore()
+          restoreVertexArray()
         })
       },
       dispose() {
