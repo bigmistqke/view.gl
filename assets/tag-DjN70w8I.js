@@ -262,8 +262,61 @@ function view(gl, program, schema, options) {
     uniforms: !schema.uniforms ? void 0 : uniformView(gl, program, schema.uniforms),
     attributes: !schema.attributes ? void 0 : attributeView(gl, program, schema.attributes, options),
     interleavedAttributes: !schema.interleavedAttributes ? void 0 : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
-    buffers: !schema.buffers ? void 0 : bufferView(gl, schema.buffers)
+    buffers: !schema.buffers ? void 0 : bufferView(gl, schema.buffers),
+    vao(participants) {
+      return vaoView(gl, participants, options);
+    }
   };
+}
+function bindDefaultVertexArray(gl) {
+  const feature = getVertexArrayObject(gl);
+  if (!feature) {
+    return () => {
+    };
+  }
+  const previous = gl.getParameter(VERTEX_ARRAY_BINDING);
+  feature.bindVertexArray(null);
+  return () => feature.bindVertexArray(previous);
+}
+function vaoView(gl, participants, { signal } = {}) {
+  const feature = getVertexArrayObject(gl);
+  const methods = !feature ? {
+    bind() {
+      const restores = participants.map((participant) => participant.applyToVertexArray());
+      participants.forEach((participant) => participant.applyToContext?.());
+      return once(() => restores.forEach((restore) => restore()));
+    },
+    unbind() {
+    },
+    dispose() {
+    }
+  } : (() => {
+    const vertexArray = assertedNotNullish(feature.createVertexArray());
+    const previous = gl.getParameter(VERTEX_ARRAY_BINDING);
+    feature.bindVertexArray(vertexArray);
+    for (const participant of participants) {
+      participant.applyToVertexArray();
+    }
+    feature.bindVertexArray(previous);
+    return {
+      bind() {
+        const previousVertexArray = gl.getParameter(
+          VERTEX_ARRAY_BINDING
+        );
+        feature.bindVertexArray(vertexArray);
+        participants.forEach((participant) => participant.applyToContext?.());
+        return once(() => feature.bindVertexArray(previousVertexArray));
+      },
+      unbind() {
+        feature.bindVertexArray(null);
+      },
+      dispose() {
+        feature.deleteVertexArray(vertexArray);
+      }
+    };
+  })();
+  signal?.addEventListener("abort", () => methods.dispose());
+  return methods;
 }
 function uniformView(gl, program, schema) {
   return mapObject(schema, ({ kind, size }, key) => {
@@ -383,14 +436,23 @@ function attributeView(gl, program, schema, { signal } = {}) {
       const resolvedFormat = format ?? defaultFormat(kind);
       const glType = FORMAT_TO_GL_TYPE[resolvedFormat];
       const isIntKind = kind.startsWith("i") || kind.startsWith("u");
+      function applyToVertexArray() {
+        const previousDivisor = readDivisor(gl, location);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced);
+        return once(() => {
+          getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor);
+        });
+      }
       return {
         buffer,
+        applyToVertexArray,
         bind() {
-          const previousDivisor = readDivisor(gl, location);
-          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-          handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced);
+          const restoreVertexArray = bindDefaultVertexArray(gl);
+          const restore = applyToVertexArray();
           return once(() => {
-            getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor);
+            restore();
+            restoreVertexArray();
           });
         },
         dispose() {
@@ -409,8 +471,57 @@ function attributeView(gl, program, schema, { signal } = {}) {
   });
   return attributes;
 }
+function constantSource(gl, layout, locations) {
+  const setters = layout.map((entry, index2) => {
+    const size = kindToSize(entry.kind);
+    const name = toID(entry.key);
+    if (isMatKind(entry.kind) || size > 4) {
+      throw new Error(
+        `'${name}' is a ${entry.kind}, which cannot be a constant attribute: vertexAttrib* takes at most 4 floats and has no matrix form. Use the buffer source for it.`
+      );
+    }
+    let values = [];
+    const fn = gl[`vertexAttrib${size}f`].bind(gl);
+    return {
+      name,
+      location: locations[index2],
+      write: () => {
+        if (values.length) {
+          fn(locations[index2], ...values);
+        }
+      },
+      methods: {
+        set(...args) {
+          values = args;
+        }
+      }
+    };
+  });
+  return Object.assign(Object.fromEntries(setters.map((setter) => [setter.name, setter.methods])), {
+    applyToVertexArray() {
+      const restores = setters.map(({ location }) => {
+        const wasEnabled = gl.getVertexAttrib(location, gl.VERTEX_ATTRIB_ARRAY_ENABLED);
+        gl.disableVertexAttribArray(location);
+        return () => wasEnabled ? gl.enableVertexAttribArray(location) : void 0;
+      });
+      return once(() => restores.forEach((restore) => restore()));
+    },
+    applyToContext() {
+      setters.forEach((setter) => setter.write());
+    },
+    bind() {
+      const restoreVertexArray = bindDefaultVertexArray(gl);
+      const restore = this.applyToVertexArray();
+      this.applyToContext();
+      return once(() => {
+        restore();
+        restoreVertexArray();
+      });
+    }
+  });
+}
 function interleavedAttributeView(gl, program, schema, { signal } = {}) {
-  const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
+  const interleavedAttributes = mapObject(schema, ({ layout }) => {
     let index2 = 0;
     const locations = [];
     const handles = layout.map((layout2) => {
@@ -427,7 +538,7 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
       const isIntKind = layout2.kind.startsWith("i") || layout2.kind.startsWith("u");
       const normalized = layout2.normalized ?? false;
       index2 += size * FORMAT_BYTE_SIZE[resolvedFormat];
-      return () => handleAttribute(
+      return (divisor) => handleAttribute(
         gl,
         location,
         size,
@@ -436,78 +547,57 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
         glType,
         isIntKind,
         normalized,
-        instanced
+        divisor === 1
       );
     });
     const stride = index2;
     const buffer = assertedNotNullish(gl.createBuffer());
-    let vao = void 0;
-    const feature = getVertexArrayObject(gl);
-    if (feature) {
-      const vertexArray = feature.createVertexArray();
-      feature.bindVertexArray(vertexArray);
+    function applyToVertexArray(divisor) {
+      const previousDivisors = locations.map(
+        (location) => [location, readDivisor(gl, location)]
+      );
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       for (const handle of handles) {
-        handle();
+        handle(divisor);
       }
-      feature.bindVertexArray(null);
-      vao = {
-        unbind() {
-          feature.bindVertexArray(null);
-        },
+      return once(() => {
+        const instancedArrays = getInstancedArrays(gl);
+        previousDivisors.forEach(([location, previous]) => {
+          instancedArrays?.vertexAttribDivisor(location, previous);
+        });
+      });
+    }
+    let constant;
+    function bufferSource(divisor) {
+      const apply = () => applyToVertexArray(divisor);
+      return {
+        applyToVertexArray: apply,
         bind() {
-          feature.bindVertexArray(vertexArray);
-        },
-        dispose() {
-          feature.deleteVertexArray(vertexArray);
+          const restoreVertexArray = bindDefaultVertexArray(gl);
+          const restore = apply();
+          return once(() => {
+            restore();
+            restoreVertexArray();
+          });
         }
       };
     }
-    const unbind = () => {
-      if (vao) {
-        vao.unbind();
-      }
-    };
     return {
-      bind() {
-        const previousVertexArray = feature ? gl.getParameter(VERTEX_ARRAY_BINDING) : null;
-        const previousDivisors = vao ? [] : locations.map((location) => [location, readDivisor(gl, location)]);
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        if (vao) {
-          vao.bind();
-        } else {
-          for (const handle of handles) {
-            handle();
-          }
+      buffer: Object.assign(bufferSource(0), {
+        /** The same buffer, stepped once per instance instead of once per vertex. */
+        perInstance: bufferSource(1),
+        set(value, usage = "STATIC_DRAW") {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage]);
         }
-        return once(() => {
-          if (feature) {
-            feature.bindVertexArray(previousVertexArray);
-          }
-          if (!vao) {
-            const instancedArrays = getInstancedArrays(gl);
-            previousDivisors.forEach(([location, divisor]) => {
-              instancedArrays?.vertexAttribDivisor(location, divisor);
-            });
-          }
-        });
+      }),
+      // Lazy: a layout key can be perfectly good in a buffer and impossible as
+      // a constant, and finding that out should wait until someone asks for one.
+      get constant() {
+        return constant ??= constantSource(gl, layout, locations);
       },
-      unbind,
       dispose() {
         gl.deleteBuffer(buffer);
-        if (vao) {
-          vao.dispose();
-        }
-      },
-      set(value, usage = "STATIC_DRAW") {
-        if (vao) {
-          vao.bind();
-        }
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage]);
-        if (vao) {
-          vao.unbind();
-        }
       }
     };
   });
@@ -519,12 +609,21 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
 function bufferView(gl, schema, { signal } = {}) {
   const buffers = mapObject(schema, ({ target = "ARRAY_BUFFER", usage = "STATIC_DRAW" }) => {
     const buffer = assertedNotNullish(gl.createBuffer());
+    function applyToVertexArray() {
+      const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]);
+      gl.bindBuffer(gl[target], buffer);
+      return once(() => {
+        gl.bindBuffer(gl[target], previousBuffer);
+      });
+    }
     return {
+      applyToVertexArray,
       bind() {
-        const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]);
-        gl.bindBuffer(gl[target], buffer);
+        const restoreVertexArray = bindDefaultVertexArray(gl);
+        const restore = applyToVertexArray();
         return once(() => {
-          gl.bindBuffer(gl[target], previousBuffer);
+          restore();
+          restoreVertexArray();
         });
       },
       dispose() {

@@ -1,4 +1,4 @@
-import { b as createFramebuffer, u as uniform, g as glsl, c as compile } from './tag-Bq_oNuuj.js';
+import { b as createFramebuffer, u as uniform, g as glsl, c as compile } from './tag-DjN70w8I.js';
 import { d as dom } from './utils-2dzuv_bW.js';
 
 let playing = false;
