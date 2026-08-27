@@ -84,10 +84,11 @@ describe('view', () => {
 
     expect(result.interleavedAttributes).toBeDefined()
     expect(result.interleavedAttributes!.data).toBeDefined()
-    expect(result.interleavedAttributes!.data.bind).toBeInstanceOf(Function)
-    expect(result.interleavedAttributes!.data.unbind).toBeInstanceOf(Function)
+    expect(result.interleavedAttributes!.data.buffer.bind).toBeInstanceOf(Function)
+    expect(result.interleavedAttributes!.data.buffer.perInstance.bind).toBeInstanceOf(Function)
+    expect(result.interleavedAttributes!.data.constant.bind).toBeInstanceOf(Function)
     expect(result.interleavedAttributes!.data.dispose).toBeInstanceOf(Function)
-    expect(result.interleavedAttributes!.data.set).toBeInstanceOf(Function)
+    expect(result.interleavedAttributes!.data.buffer.set).toBeInstanceOf(Function)
   })
 
   it('should create a view with buffers', () => {
@@ -167,7 +168,7 @@ describe('view', () => {
     expect(result.attributes![a_position_symbol].bind).toBeInstanceOf(Function)
     
     expect(result.interleavedAttributes![data_symbol]).toBeDefined()
-    expect(result.interleavedAttributes![data_symbol].bind).toBeInstanceOf(Function)
+    expect(result.interleavedAttributes![data_symbol].buffer.bind).toBeInstanceOf(Function)
     
     expect(result.buffers![vertices_symbol]).toBeDefined()
     expect(result.buffers![vertices_symbol].bind).toBeInstanceOf(Function)
@@ -779,10 +780,10 @@ describe('interleavedAttributeView', () => {
     const interleavedAttributes = interleavedAttributeView(gl, program, schema)
 
     expect(interleavedAttributes.vertexData).toBeDefined()
-    expect(interleavedAttributes.vertexData.bind).toBeInstanceOf(Function)
-    expect(interleavedAttributes.vertexData.unbind).toBeInstanceOf(Function)
+    expect(interleavedAttributes.vertexData.buffer.bind).toBeInstanceOf(Function)
+    expect(interleavedAttributes.vertexData.buffer.perInstance.bind).toBeInstanceOf(Function)
     expect(interleavedAttributes.vertexData.dispose).toBeInstanceOf(Function)
-    expect(interleavedAttributes.vertexData.set).toBeInstanceOf(Function)
+    expect(interleavedAttributes.vertexData.buffer.set).toBeInstanceOf(Function)
   })
 
   it('should return a disposer from bind that restores the default vertex array', () => {
@@ -805,7 +806,7 @@ describe('interleavedAttributeView', () => {
     const previous = { id: 'previously-bound-vao' }
     ;(gl.getParameter as any).mockReturnValue(previous)
 
-    const unbind = interleavedAttributes.vertexData.bind()
+    const unbind = interleavedAttributes.vertexData.buffer.bind()
     expect(unbind).toBeInstanceOf(Function)
 
     ;(gl.bindVertexArray as any).mockClear()
@@ -827,7 +828,7 @@ describe('interleavedAttributeView', () => {
 
     const interleavedAttributes = interleavedAttributeView(gl, program, schema)
 
-    interleavedAttributes.vertexData.bind()
+    interleavedAttributes.vertexData.buffer.bind()
 
     // Check vertexAttribPointer calls
     const calls = (gl.vertexAttribPointer as any).mock.calls
@@ -851,23 +852,28 @@ describe('interleavedAttributeView', () => {
     expect(calls[2][5]).toBe(24) // offset
   })
 
-  it('should handle instanced interleaved attributes', () => {
+  it('steps per instance or per vertex from the same buffer', () => {
+    // A divisor is a property of the draw, not of the data, so it is chosen
+    // here rather than declared in the schema.
     const schema = {
       instanceData: {
         layout: [
           { key: 'a_instancePos', kind: 'vec3' },
           { key: 'a_instanceScale', kind: 'float' },
         ],
-        instanced: true,
       },
     } satisfies InterleavedAttributeSchema
 
     const interleavedAttributes = interleavedAttributeView(gl, program, schema)
 
-    interleavedAttributes.instanceData.bind()
-
+    interleavedAttributes.instanceData.buffer.perInstance.bind()
     expect(gl.vertexAttribDivisor).toHaveBeenCalledTimes(2)
     expect(gl.vertexAttribDivisor).toHaveBeenCalledWith(expect.any(Number), 1)
+
+    vi.mocked(gl.vertexAttribDivisor).mockClear()
+
+    interleavedAttributes.instanceData.buffer.bind()
+    expect(gl.vertexAttribDivisor).toHaveBeenCalledWith(expect.any(Number), 0)
   })
 
   it('should handle integer attributes in layout', () => {
@@ -884,7 +890,7 @@ describe('interleavedAttributeView', () => {
 
     const interleavedAttributes = interleavedAttributeView(gl, program, schema)
 
-    interleavedAttributes.data.bind()
+    interleavedAttributes.data.buffer.bind()
 
     const floatCalls = (gl.vertexAttribPointer as any).mock.calls
     const intCalls = (gl.vertexAttribIPointer as any).mock.calls
@@ -909,7 +915,7 @@ describe('interleavedAttributeView', () => {
     } satisfies InterleavedAttributeSchema
 
     const interleavedAttributes = interleavedAttributeView(gl, program, schema)
-    interleavedAttributes.data.bind()
+    interleavedAttributes.data.buffer.bind()
 
     const calls = (gl.vertexAttribPointer as any).mock.calls
     const stride = 16 // 8 + 4 + 4
@@ -962,7 +968,7 @@ describe('interleavedAttributeView', () => {
       1, // color
     ])
 
-    interleavedAttributes.vertexData.set(data)
+    interleavedAttributes.vertexData.buffer.set(data)
     expect(gl.bufferData).toHaveBeenCalledWith(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW)
   })
 
@@ -1057,13 +1063,13 @@ describe('interleavedAttributeView', () => {
     const interleavedAttributes = interleavedAttributeView(gl, program, schema)
 
     expect(interleavedAttributes[data_symbol]).toBeDefined()
-    expect(interleavedAttributes[data_symbol].bind).toBeInstanceOf(Function)
-    expect(interleavedAttributes[data_symbol].unbind).toBeInstanceOf(Function)
+    expect(interleavedAttributes[data_symbol].buffer.bind).toBeInstanceOf(Function)
+    expect(interleavedAttributes[data_symbol].buffer.perInstance.bind).toBeInstanceOf(Function)
     expect(interleavedAttributes[data_symbol].dispose).toBeInstanceOf(Function)
-    expect(interleavedAttributes[data_symbol].set).toBeInstanceOf(Function)
+    expect(interleavedAttributes[data_symbol].buffer.set).toBeInstanceOf(Function)
 
     // Test binding
-    interleavedAttributes[data_symbol].bind()
+    interleavedAttributes[data_symbol].buffer.bind()
     
     // Should bind buffer and set up attributes
     expect(gl.bindBuffer).toHaveBeenCalled()
@@ -1091,7 +1097,7 @@ describe('interleavedAttributeView', () => {
     expect(interleavedAttributes[vertexData]).toBeDefined()
     
     // Test that it correctly calculates stride
-    interleavedAttributes[vertexData].bind()
+    interleavedAttributes[vertexData].buffer.bind()
     
     const calls = (gl.vertexAttribPointer as any).mock.calls
     // All calls should have the same stride (3+3+2)*4 = 32 bytes
@@ -1281,7 +1287,11 @@ describe('vaoView', () => {
       calls.push(target === gl.ELEMENT_ARRAY_BUFFER ? 'indices' : 'array'),
     ) as any
 
-    vaoView(gl as any, [attributes.a_corner, interleaved.a_instance, buffers.b_index])
+    vaoView(gl as any, [
+      attributes.a_corner,
+      interleaved.a_instance.buffer.perInstance,
+      buffers.b_index,
+    ])
 
     // Every participant's state is written while the new array is bound —
     // that is the whole contract, and what call order used to decide.
@@ -1365,5 +1375,73 @@ describe('binding a participant on its own', () => {
     expect(bindVertexArray).toHaveBeenCalledWith(null)
     restore()
     expect(bindVertexArray).toHaveBeenLastCalledWith(foreign)
+  })
+})
+
+describe('the constant source', () => {
+  let gl: WebGL2RenderingContext
+  let program: WebGLProgram
+  beforeEach(() => {
+    const mock = createMockCanvas()
+    gl = mock.gl
+    program = gl.createProgram()!
+  })
+
+  const schema = {
+    a_instance: {
+      layout: [
+        { key: 'a_pos', kind: 'vec2' },
+        { key: 'a_size', kind: 'float' },
+      ],
+    },
+  } satisfies InterleavedAttributeSchema
+
+  it('gives the layout per-key setters, like a uniform', () => {
+    const { a_instance } = interleavedAttributeView(gl as any, program, schema)
+
+    expect(a_instance.constant.a_pos.set).toBeInstanceOf(Function)
+    expect(a_instance.constant.a_size.set).toBeInstanceOf(Function)
+  })
+
+  it('disables the arrays, so the attributes read the constants', () => {
+    const { a_instance } = interleavedAttributeView(gl as any, program, schema)
+
+    a_instance.constant.applyToVertexArray()
+
+    expect(gl.disableVertexAttribArray).toHaveBeenCalledTimes(2)
+  })
+
+  it('writes the values on every bind, not once into the array', () => {
+    // The enable flag is vertex-array state; the values are context state, and
+    // no array can keep them. Applying them once at construction would leave a
+    // later draw showing whatever the previous one set.
+    const { a_instance } = interleavedAttributeView(gl as any, program, schema)
+    a_instance.constant.a_pos.set(1, 2)
+    a_instance.constant.a_size.set(4)
+
+    const vao = vaoView(gl as any, [a_instance.constant])
+    expect(gl.vertexAttrib2f).not.toHaveBeenCalled()
+
+    vao.bind()
+    expect(gl.vertexAttrib2f).toHaveBeenCalledWith(expect.any(Number), 1, 2)
+    expect(gl.vertexAttrib1f).toHaveBeenCalledWith(expect.any(Number), 4)
+
+    a_instance.constant.a_pos.set(7, 8)
+    vao.bind()
+    expect(gl.vertexAttrib2f).toHaveBeenLastCalledWith(expect.any(Number), 7, 8)
+  })
+
+  it('refuses a kind vertexAttrib* cannot express, when asked for one', () => {
+    // A hard limit of the API, not a choice: vertexAttrib* takes at most four
+    // floats and has no matrix form. The buffer source handles it fine, so the
+    // complaint waits until someone reaches for a constant.
+    const matrix = {
+      a_instance: { layout: [{ key: 'a_model', kind: 'mat4' }] },
+    } satisfies InterleavedAttributeSchema
+
+    const { a_instance } = interleavedAttributeView(gl as any, program, matrix)
+
+    expect(() => a_instance.buffer.bind()).not.toThrow()
+    expect(() => a_instance.constant).toThrow(/cannot be a constant attribute/)
   })
 })

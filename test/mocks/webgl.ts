@@ -134,6 +134,12 @@ export function createMockGL() {
     // which tests override where the previous value is what is under test.
     getParameter: vi.fn(() => null),
     getVertexAttrib: vi.fn(() => 0),
+    disableVertexAttribArray: vi.fn(),
+    vertexAttrib1f: vi.fn(),
+    vertexAttrib2f: vi.fn(),
+    vertexAttrib3f: vi.fn(),
+    vertexAttrib4f: vi.fn(),
+    VERTEX_ATTRIB_ARRAY_ENABLED: 0x8622,
 
     // Uniform methods
     getUniformLocation: vi.fn((program: MockWebGLProgram, name: string) => {

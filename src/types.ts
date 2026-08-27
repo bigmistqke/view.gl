@@ -338,6 +338,18 @@ type FormatToArray = {
  */
 export interface VertexArrayParticipant {
   applyToVertexArray(): () => void
+  /**
+   * State the CONTEXT holds rather than the vertex array, re-applied on every
+   * bind because no array can keep it.
+   *
+   * There is exactly one such thing: the current generic vertex attribute
+   * values, which an attribute reads when its array is disabled. The enable
+   * flag saying to read them is vertex-array state; the values themselves are
+   * not. So a constant source splits across the two hooks — and the tempting
+   * optimisation of skipping this when nothing changed would let one draw's
+   * constants leak into the next.
+   */
+  applyToContext?(): void
 }
 
 export interface AttributeMethods<T extends AttributeDefinition = AttributeDefinition>
@@ -380,17 +392,48 @@ export interface InterleavedAttributeDefinition {
 
 export type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeDefinition>
 
-export interface InterleavedAttributeMethods<
-  T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
-> extends VertexArrayParticipant {
+/**
+ * A source is where one draw's values for a layout come from. Both kinds are
+ * participants, so either can go into a `vao()`.
+ */
+export interface Source extends VertexArrayParticipant {
   /**
-   * Apply this layout to the DEFAULT vertex array, returning a disposer. See
+   * Apply this source to the DEFAULT vertex array, returning a disposer. See
    * `AttributeMethods.bind` — and prefer `vao()`, which is the only way to get
-   * this layout and its fellow participants into an array of their own.
+   * a source and its fellow participants into an array of their own.
    */
   bind(): () => void
-  unbind(): void
+}
+
+export interface BufferSource extends Source {
+  /**
+   * The same buffer, stepped once per instance rather than once per vertex.
+   *
+   * A divisor is a property of the draw, not of the data — the same markers
+   * are an instanced fleet in one draw and a single mesh in the next — so it
+   * is chosen here rather than declared in the schema.
+   */
+  perInstance: Source
   set(data: Float32Array, usage?: GLUsage): void
+}
+
+export interface ConstantAttributeMethods {
+  set(...values: number[]): void
+}
+
+/**
+ * Per-key setters over the same layout the buffer source uses — a constant
+ * attribute is a uniform in all but name, so it is written like one.
+ */
+export type ConstantSource<T extends InterleavedAttributeLayout[]> = Source & {
+  [K in T[number] as K['key'] extends string ? K['key'] : never]: ConstantAttributeMethods
+}
+
+export interface InterleavedAttributeMethods<
+  T extends InterleavedAttributeLayout[] = InterleavedAttributeLayout[],
+> {
+  buffer: BufferSource
+  constant: ConstantSource<T>
   dispose(): void
 }
 

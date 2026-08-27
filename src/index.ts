@@ -9,6 +9,8 @@ import type {
   BufferView,
   GL,
   UniformView as InferUniformView,
+  GLUsage,
+  InterleavedAttributeLayout,
   InterleavedAttributeMethods,
   InterleavedAttributeSchema,
   InterleavedAttributeView,
@@ -132,6 +134,7 @@ export function vaoView(
     ? {
         bind() {
           const restores = participants.map(participant => participant.applyToVertexArray())
+          participants.forEach(participant => participant.applyToContext?.())
           return once(() => restores.forEach(restore => restore()))
         },
         unbind() {},
@@ -154,6 +157,8 @@ export function vaoView(
               VERTEX_ARRAY_BINDING,
             ) as WebGLVertexArrayObject | null
             feature.bindVertexArray(vertexArray)
+            // Context state the array cannot hold — see applyToContext.
+            participants.forEach(participant => participant.applyToContext?.())
             return once(() => feature.bindVertexArray(previousVertexArray))
           },
           unbind() {
@@ -422,6 +427,73 @@ export function attributeView<T extends AttributeSchema>(
 /*                                                                                */
 /**********************************************************************************/
 
+/**
+ * The other place an attribute's value can come from: not a buffer, but the
+ * context's current generic vertex attribute values, which an attribute reads
+ * for every vertex when its array is disabled.
+ *
+ * A constant is a uniform in all but name — one value for the whole draw, set
+ * by a function chosen from the kind — so it gets the setters a uniform gets,
+ * off the same layout the buffer source uses.
+ *
+ * `vertexAttrib*` tops out at four floats and has no matrix form, so a layout
+ * key that is fine in a buffer can be impossible as a constant. That is a hard
+ * limit of the API rather than a choice, and it is worth saying so out loud at
+ * the point someone reaches for it.
+ */
+function constantSource(gl: GL, layout: InterleavedAttributeLayout[], locations: number[]) {
+  const setters = layout.map((entry, index) => {
+    const size = kindToSize(entry.kind)
+    const name = toID(entry.key)
+    if (isMatKind(entry.kind) || size > 4) {
+      throw new Error(
+        `'${name}' is a ${entry.kind}, which cannot be a constant attribute: vertexAttrib* takes at most 4 floats and has no matrix form. Use the buffer source for it.`,
+      )
+    }
+    // The values are context state, not vertex-array state, so they are held
+    // here and written again on every bind — see applyToContext.
+    let values: number[] = []
+    const fn = gl[`vertexAttrib${size as 1 | 2 | 3 | 4}f`].bind(gl)
+    return {
+      name,
+      location: locations[index]!,
+      write: () => {
+        if (values.length) {
+          ;(fn as (location: number, ...args: number[]) => void)(locations[index]!, ...values)
+        }
+      },
+      methods: {
+        set(...args: number[]) {
+          values = args
+        },
+      },
+    }
+  })
+
+  return Object.assign(Object.fromEntries(setters.map(setter => [setter.name, setter.methods])), {
+    applyToVertexArray() {
+      const restores = setters.map(({ location }) => {
+        const wasEnabled = gl.getVertexAttrib(location, gl.VERTEX_ATTRIB_ARRAY_ENABLED) as boolean
+        gl.disableVertexAttribArray(location)
+        return () => (wasEnabled ? gl.enableVertexAttribArray(location) : undefined)
+      })
+      return once(() => restores.forEach(restore => restore()))
+    },
+    applyToContext() {
+      setters.forEach(setter => setter.write())
+    },
+    bind() {
+      const restoreVertexArray = bindDefaultVertexArray(gl)
+      const restore = this.applyToVertexArray()
+      this.applyToContext()
+      return once(() => {
+        restore()
+        restoreVertexArray()
+      })
+    },
+  })
+}
+
 export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   gl: GL,
   program: WebGLProgram,
@@ -429,7 +501,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
   { signal }: ViewOptions = {},
 ): InterleavedAttributeView<T> {
   // Initialize interleaved attributes
-  const interleavedAttributes = mapObject(schema, ({ layout, instanced }) => {
+  const interleavedAttributes = mapObject(schema, ({ layout }) => {
     // Increment number to keep track of offset
     let index = 0
 
@@ -454,7 +526,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       const normalized = layout.normalized ?? false
       index += size * FORMAT_BYTE_SIZE[resolvedFormat]
 
-      return () =>
+      return (divisor: 0 | 1) =>
         handleAttribute(
           gl,
           location,
@@ -464,7 +536,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
           glType,
           isIntKind,
           normalized,
-          instanced,
+          divisor === 1,
         )
     })
 
@@ -478,43 +550,58 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
     // the other participants in a draw had to be bound after it to be included
     // — the array they landed in was whichever one happened to be current.
     // Arrays are `vao()`'s job now; a layout is a layout and a buffer.
-    function applyToVertexArray() {
+    function applyToVertexArray(divisor: 0 | 1) {
       const previousDivisors = locations.map(
         location => [location, readDivisor(gl, location)] as const,
       )
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
       for (const handle of handles) {
-        handle()
+        handle(divisor)
       }
       return once(() => {
         const instancedArrays = getInstancedArrays(gl)
-        previousDivisors.forEach(([location, divisor]) => {
-          instancedArrays?.vertexAttribDivisor(location, divisor)
+        previousDivisors.forEach(([location, previous]) => {
+          instancedArrays?.vertexAttribDivisor(location, previous)
         })
       })
     }
 
+    let constant: ReturnType<typeof constantSource> | undefined
+
+    /** One layout, one buffer, but a divisor per draw rather than per schema. */
+    function bufferSource(divisor: 0 | 1) {
+      const apply = () => applyToVertexArray(divisor)
+      return {
+        applyToVertexArray: apply,
+        bind() {
+          const restoreVertexArray = bindDefaultVertexArray(gl)
+          const restore = apply()
+          return once(() => {
+            restore()
+            restoreVertexArray()
+          })
+        },
+      }
+    }
+
     return {
-      applyToVertexArray,
-      bind() {
-        const restoreVertexArray = bindDefaultVertexArray(gl)
-        const restore = applyToVertexArray()
-        return once(() => {
-          restore()
-          restoreVertexArray()
-        })
-      },
-      unbind() {
-        getVertexArrayObject(gl)?.bindVertexArray(null)
+      buffer: Object.assign(bufferSource(0), {
+        /** The same buffer, stepped once per instance instead of once per vertex. */
+        perInstance: bufferSource(1),
+        set(value: Float32Array, usage: GLUsage = 'STATIC_DRAW') {
+          // Uploading is storage, not binding: ARRAY_BUFFER is not vertex-array
+          // state, so this touches no array, whichever one is bound.
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+          gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage])
+        },
+      }),
+      // Lazy: a layout key can be perfectly good in a buffer and impossible as
+      // a constant, and finding that out should wait until someone asks for one.
+      get constant() {
+        return (constant ??= constantSource(gl, layout, locations))
       },
       dispose() {
         gl.deleteBuffer(buffer)
-      },
-      set(value, usage = 'STATIC_DRAW') {
-        // Uploading is storage, not binding: ARRAY_BUFFER is not vertex-array
-        // state, so this touches no array, whichever one is bound.
-        gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage])
       },
     } satisfies InterleavedAttributeMethods
   })
