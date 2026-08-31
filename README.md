@@ -103,6 +103,7 @@ const { uniforms, attributes } = view(gl, program, schema)
 
 - `uniforms`: Type-safe uniform setters
 - `attributes`: Attribute managers with buffer handling
+- `dispose`: Deletes everything the view made — see [Disposal](#-disposal)
 
 #### 📋 ViewSchema
 The complete schema object that defines all WebGL resources. Contains mappings for:
@@ -127,6 +128,47 @@ interface ViewSchema {
 ```
 
 </details>
+
+### 🗑️ Disposal
+
+Everything that creates a WebGL resource takes an `AbortSignal` and offers a
+`dispose()`, and the two are the same teardown reached two ways:
+
+```typescript
+const controller = new AbortController()
+
+const { view, dispose } = compile(gl, vertex, fragment, { signal: controller.signal })
+const buffers = bufferView(gl, { indices: {} }, { signal: controller.signal })
+const target = createFramebuffer(gl, definition, { signal: controller.signal })
+
+controller.abort() // deletes the program, the buffers, the vertex arrays, the framebuffer
+```
+
+Two rules make this safe to reach for.
+
+**Only what it made.** A resource handed in from outside is borrowed, never
+deleted: a buffer named by an attribute schema, a texture passed to
+`createFramebuffer`. Those belong to whoever created them, and the same buffer
+often feeds several views. Delete one out from under its owner and WebGL does
+not fault where it happened — the object survives while it is bound, so the
+handle is invalidated and the *other* view fails later, on its next upload.
+
+**Once.** Every `dispose()` is idempotent. Disposing by hand and then aborting,
+or aborting twice, deletes each resource exactly once.
+
+| creates | disposed by |
+| --- | --- |
+| `view()` | its own attribute and layout buffers, and vertex arrays still held from `vao()` |
+| `compile()` | the program, and its view |
+| `attributeView` / `interleavedAttributeView` | the buffer, unless the schema named one |
+| `bufferView` | its buffers |
+| `vaoView` | the vertex array, never its participants |
+| `createProgram` | the program |
+| `createTexture` | the texture |
+| `createFramebuffer` | the framebuffer, and the texture unless one was passed in |
+
+`uniformView` takes no signal: a uniform location is not a resource, so there is
+nothing to delete.
 
 ### 👀 Resource Views
 
@@ -777,7 +819,7 @@ uniforms[u_time].set(performance.now())
 Creates and links a WebGL program from vertex and fragment shader sources.
 
 ```typescript
-const program = createProgram(gl, vertexShaderSource, fragmentShaderSource)
+const program = createProgram(gl, vertexShaderSource, fragmentShaderSource, { signal })
 ```
 
 ### 🖼️ createTexture
@@ -799,6 +841,7 @@ const texture = createTexture(
     wrapT: 'CLAMP_TO_EDGE',
   },
   data,
+  { signal },
 )
 ```
 
@@ -809,17 +852,25 @@ Automatically validates WebGL2-only formats and provides fallbacks for WebGL1.
 Creates a framebuffer with attached texture for render-to-texture operations.
 
 ```typescript
-const { framebuffer, texture } = createFramebuffer(gl, {
-  width: 512,
-  height: 512,
-  attachment: 'color',
-  internalFormat: 'RGBA',
-  format: 'RGBA',
-  type: 'UNSIGNED_BYTE',
-})
+const { framebuffer, texture, dispose } = createFramebuffer(
+  gl,
+  {
+    width: 512,
+    height: 512,
+    attachment: 'color',
+    internalFormat: 'RGBA',
+    format: 'RGBA',
+    type: 'UNSIGNED_BYTE',
+  },
+  { signal },
+)
 ```
 
 Supports color, depth, stencil, and combined depth-stencil attachments with completeness validation.
+
+Pass a `texture` to attach one you already have — ping-ponging a pair of
+framebuffers over shared textures, say. `dispose()` then deletes the framebuffer
+and leaves that texture alone, because it is not the framebuffer's to delete.
 
 ## 🔍 WebGL Type Compatibility
 

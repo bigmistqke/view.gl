@@ -1,5 +1,6 @@
 import { RemoveSuffix } from './type-utils'
-import type { GL } from './types'
+import type { GL, ViewOptions } from './types'
+import { once } from './utils'
 
 function isWebGL2RenderingContext(
   gl: WebGLRenderingContext | WebGL2RenderingContext,
@@ -37,7 +38,12 @@ export function createShader(gl: GL, type: number, source: string): WebGLShader 
 /*                                                                                */
 /**********************************************************************************/
 
-export function createProgram(gl: GL, vertexSource: string, fragmentSource: string): WebGLProgram {
+export function createProgram(
+  gl: GL,
+  vertexSource: string,
+  fragmentSource: string,
+  { signal }: ViewOptions = {},
+): WebGLProgram {
   const program = gl.createProgram()
   if (!program) throw new Error('Failed to create WebGL program')
 
@@ -59,6 +65,11 @@ export function createProgram(gl: GL, vertexSource: string, fragmentSource: stri
   // Clean up shaders after linking
   gl.deleteShader(vertexShader)
   gl.deleteShader(fragmentShader)
+
+  signal?.addEventListener(
+    'abort',
+    once(() => gl.deleteProgram(program)),
+  )
 
   return program
 }

@@ -511,6 +511,12 @@ export interface TextureDefinition {
 export interface Framebuffer {
   texture: WebGLTexture
   framebuffer: WebGLFramebuffer
+  /**
+   * Delete the framebuffer, and the texture only if `createFramebuffer` made
+   * it. A texture handed in belongs to whoever made it. Idempotent, and exactly
+   * what aborting the signal does.
+   */
+  dispose(): void
 }
 
 /**********************************************************************************/
@@ -665,6 +671,13 @@ export type View<T extends ViewSchema = ViewSchema> = {
    * something you say rather than something you inherit from call order.
    */
   vao(participants: VertexArrayParticipant[]): VertexArrayMethods
+  /**
+   * Delete everything the view made: the buffers behind its attributes and
+   * layouts, and any vertex array still held from `vao()`. Buffers named by the
+   * schema are left alone — those belong to whoever made them. Idempotent, and
+   * exactly what aborting the signal does.
+   */
+  dispose(): void
 }
 
 /**********************************************************************************/
@@ -893,5 +906,10 @@ export type CompileResult<
         view: Prettify<View<TSchema>>
         vertex: string
         fragment: string
+        /**
+         * Delete the program and everything its view made. Idempotent, and
+         * exactly what aborting the signal does.
+         */
+        dispose(): void
       }
     : never

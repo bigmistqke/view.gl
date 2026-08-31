@@ -1205,6 +1205,27 @@ describe('compile', () => {
     gl.createProgram = vi.fn(() => mockProgram)
   })
 
+  it('disposes the same way whether by hand or by signal', () => {
+    const vertex = glsl`${attribute.vec2('a_position')}
+      void main() { gl_Position = vec4(a_position, 0.0, 1.0); }`
+    const fragment = glsl`void main() {}`
+    gl.deleteProgram = vi.fn()
+    gl.deleteBuffer = vi.fn()
+
+    const controller = new AbortController()
+    const result = compile(gl as WebGLRenderingContext, vertex, fragment, {
+      signal: controller.signal,
+    })
+
+    controller.abort()
+    result.dispose()
+
+    // Idempotent across both routes: the program and the view's own buffer go
+    // exactly once, however many times teardown is asked for.
+    expect(gl.deleteProgram).toHaveBeenCalledTimes(1)
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(1)
+  })
+
   it('deletes the program it created, and nothing it borrowed', () => {
     const vertex = glsl`${attribute.vec2('a_position')}
       void main() { gl_Position = vec4(a_position, 0.0, 1.0); }`

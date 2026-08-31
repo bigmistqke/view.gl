@@ -6,11 +6,30 @@ import type {
   KIND_TO_UNIFORM_FN_NAME_MAP,
   TextureDefinition,
   UniformKind,
+  ViewOptions,
 } from './types'
 
 export function assertedNotNullish<T>(value: T, message?: string): NonNullable<T> {
   if (value === undefined || value === null) throw new Error(message)
   return value
+}
+
+/**
+ * Wraps a teardown so it runs once.
+ *
+ * Two reasons, and both bite. A disposer is per `bind()`, and undoing twice
+ * would put back state a later `bind()` is relying on. And a `dispose()` that
+ * deletes twice invalidates a handle someone else may still be holding — the
+ * object survives while it is bound, so the fault surfaces later, somewhere
+ * else. Idempotent is the only safe shape for either.
+ */
+export function once(teardown: () => void): () => void {
+  let done = false
+  return () => {
+    if (done) return
+    done = true
+    teardown()
+  }
 }
 
 /**********************************************************************************/
@@ -114,8 +133,9 @@ export function createTexture(
     height,
   }: TextureDefinition,
   data?: ArrayBufferView | null,
+  { signal }: ViewOptions = {},
 ): WebGLTexture {
-  const texture = gl.createTexture()
+  const texture = assertedNotNullish(gl.createTexture(), 'Failed to create texture')
 
   function getTextureConstant(name: string) {
     if (!(name in gl)) {
@@ -142,6 +162,11 @@ export function createTexture(
   gl.texParameteri(gl[target], gl.TEXTURE_MAG_FILTER, gl[magFilter])
   gl.texParameteri(gl[target], gl.TEXTURE_WRAP_S, gl[wrapS])
   gl.texParameteri(gl[target], gl.TEXTURE_WRAP_T, gl[wrapT])
+
+  signal?.addEventListener(
+    'abort',
+    once(() => gl.deleteTexture(texture)),
+  )
 
   return texture
 }
@@ -184,10 +209,12 @@ class FramebufferError extends Error {
 
 export function createFramebuffer(
   gl: GL,
-  { attachment, texture, ...options }: FramebufferDefinition,
+  { attachment, texture: providedTexture, ...definition }: FramebufferDefinition,
+  { signal }: ViewOptions = {},
 ) {
-  // Create texture for the framebuffer
-  texture ??= createTexture(gl, options)
+  // Create texture for the framebuffer, unless one was handed in. Which one it
+  // is decides who deletes it below — the same rule the attribute buffers follow.
+  const texture = providedTexture ?? createTexture(gl, definition)
 
   // Create framebuffer
   const framebuffer = assertedNotNullish(gl.createFramebuffer(), 'Failed to create framebuffer')
@@ -209,9 +236,21 @@ export function createFramebuffer(
     throw new FramebufferError(gl, status)
   }
 
+  const dispose = once(() => {
+    gl.deleteFramebuffer(framebuffer)
+    // A texture handed in belongs to whoever made it — it commonly outlives the
+    // framebuffer, ping-ponged between two of them.
+    if (!providedTexture) {
+      gl.deleteTexture(texture)
+    }
+  })
+
+  signal?.addEventListener('abort', dispose)
+
   return {
     texture,
     framebuffer,
+    dispose,
   }
 }
 

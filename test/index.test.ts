@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   attributeView,
   bufferView,
+  createFramebuffer,
+  createTexture,
   interleavedAttributeView,
   uniformView,
   vaoView,
@@ -169,6 +171,60 @@ describe('view', () => {
     // Symbol keys
     expect(result.uniforms![u_color_symbol]).toBeDefined()
     expect(result.attributes![a_normal_symbol]).toBeDefined()
+  })
+})
+
+describe('disposing a view', () => {
+  let gl: WebGL2RenderingContext
+  let program: WebGLProgram
+  beforeEach(() => {
+    const mock = createMockCanvas()
+    gl = mock.gl
+    program = gl.createProgram()!
+  })
+
+  const schema = {
+    attributes: { a_position: { kind: 'vec2' } },
+    interleavedAttributes: { data: { layout: [{ key: 'a_uv', kind: 'vec2' }] } },
+  } satisfies ViewSchema
+
+  it('deletes the buffers it made, and the arrays it handed out', () => {
+    const result = view(gl, program, schema)
+    const vertexArray = result.vao([result.attributes.a_position])
+
+    result.dispose()
+
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(2)
+    expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1)
+    void vertexArray
+  })
+
+  it('does the same thing on abort as it does on dispose', () => {
+    const controller = new AbortController()
+    const result = view(gl, program, schema, { signal: controller.signal })
+    result.vao([result.attributes.a_position])
+
+    controller.abort()
+    const afterAbort = (gl.deleteBuffer as any).mock.calls.length
+
+    // Both routes lead to the same teardown, so taking both must not delete
+    // twice: the second delete would invalidate a handle someone else holds.
+    result.dispose()
+    expect((gl.deleteBuffer as any).mock.calls).toHaveLength(afterAbort)
+    expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1)
+  })
+
+  it('forgets a vertex array the caller disposed itself', () => {
+    const result = view(gl, program, schema)
+    const vertexArray = result.vao([result.attributes.a_position])
+
+    vertexArray.dispose()
+    vertexArray.dispose()
+    result.dispose()
+
+    // Held only until disposed, so a view handing out an array per frame does
+    // not accumulate them — and disposing one twice deletes it once.
+    expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -1436,5 +1492,38 @@ describe('the constant source', () => {
 
     expect(() => a_instance.buffer.bind()).not.toThrow()
     expect(() => a_instance.constant).toThrow(/cannot be a constant attribute/)
+  })
+})
+
+describe('createFramebuffer', () => {
+  let gl: ReturnType<typeof createMockGL>
+
+  beforeEach(() => {
+    gl = createMockGL()
+    gl.checkFramebufferStatus = vi.fn(() => gl.FRAMEBUFFER_COMPLETE) as any
+  })
+
+  const definition = { attachment: 'color', width: 4, height: 4 } as const
+
+  it('deletes the texture it made', () => {
+    const controller = new AbortController()
+    const { texture } = createFramebuffer(gl, definition, { signal: controller.signal })
+
+    controller.abort()
+
+    expect(gl.deleteTexture).toHaveBeenCalledWith(texture)
+  })
+
+  it('leaves a texture it was handed', () => {
+    // Ping-ponged textures outlive the framebuffers pointing at them, so the
+    // one case that matters is the one where the texture came from outside.
+    const texture = createTexture(gl, { width: 4, height: 4 })
+    const target = createFramebuffer(gl, { ...definition, texture })
+
+    target.dispose()
+    target.dispose()
+
+    expect(gl.deleteFramebuffer).toHaveBeenCalledTimes(1)
+    expect(gl.deleteTexture).not.toHaveBeenCalled()
   })
 })

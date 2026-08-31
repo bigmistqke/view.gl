@@ -18,7 +18,7 @@ import type {
   ViewSchema,
   ViewSchemaPartial,
 } from './types'
-import { createUpsertMap } from './utils'
+import { createUpsertMap, once } from './utils'
 
 export function glsl<TSlot extends GLSLSlot, const TSlots extends TSlot[]>(
   template: TemplateStringsArray,
@@ -153,12 +153,18 @@ export function compile<
     // The same rule the views follow: `compile` made this program, so `compile`
     // is what deletes it. A program handed in from outside would not be ours to
     // delete, and there is no way to hand one in.
-    options?.signal?.addEventListener('abort', () => gl.deleteProgram(program))
+    const resolvedView = view(gl, program, schema)
+    const dispose = once(() => {
+      resolvedView.dispose()
+      gl.deleteProgram(program)
+    })
+    options?.signal?.addEventListener('abort', dispose)
 
     return {
       program,
       schema,
-      view: view(gl, program, schema, options),
+      view: resolvedView,
+      dispose,
       vertex: _vertex.template,
       fragment: _fragment.template,
     } as unknown as Prettify<CompileResult<TVertex, TFragment, TSchema>>

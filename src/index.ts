@@ -28,9 +28,13 @@ import {
   assertedNotNullish,
   kindToSize,
   forEachObject,
+  once,
 } from './utils'
 import { createUpsertMap, mapObject } from './utils'
 export * from './types'
+// Documented under Utils but reachable from nowhere until now: utils is not a
+// build entry, and named rather than star so the internal helpers stay internal.
+export { createFramebuffer, createTexture } from './utils'
 
 /**********************************************************************************/
 /*                                                                                */
@@ -74,19 +78,47 @@ export function view<TSchema extends ViewSchema>(
   gl: GL,
   program: WebGLProgram,
   schema: TSchema,
-  options?: ViewOptions,
+  { signal }: ViewOptions = {},
 ): View<TSchema> {
+  // The sub-views are built without the signal and the view wires disposal
+  // once, so that `dispose()` and aborting do the same thing rather than each
+  // doing half of it.
+  const attributes = !schema.attributes ? undefined : attributeView(gl, program, schema.attributes)
+  const interleavedAttributes = !schema.interleavedAttributes
+    ? undefined
+    : interleavedAttributeView(gl, program, schema.interleavedAttributes)
+
+  // Vertex arrays are made on demand rather than declared, so they are the one
+  // thing the view cannot dispose from the schema alone. Held until disposed —
+  // by the view or by the caller — and dropped either way, so a view that hands
+  // out an array per frame does not accumulate them.
+  const vertexArrays = new Set<VertexArrayMethods>()
+
+  const dispose = once(() => {
+    if (attributes) forEachObject(attributes, value => value.dispose())
+    if (interleavedAttributes) forEachObject(interleavedAttributes, value => value.dispose())
+    vertexArrays.forEach(vertexArray => vertexArray.dispose())
+    vertexArrays.clear()
+  })
+
+  signal?.addEventListener('abort', dispose)
+
   return {
     uniforms: !schema.uniforms ? undefined : uniformView(gl, program, schema.uniforms),
-    attributes: !schema.attributes
-      ? undefined
-      : attributeView(gl, program, schema.attributes, options),
-    interleavedAttributes: !schema.interleavedAttributes
-      ? undefined
-      : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
+    attributes,
+    interleavedAttributes,
     vao(participants: VertexArrayParticipant[]) {
-      return vaoView(gl, participants, options)
+      const vertexArray = vaoView(gl, participants)
+      vertexArrays.add(vertexArray)
+      return {
+        ...vertexArray,
+        dispose: once(() => {
+          vertexArrays.delete(vertexArray)
+          vertexArray.dispose()
+        }),
+      }
     },
+    dispose,
   } as View<TSchema>
 }
 
@@ -163,9 +195,7 @@ export function vaoView(
           unbind() {
             feature.bindVertexArray(null)
           },
-          dispose() {
-            feature.deleteVertexArray(vertexArray)
-          },
+          dispose: once(() => feature.deleteVertexArray(vertexArray)),
         }
       })()
 
@@ -336,17 +366,6 @@ function readDivisor(gl: GL, location: number): number {
     : 0
 }
 
-// Wraps a restore so it runs once: a disposer is per bind() and undoing twice
-// would put back state a later bind() is relying on
-function once(restore: () => void): () => void {
-  let done = false
-  return () => {
-    if (done) return
-    done = true
-    restore()
-  }
-}
-
 export function attributeView<T extends AttributeSchema>(
   gl: GL,
   program: WebGLProgram,
@@ -401,11 +420,11 @@ export function attributeView<T extends AttributeSchema>(
             restoreVertexArray()
           })
         },
-        dispose() {
+        dispose: once(() => {
           if (!providedBuffer) {
             gl.deleteBuffer(buffer)
           }
-        },
+        }),
         set(data, usage = 'STATIC_DRAW') {
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
           gl.bufferData(gl.ARRAY_BUFFER, data, gl[usage])
@@ -601,9 +620,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       get constant() {
         return (constant ??= constantSource(gl, layout, locations))
       },
-      dispose() {
-        gl.deleteBuffer(buffer)
-      },
+      dispose: once(() => gl.deleteBuffer(buffer)),
     } satisfies InterleavedAttributeMethods
   })
 
@@ -654,9 +671,7 @@ export function bufferView<T extends BufferSchema>(
           restoreVertexArray()
         })
       },
-      dispose() {
-        gl.deleteBuffer(buffer)
-      },
+      dispose: once(() => gl.deleteBuffer(buffer)),
       set(data: Float32Array) {
         gl.bindBuffer(gl[target], buffer)
         gl.bufferData(gl[target], data, gl[usage])
