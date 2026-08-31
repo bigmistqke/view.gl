@@ -1,73 +1,14 @@
-function isWebGL2RenderingContext(gl) {
-  return typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
-}
-function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  if (!shader) throw new Error("Failed to create shader");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error(
-      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
-    );
-  }
-  return shader;
-}
-function createProgram(gl, vertexSource, fragmentSource) {
-  const program = gl.createProgram();
-  if (!program) throw new Error("Failed to create WebGL program");
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(program);
-    gl.deleteProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    throw new Error(`Failed to link program: ${info}`);
-  }
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-  return program;
-}
-const INSTANCED_ARRAYS_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
-function getInstancedArrays(gl) {
-  if (isWebGL2RenderingContext(gl)) return gl;
-  const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl);
-  if (cached) return cached;
-  const ext = gl.getExtension("ANGLE_instanced_arrays");
-  if (!ext) return void 0;
-  const wrapper = {
-    drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
-    drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
-    vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext)
-  };
-  INSTANCED_ARRAYS_WRAPPER_MAP.set(gl, wrapper);
-  return wrapper;
-}
-const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
-function getVertexArrayObject(gl) {
-  if (isWebGL2RenderingContext(gl)) return gl;
-  const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl);
-  if (cached) return cached;
-  const ext = gl.getExtension("OES_vertex_array_object");
-  if (!ext) return null;
-  const wrapper = {
-    bindVertexArray: ext.bindVertexArrayOES.bind(ext),
-    createVertexArray: ext.createVertexArrayOES.bind(ext),
-    deleteVertexArray: ext.deleteVertexArrayOES.bind(ext)
-  };
-  VERTEX_ARRAY_OBJECT_WRAPPER_MAP.set(gl, wrapper);
-  return wrapper;
-}
-
 function assertedNotNullish(value, message) {
   if (value === void 0 || value === null) throw new Error(message);
   return value;
+}
+function once(teardown) {
+  let done = false;
+  return () => {
+    if (done) return;
+    done = true;
+    teardown();
+  };
 }
 const kindToUniformFnName = (kind) => {
   switch (kind[0]) {
@@ -124,13 +65,13 @@ function createTexture(gl, {
   wrapT = "CLAMP_TO_EDGE",
   width,
   height
-}, data) {
-  const texture = gl.createTexture();
-  function getTextureConstant(name2) {
-    if (!(name2 in gl)) {
-      throw new Error(`Attempted to create webgl2-only texture (${name2}) in webgl1`);
+}, data, { signal } = {}) {
+  const texture = assertedNotNullish(gl.createTexture(), "Failed to create texture");
+  function getTextureConstant(name) {
+    if (!(name in gl)) {
+      throw new Error(`Attempted to create webgl2-only texture (${name}) in webgl1`);
     }
-    return gl[name2];
+    return gl[name];
   }
   gl.bindTexture(gl[target], texture);
   gl.texImage2D(
@@ -144,11 +85,14 @@ function createTexture(gl, {
     getTextureConstant(type),
     null
   );
-  console.log(minFilter);
   gl.texParameteri(gl[target], gl.TEXTURE_MIN_FILTER, gl[minFilter]);
   gl.texParameteri(gl[target], gl.TEXTURE_MAG_FILTER, gl[magFilter]);
   gl.texParameteri(gl[target], gl.TEXTURE_WRAP_S, gl[wrapS]);
   gl.texParameteri(gl[target], gl.TEXTURE_WRAP_T, gl[wrapT]);
+  signal?.addEventListener(
+    "abort",
+    once(() => gl.deleteTexture(texture))
+  );
   return texture;
 }
 const FRAMEBUFFER_ATTACHMENT_MAP = {
@@ -159,7 +103,7 @@ const FRAMEBUFFER_ATTACHMENT_MAP = {
 };
 class FramebufferError extends Error {
   constructor(gl, status) {
-    let errorMessage = `Framebuffer '${name}' not complete. Status: `;
+    let errorMessage = "Framebuffer not complete. Status: ";
     switch (status) {
       case gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
         errorMessage += "FRAMEBUFFER_INCOMPLETE_ATTACHMENT";
@@ -179,12 +123,9 @@ class FramebufferError extends Error {
     super(errorMessage);
   }
 }
-function createFramebuffer(gl, { attachment, texture, ...options }) {
-  texture ??= createTexture(gl, options);
-  const framebuffer = assertedNotNullish(
-    gl.createFramebuffer(),
-    `Failed to create framebuffer: ${name}`
-  );
+function createFramebuffer(gl, { attachment, texture: providedTexture, ...definition }, { signal } = {}) {
+  const texture = providedTexture ?? createTexture(gl, definition);
+  const framebuffer = assertedNotNullish(gl.createFramebuffer(), "Failed to create framebuffer");
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(
     gl.FRAMEBUFFER,
@@ -198,9 +139,17 @@ function createFramebuffer(gl, { attachment, texture, ...options }) {
   if (status !== gl.FRAMEBUFFER_COMPLETE) {
     throw new FramebufferError(gl, status);
   }
+  const dispose = once(() => {
+    gl.deleteFramebuffer(framebuffer);
+    if (!providedTexture) {
+      gl.deleteTexture(texture);
+    }
+  });
+  signal?.addEventListener("abort", dispose);
   return {
     texture,
-    framebuffer
+    framebuffer,
+    dispose
   };
 }
 function createUpsertMap(constructor) {
@@ -236,6 +185,77 @@ function mapObject(value, callback) {
   return result;
 }
 
+function isWebGL2RenderingContext(gl) {
+  return typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+}
+function createShader(gl, type, source) {
+  const shader = gl.createShader(type);
+  if (!shader) throw new Error("Failed to create shader");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const info = gl.getShaderInfoLog(shader);
+    gl.deleteShader(shader);
+    throw new Error(
+      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
+    );
+  }
+  return shader;
+}
+function createProgram(gl, vertexSource, fragmentSource, { signal } = {}) {
+  const program = gl.createProgram();
+  if (!program) throw new Error("Failed to create WebGL program");
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const info = gl.getProgramInfoLog(program);
+    gl.deleteProgram(program);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    throw new Error(`Failed to link program: ${info}`);
+  }
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+  signal?.addEventListener(
+    "abort",
+    once(() => gl.deleteProgram(program))
+  );
+  return program;
+}
+const INSTANCED_ARRAYS_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
+function getInstancedArrays(gl) {
+  if (isWebGL2RenderingContext(gl)) return gl;
+  const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl);
+  if (cached) return cached;
+  const ext = gl.getExtension("ANGLE_instanced_arrays");
+  if (!ext) return void 0;
+  const wrapper = {
+    drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
+    drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
+    vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext)
+  };
+  INSTANCED_ARRAYS_WRAPPER_MAP.set(gl, wrapper);
+  return wrapper;
+}
+const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
+function getVertexArrayObject(gl) {
+  if (isWebGL2RenderingContext(gl)) return gl;
+  const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl);
+  if (cached) return cached;
+  const ext = gl.getExtension("OES_vertex_array_object");
+  if (!ext) return null;
+  const wrapper = {
+    bindVertexArray: ext.bindVertexArrayOES.bind(ext),
+    createVertexArray: ext.createVertexArrayOES.bind(ext),
+    deleteVertexArray: ext.deleteVertexArrayOES.bind(ext)
+  };
+  VERTEX_ARRAY_OBJECT_WRAPPER_MAP.set(gl, wrapper);
+  return wrapper;
+}
+
 let index = 0;
 const PREFIX = "VIEW_GL_ALIAS";
 const HAS_WEAK_SYMBOL = (() => {
@@ -257,15 +277,33 @@ function toID(key) {
   }
   return key.toString();
 }
-function view(gl, program, schema, options) {
+function view(gl, program, schema, { signal } = {}) {
+  const attributes = !schema.attributes ? void 0 : attributeView(gl, program, schema.attributes);
+  const interleavedAttributes = !schema.interleavedAttributes ? void 0 : interleavedAttributeView(gl, program, schema.interleavedAttributes);
+  const vertexArrays = /* @__PURE__ */ new Set();
+  const dispose = once(() => {
+    if (attributes) forEachObject(attributes, (value) => value.dispose());
+    if (interleavedAttributes) forEachObject(interleavedAttributes, (value) => value.dispose());
+    vertexArrays.forEach((vertexArray) => vertexArray.dispose());
+    vertexArrays.clear();
+  });
+  signal?.addEventListener("abort", dispose);
   return {
     uniforms: !schema.uniforms ? void 0 : uniformView(gl, program, schema.uniforms),
-    attributes: !schema.attributes ? void 0 : attributeView(gl, program, schema.attributes, options),
-    interleavedAttributes: !schema.interleavedAttributes ? void 0 : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
-    buffers: !schema.buffers ? void 0 : bufferView(gl, schema.buffers),
+    attributes,
+    interleavedAttributes,
     vao(participants) {
-      return vaoView(gl, participants, options);
-    }
+      const vertexArray = vaoView(gl, participants);
+      vertexArrays.add(vertexArray);
+      return {
+        ...vertexArray,
+        dispose: once(() => {
+          vertexArrays.delete(vertexArray);
+          vertexArray.dispose();
+        })
+      };
+    },
+    dispose
   };
 }
 function bindDefaultVertexArray(gl) {
@@ -310,9 +348,7 @@ function vaoView(gl, participants, { signal } = {}) {
       unbind() {
         feature.bindVertexArray(null);
       },
-      dispose() {
-        feature.deleteVertexArray(vertexArray);
-      }
+      dispose: once(() => feature.deleteVertexArray(vertexArray))
     };
   })();
   signal?.addEventListener("abort", () => methods.dispose());
@@ -409,25 +445,12 @@ const VERTEX_ARRAY_BINDING = 34229;
 function readDivisor(gl, location) {
   return getInstancedArrays(gl) ? gl.getVertexAttrib(location, VERTEX_ATTRIB_ARRAY_DIVISOR) : 0;
 }
-function once(restore) {
-  let done = false;
-  return () => {
-    if (done) return;
-    done = true;
-    restore();
-  };
-}
 function attributeView(gl, program, schema, { signal } = {}) {
   const attributes = mapObject(
     schema,
-    ({
-      kind,
-      format,
-      normalized = false,
-      instanced,
-      buffer = assertedNotNullish(gl.createBuffer())
-    }, key) => {
+    ({ kind, format, normalized = false, instanced, buffer: providedBuffer }, key) => {
       const name = toID(key);
+      const buffer = providedBuffer ?? assertedNotNullish(gl.createBuffer());
       const location = gl.getAttribLocation(program, name);
       if (location < 0) {
         throw new Error(`Attribute '${name}' not found`);
@@ -455,9 +478,11 @@ function attributeView(gl, program, schema, { signal } = {}) {
             restoreVertexArray();
           });
         },
-        dispose() {
-          gl.deleteBuffer(buffer);
-        },
+        dispose: once(() => {
+          if (!providedBuffer) {
+            gl.deleteBuffer(buffer);
+          }
+        }),
         set(data, usage = "STATIC_DRAW") {
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
           gl.bufferData(gl.ARRAY_BUFFER, data, gl[usage]);
@@ -596,49 +621,13 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
       get constant() {
         return constant ??= constantSource(gl, layout, locations);
       },
-      dispose() {
-        gl.deleteBuffer(buffer);
-      }
+      dispose: once(() => gl.deleteBuffer(buffer))
     };
   });
   signal?.addEventListener("abort", function dispose() {
     forEachObject(interleavedAttributes, (value) => value.dispose());
   });
   return interleavedAttributes;
-}
-function bufferView(gl, schema, { signal } = {}) {
-  const buffers = mapObject(schema, ({ target = "ARRAY_BUFFER", usage = "STATIC_DRAW" }) => {
-    const buffer = assertedNotNullish(gl.createBuffer());
-    function applyToVertexArray() {
-      const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]);
-      gl.bindBuffer(gl[target], buffer);
-      return once(() => {
-        gl.bindBuffer(gl[target], previousBuffer);
-      });
-    }
-    return {
-      applyToVertexArray,
-      bind() {
-        const restoreVertexArray = bindDefaultVertexArray(gl);
-        const restore = applyToVertexArray();
-        return once(() => {
-          restore();
-          restoreVertexArray();
-        });
-      },
-      dispose() {
-        gl.deleteBuffer(buffer);
-      },
-      set(data) {
-        gl.bindBuffer(gl[target], buffer);
-        gl.bufferData(gl[target], data, gl[usage]);
-      }
-    };
-  });
-  signal?.addEventListener("abort", function dispose() {
-    forEachObject(buffers, (value) => value.dispose());
-  });
-  return buffers;
 }
 
 function glsl(template, ...slots) {
@@ -714,10 +703,17 @@ function compile(gl, vertex, fragment, options) {
   }
   try {
     const program = createProgram(gl, _vertex.template, _fragment.template);
+    const resolvedView = view(gl, program, schema);
+    const dispose = once(() => {
+      resolvedView.dispose();
+      gl.deleteProgram(program);
+    });
+    options?.signal?.addEventListener("abort", dispose);
     return {
       program,
       schema,
-      view: view(gl, program, schema),
+      view: resolvedView,
+      dispose,
       vertex: _vertex.template,
       fragment: _fragment.template
     };
