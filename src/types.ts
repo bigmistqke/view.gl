@@ -365,6 +365,15 @@ export interface AttributeMethods<T extends AttributeDefinition = AttributeDefin
    */
   bind(): () => void
   set(data: FormatToArray[ResolvedFormat<T>], usage?: GLUsage): { bind(): () => void }
+  /**
+   * Delete the buffer, if this attribute is the one that made it.
+   *
+   * A buffer named by the schema came from somewhere else and is deleted by
+   * whoever made it — a shared buffer is the point of passing one in, and one
+   * view cannot know whether the others are done. So this is safe to call
+   * twice and safe to call on a borrowed buffer, and it is not a way to free
+   * one: dispose the view that created it.
+   */
   dispose(): void
 }
 
@@ -617,11 +626,16 @@ export interface ViewOptions {
   signal?: AbortSignal
 }
 
+/**
+ * What a program has names for. Buffers are absent on purpose: a buffer has no
+ * name in the source, so it cannot be resolved against a program the way a
+ * uniform or an attribute is, and its lifetime is rarely a program's. Build one
+ * with `bufferView` and pass it to `vao()` alongside the attributes.
+ */
 export interface ViewSchema {
   uniforms?: UniformSchema
   attributes?: AttributeSchema
   interleavedAttributes?: InterleavedAttributeSchema
-  buffers?: BufferSchema
 }
 
 type PartialSchema<T> =
@@ -631,7 +645,6 @@ export interface ViewSchemaPartial {
   uniforms?: PartialSchema<UniformSchema>
   attributes?: PartialSchema<AttributeSchema>
   interleavedAttributes?: PartialSchema<InterleavedAttributeSchema>
-  buffers?: PartialSchema<BufferSchema>
 }
 
 export type View<T extends ViewSchema = ViewSchema> = {
@@ -641,7 +654,6 @@ export type View<T extends ViewSchema = ViewSchema> = {
   interleavedAttributes: T['interleavedAttributes'] extends InterleavedAttributeSchema
     ? Prettify<InterleavedAttributeView<T['interleavedAttributes']>>
     : {}
-  buffers: T['buffers'] extends BufferSchema ? Prettify<BufferView<T['buffers']>> : {}
   uniforms: T['uniforms'] extends UniformSchema ? Prettify<UniformView<T['uniforms']>> : {}
   /**
    * Build a vertex array from the participants one draw needs — its attributes,

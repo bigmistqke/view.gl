@@ -99,6 +99,11 @@ export function interleave<
 export interface CompileOptions<TSchema extends ViewSchemaPartial> {
   schema?: TSchema
   webgl2?: boolean
+  /**
+   * Disposes what `compile` made: the program, and the buffers the view created
+   * for itself. Buffers named by the schema belong to whoever made them.
+   */
+  signal?: AbortSignal
 }
 
 export function compile<
@@ -145,10 +150,15 @@ export function compile<
   try {
     const program = createProgram(gl, _vertex.template, _fragment.template)
 
+    // The same rule the views follow: `compile` made this program, so `compile`
+    // is what deletes it. A program handed in from outside would not be ours to
+    // delete, and there is no way to hand one in.
+    options?.signal?.addEventListener('abort', () => gl.deleteProgram(program))
+
     return {
       program,
       schema,
-      view: view(gl, program, schema),
+      view: view(gl, program, schema, options),
       vertex: _vertex.template,
       fragment: _fragment.template,
     } as unknown as Prettify<CompileResult<TVertex, TFragment, TSchema>>

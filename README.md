@@ -60,7 +60,7 @@ bun add @bigmistqke/view.gl
 
 ## 👁️ view.gl
 
-The view system provides type-safe WebGL resource management for uniforms, attributes, and buffers
+The view system provides type-safe WebGL resource management for uniforms and attributes
 
 ### 🚀 Basic Usage
 
@@ -73,9 +73,6 @@ const { uniforms, attributes } = view(gl, program, {
   attributes: {
     position: { kind: 'vec3' },
     uv: { kind: 'vec2' },
-  },
-  buffers: {
-    indices: { target: 'ELEMENT_ARRAY_BUFFER' },
   },
 })
 
@@ -93,7 +90,7 @@ attributes.position.bind()
 The `view()` function creates type-safe WebGL resource managers from a schema.
 
 ```typescript
-const { uniforms, attributes, buffers } = view(gl, program, schema)
+const { uniforms, attributes } = view(gl, program, schema)
 ```
 
 **Parameters:**
@@ -106,14 +103,17 @@ const { uniforms, attributes, buffers } = view(gl, program, schema)
 
 - `uniforms`: Type-safe uniform setters
 - `attributes`: Attribute managers with buffer handling
-- `buffers`: Generic buffer managers
 
 #### 📋 ViewSchema
 The complete schema object that defines all WebGL resources. Contains mappings for:
 - [`UniformSchema`](#-uniformschema) - uniform variable definitions
 - [`AttributeSchema`](#-attributeschema) - vertex attribute definitions  
 - [`InterleavedAttributeSchema`](#-interleavedattributeschema) - interleaved vertex data definitions
-- [`BufferSchema`](#-bufferschema) - generic buffer definitions
+
+A schema names what the program has names for, so buffers are not part of it: a
+buffer has no name in the source to resolve against the program, and its lifetime
+is rarely a program's — the same buffer often feeds several. Build one with
+[`bufferView`](#-bufferview) and hand it to `vao()` alongside the attributes.
 
 <details>
 <summary>TypeScript Types</summary>
@@ -123,7 +123,6 @@ interface ViewSchema {
   uniforms: UniformSchema
   attributes: AttributeSchema
   interleavedAttributes: InterleavedAttributeSchema
-  buffers: BufferSchema
 }
 ```
 
@@ -316,8 +315,10 @@ const buffers = bufferView(gl, {
   data: { target: 'ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
 })
 
-buffers.indices.set(indexData).bind()
-buffers.data.set(dynamicData).bind()
+buffers.indices.set(indexData)
+buffers.data.set(dynamicData)
+
+const unbind = buffers.indices.bind()
 
 // bind() returns a disposer restoring the previous binding for that target.
 // Worth calling for ELEMENT_ARRAY_BUFFER, whose binding is recorded in the
@@ -628,19 +629,22 @@ You can provide an optional override schema to enhance or override the automatic
 
 ```typescript
 const { program, schema, view } = compile(gl, vertexShader, fragmentShader, {
-  uniforms: {
-    // Add additional uniforms not automatically inferred
-    customTime: { kind: 'float' },
-  },
-  buffers: {
-    // Add buffer definitions
-    indices: { target: 'ELEMENT_ARRAY_BUFFER' },
+  schema: {
+    uniforms: {
+      // Add additional uniforms not automatically inferred
+      customTime: { kind: 'float' },
+    },
   },
 })
 
 // The override schema is merged with the extracted schema
 view.uniforms.customTime.set(123.45)
-view.buffers.indices.set(indexData).bind()
+
+// An index buffer is its own thing — no program names it, and it outlives any
+// one of them. Build it with bufferView and pass it into the vertex array.
+const buffers = bufferView(gl, { indices: { target: 'ELEMENT_ARRAY_BUFFER' } })
+buffers.indices.set(indexData)
+const vao = view.vao([view.attributes.position, buffers.indices])
 ```
 
 **Returns**:

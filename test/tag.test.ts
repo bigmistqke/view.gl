@@ -1205,6 +1205,26 @@ describe('compile', () => {
     gl.createProgram = vi.fn(() => mockProgram)
   })
 
+  it('deletes the program it created, and nothing it borrowed', () => {
+    const vertex = glsl`${attribute.vec2('a_position')}
+      void main() { gl_Position = vec4(a_position, 0.0, 1.0); }`
+    const fragment = glsl`void main() {}`
+    const borrowed = gl.createBuffer()!
+    gl.deleteProgram = vi.fn()
+    gl.deleteBuffer = vi.fn()
+
+    const controller = new AbortController()
+    compile(gl as WebGLRenderingContext, vertex, fragment, {
+      signal: controller.signal,
+      schema: { attributes: { a_position: { buffer: borrowed } } },
+    })
+
+    controller.abort()
+
+    expect(gl.deleteProgram).toHaveBeenCalledWith(mockProgram)
+    expect(gl.deleteBuffer).not.toHaveBeenCalledWith(borrowed)
+  })
+
   it('should compile shaders and return program with schema', () => {
     const vertex = glsl`
       ${attribute.vec2('a_position')}

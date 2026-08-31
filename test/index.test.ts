@@ -45,7 +45,6 @@ describe('view', () => {
     expect(result.uniforms!.u_texture.set).toBeInstanceOf(Function)
     expect(result.attributes).toBeUndefined()
     expect(result.interleavedAttributes).toBeUndefined()
-    expect(result.buffers).toBeUndefined()
   })
 
   it('should create a view with attributes', () => {
@@ -91,23 +90,6 @@ describe('view', () => {
     expect(result.interleavedAttributes!.data.buffer.set).toBeInstanceOf(Function)
   })
 
-  it('should create a view with buffers', () => {
-    const schema = {
-      buffers: {
-        vertices: { target: 'ARRAY_BUFFER', usage: 'STATIC_DRAW' },
-        indices: { target: 'ELEMENT_ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
-      },
-    } satisfies ViewSchema
-
-    const result = view(gl, program, schema)
-
-    expect(result.buffers).toBeDefined()
-    expect(result.buffers!.vertices).toBeDefined()
-    expect(result.buffers!.vertices.bind).toBeInstanceOf(Function)
-    expect(result.buffers!.vertices.dispose).toBeInstanceOf(Function)
-    expect(result.buffers!.vertices.set).toBeInstanceOf(Function)
-  })
-
   it('should create a view with all components', () => {
     const schema = {
       uniforms: {
@@ -122,9 +104,6 @@ describe('view', () => {
           instanced: false,
         },
       },
-      buffers: {
-        vertices: {},
-      },
     } satisfies ViewSchema
 
     const result = view(gl, program, schema)
@@ -132,14 +111,12 @@ describe('view', () => {
     expect(result.uniforms).toBeDefined()
     expect(result.attributes).toBeDefined()
     expect(result.interleavedAttributes).toBeDefined()
-    expect(result.buffers).toBeDefined()
   })
 
   it('should create a view with symbols for all component types', () => {
     const u_time_symbol = Symbol('u_time')
     const a_position_symbol = Symbol('a_position')
     const data_symbol = Symbol('data')
-    const vertices_symbol = Symbol('vertices')
     
     const schema = {
       uniforms: {
@@ -154,9 +131,6 @@ describe('view', () => {
           instanced: false,
         },
       },
-      buffers: {
-        [vertices_symbol]: {},
-      },
     } satisfies ViewSchema
 
     const result = view(gl, program, schema)
@@ -169,9 +143,6 @@ describe('view', () => {
     
     expect(result.interleavedAttributes![data_symbol]).toBeDefined()
     expect(result.interleavedAttributes![data_symbol].buffer.bind).toBeInstanceOf(Function)
-    
-    expect(result.buffers![vertices_symbol]).toBeDefined()
-    expect(result.buffers![vertices_symbol].bind).toBeInstanceOf(Function)
   })
 
   it('should create a view with mixed string and symbol keys', () => {
@@ -480,6 +451,28 @@ describe('attributeView', () => {
     expect(attributes.a_position.buffer).toBe(customBuffer)
     // Should not create a new buffer
     expect(gl.createBuffer).toHaveBeenCalledTimes(1) // Only for the custom buffer
+  })
+
+  it('does not delete a buffer it did not create', () => {
+    const customBuffer = gl.createBuffer()!
+    const controller = new AbortController()
+    const attributes = attributeView(
+      gl,
+      program,
+      {
+        a_position: { kind: 'vec2', buffer: customBuffer },
+        a_normal: { kind: 'vec2' },
+      } satisfies AttributeSchema,
+      { signal: controller.signal },
+    )
+    const own = attributes.a_normal.buffer
+
+    controller.abort()
+
+    // A schema can name a buffer another view owns — compile.toQuad shares one
+    // across every program on a context — and disposing here must not take it.
+    expect(gl.deleteBuffer).not.toHaveBeenCalledWith(customBuffer)
+    expect(gl.deleteBuffer).toHaveBeenCalledWith(own)
   })
 
   it('should handle float attributes', () => {

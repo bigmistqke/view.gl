@@ -84,7 +84,6 @@ export function view<TSchema extends ViewSchema>(
     interleavedAttributes: !schema.interleavedAttributes
       ? undefined
       : interleavedAttributeView(gl, program, schema.interleavedAttributes, options),
-    buffers: !schema.buffers ? undefined : bufferView(gl, schema.buffers),
     vao(participants: VertexArrayParticipant[]) {
       return vaoView(gl, participants, options)
     },
@@ -357,16 +356,16 @@ export function attributeView<T extends AttributeSchema>(
   const attributes = mapObject(
     schema,
     (
-      {
-        kind,
-        format,
-        normalized = false,
-        instanced,
-        buffer = assertedNotNullish(gl.createBuffer()),
-      },
+      { kind, format, normalized = false, instanced, buffer: providedBuffer },
       key,
     ): AttributeMethods => {
       const name = toID(key)
+
+      // Whoever made the buffer deletes it. A schema can name a buffer that
+      // belongs to another view — the quad `compile.toQuad` shares across every
+      // program on a context, an attribute two programs step over — and
+      // deleting one of those would take it out from under its owner.
+      const buffer = providedBuffer ?? assertedNotNullish(gl.createBuffer())
 
       const location = gl.getAttribLocation(program, name)
       if (location < 0) {
@@ -403,7 +402,9 @@ export function attributeView<T extends AttributeSchema>(
           })
         },
         dispose() {
-          gl.deleteBuffer(buffer)
+          if (!providedBuffer) {
+            gl.deleteBuffer(buffer)
+          }
         },
         set(data, usage = 'STATIC_DRAW') {
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
