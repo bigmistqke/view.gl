@@ -137,7 +137,6 @@ export function createTexture(
     data ?? null,
   )
 
-  console.log(minFilter)
   // Set texture parameters
   gl.texParameteri(gl[target], gl.TEXTURE_MIN_FILTER, gl[minFilter])
   gl.texParameteri(gl[target], gl.TEXTURE_MAG_FILTER, gl[magFilter])
@@ -162,7 +161,7 @@ const FRAMEBUFFER_ATTACHMENT_MAP = {
 
 class FramebufferError extends Error {
   constructor(gl: GL, status: number) {
-    let errorMessage = `Framebuffer '${name}' not complete. Status: `
+    let errorMessage = 'Framebuffer not complete. Status: '
     switch (status) {
       case gl.FRAMEBUFFER_INCOMPLETE_ATTACHMENT:
         errorMessage += 'FRAMEBUFFER_INCOMPLETE_ATTACHMENT'
@@ -191,10 +190,7 @@ export function createFramebuffer(
   texture ??= createTexture(gl, options)
 
   // Create framebuffer
-  const framebuffer = assertedNotNullish(
-    gl.createFramebuffer(),
-    `Failed to create framebuffer: ${name}`,
-  )
+  const framebuffer = assertedNotNullish(gl.createFramebuffer(), 'Failed to create framebuffer')
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
 
