@@ -110,11 +110,22 @@ The complete schema object that defines all WebGL resources. Contains mappings f
 - [`UniformSchema`](#-uniformschema) - uniform variable definitions
 - [`AttributeSchema`](#-attributeschema) - vertex attribute definitions  
 - [`InterleavedAttributeSchema`](#-interleavedattributeschema) - interleaved vertex data definitions
+- [`BufferSchema`](#-bufferschema) - buffers the view owns
 
-A schema names what the program has names for, so buffers are not part of it: a
-buffer has no name in the source to resolve against the program, and its lifetime
-is rarely a program's — the same buffer often feeds several. Build one with
-[`bufferView`](#-bufferview) and hand it to `vao()` alongside the attributes.
+A buffer is the one schema member with no name in the source, so it is not
+resolved against the program the way a uniform or an attribute is — a buffer key
+is a label for the reader. What putting it in the schema decides is its
+**lifetime**, and that is the question worth answering at the declaration:
+
+| the buffer | declare it | disposed by |
+| --- | --- | --- |
+| lives and dies with the view | `buffers:` in the schema | the view |
+| outlives the view, or is shared between views | a standalone [`bufferView`](#-bufferview) | you |
+| belongs to somebody else | name it on an attribute | nobody — it is borrowed |
+
+An index buffer whose lifetime is its program's belongs in the schema, beside
+the attributes it is drawn with, on the one signal. A quad cached per context,
+or a buffer handed from one program's view to another's, is its own thing.
 
 <details>
 <summary>TypeScript Types</summary>
@@ -158,7 +169,7 @@ or aborting twice, deletes each resource exactly once.
 
 | creates | disposed by |
 | --- | --- |
-| `view()` | its own attribute and layout buffers, and vertex arrays still held from `vao()` |
+| `view()` | its own attribute, layout and schema buffers, and vertex arrays still held from `vao()` |
 | `compile()` | the program, and its view |
 | `attributeView` / `interleavedAttributeView` | the buffer, unless the schema named one |
 | `bufferView` | its buffers |
@@ -682,8 +693,9 @@ const { program, schema, view } = compile(gl, vertexShader, fragmentShader, {
 // The override schema is merged with the extracted schema
 view.uniforms.customTime.set(123.45)
 
-// An index buffer is its own thing — no program names it, and it outlives any
-// one of them. Build it with bufferView and pass it into the vertex array.
+// An index buffer that outlives this program — shared between views, or cached
+// per context — is its own thing. One that dies with the view goes in the
+// schema instead, and is disposed with it.
 const buffers = bufferView(gl, { indices: { target: 'ELEMENT_ARRAY_BUFFER' } })
 buffers.indices.set(indexData)
 const vao = view.vao([view.attributes.position, buffers.indices])

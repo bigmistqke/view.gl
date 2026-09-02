@@ -214,6 +214,40 @@ describe('disposing a view', () => {
     expect(gl.deleteVertexArray).toHaveBeenCalledTimes(1)
   })
 
+  it('deletes a buffer the schema declared, on its own signal', () => {
+    // The regression this key exists for. It used to be built with the options
+    // dropped — `bufferView(gl, schema.buffers)` — so a view's buffers were the
+    // only resources it did not dispose, and every caller had to remember one
+    // extra line beside an abort that covered everything else.
+    const controller = new AbortController()
+    const withBuffer = {
+      attributes: { a_position: { kind: 'vec2' } },
+      buffers: { b_index: { target: 'ELEMENT_ARRAY_BUFFER' } },
+    } satisfies ViewSchema
+    const result = view(gl, program, withBuffer, { signal: controller.signal })
+    void result.buffers.b_index
+
+    controller.abort()
+
+    // The attribute's buffer and the declared one.
+    expect(gl.deleteBuffer).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves a buffer the schema NAMED to whoever made it', () => {
+    // Borrowed, not owned — the other half of the rule. A named buffer is the
+    // point of sharing one, and one view cannot know whether the others are
+    // done with it.
+    const borrowed = bufferView(gl, { shared: { target: 'ARRAY_BUFFER' } })
+    ;(gl.deleteBuffer as any).mockClear()
+    const result = view(gl, program, {
+      attributes: { a_position: { kind: 'vec2', buffer: borrowed.shared } },
+    } satisfies ViewSchema)
+
+    result.dispose()
+
+    expect(gl.deleteBuffer).not.toHaveBeenCalled()
+  })
+
   it('forgets a vertex array the caller disposed itself', () => {
     const result = view(gl, program, schema)
     const vertexArray = result.vao([result.attributes.a_position])

@@ -633,15 +633,25 @@ export interface ViewOptions {
 }
 
 /**
- * What a program has names for. Buffers are absent on purpose: a buffer has no
- * name in the source, so it cannot be resolved against a program the way a
- * uniform or an attribute is, and its lifetime is rarely a program's. Build one
- * with `bufferView` and pass it to `vao()` alongside the attributes.
+ * What a view builds for one program.
+ *
+ * A buffer declared here is OWNED by the view: it lives and dies with it, on
+ * the one signal, which is the common case — an index buffer whose lifetime is
+ * its program's has no reason to be declared apart from the attributes it is
+ * drawn with.
+ *
+ * The other two lifetimes have their own spellings, and neither is this one. A
+ * buffer that outlives the view, or is shared between views, is a standalone
+ * `bufferView` — `compile.toQuad`'s per-context quad, a buffer handed from one
+ * program's view to another's. A buffer that belongs to somebody else is NAMED
+ * by an attribute schema, and is borrowed: the view uses it and never deletes
+ * it.
  */
 export interface ViewSchema {
   uniforms?: UniformSchema
   attributes?: AttributeSchema
   interleavedAttributes?: InterleavedAttributeSchema
+  buffers?: BufferSchema
 }
 
 type PartialSchema<T> =
@@ -651,6 +661,7 @@ export interface ViewSchemaPartial {
   uniforms?: PartialSchema<UniformSchema>
   attributes?: PartialSchema<AttributeSchema>
   interleavedAttributes?: PartialSchema<InterleavedAttributeSchema>
+  buffers?: PartialSchema<BufferSchema>
 }
 
 export type View<T extends ViewSchema = ViewSchema> = {
@@ -661,6 +672,7 @@ export type View<T extends ViewSchema = ViewSchema> = {
     ? Prettify<InterleavedAttributeView<T['interleavedAttributes']>>
     : {}
   uniforms: T['uniforms'] extends UniformSchema ? Prettify<UniformView<T['uniforms']>> : {}
+  buffers: T['buffers'] extends BufferSchema ? Prettify<BufferView<T['buffers']>> : {}
   /**
    * Build a vertex array from the participants one draw needs — its attributes,
    * its interleaved layouts, its element buffer.

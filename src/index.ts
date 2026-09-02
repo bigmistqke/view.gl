@@ -87,6 +87,12 @@ export function view<TSchema extends ViewSchema>(
   const interleavedAttributes = !schema.interleavedAttributes
     ? undefined
     : interleavedAttributeView(gl, program, schema.interleavedAttributes)
+  // Owned by the view, on the view's signal. This is the line the split was
+  // really about: it used to read `bufferView(gl, schema.buffers)` with the
+  // options dropped, so a view's buffers were the only resources that still
+  // needed disposing by hand. That was a missing argument rather than a wrong
+  // model — a buffer whose lifetime IS the view's belongs with it.
+  const buffers = !schema.buffers ? undefined : bufferView(gl, schema.buffers)
 
   // Vertex arrays are made on demand rather than declared, so they are the one
   // thing the view cannot dispose from the schema alone. Held until disposed —
@@ -97,6 +103,7 @@ export function view<TSchema extends ViewSchema>(
   const dispose = once(() => {
     if (attributes) forEachObject(attributes, value => value.dispose())
     if (interleavedAttributes) forEachObject(interleavedAttributes, value => value.dispose())
+    if (buffers) forEachObject(buffers, value => value.dispose())
     vertexArrays.forEach(vertexArray => vertexArray.dispose())
     vertexArrays.clear()
   })
@@ -107,6 +114,7 @@ export function view<TSchema extends ViewSchema>(
     uniforms: !schema.uniforms ? undefined : uniformView(gl, program, schema.uniforms),
     attributes,
     interleavedAttributes,
+    buffers,
     vao(participants: VertexArrayParticipant[]) {
       const vertexArray = vaoView(gl, participants)
       vertexArrays.add(vertexArray)

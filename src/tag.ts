@@ -132,6 +132,11 @@ export function compile<
       ..._vertex.schema.interleavedAttributes,
       ..._fragment.schema.interleavedAttributes,
     },
+    // Never produced by a tag — a buffer has no name in the source to be
+    // parsed out of one — but `options.schema` may name buffers for the view to
+    // own, and the deep merge below indexes this object by every key it finds
+    // there. Missing, that threw.
+    buffers: {} as NonNullable<ViewSchema['buffers']>,
   }
 
   // Deep merge options.schema with generated schema
