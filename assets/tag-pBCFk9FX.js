@@ -280,10 +280,12 @@ function toID(key) {
 function view(gl, program, schema, { signal } = {}) {
   const attributes = !schema.attributes ? void 0 : attributeView(gl, program, schema.attributes);
   const interleavedAttributes = !schema.interleavedAttributes ? void 0 : interleavedAttributeView(gl, program, schema.interleavedAttributes);
+  const buffers = !schema.buffers ? void 0 : bufferView(gl, schema.buffers);
   const vertexArrays = /* @__PURE__ */ new Set();
   const dispose = once(() => {
     if (attributes) forEachObject(attributes, (value) => value.dispose());
     if (interleavedAttributes) forEachObject(interleavedAttributes, (value) => value.dispose());
+    if (buffers) forEachObject(buffers, (value) => value.dispose());
     vertexArrays.forEach((vertexArray) => vertexArray.dispose());
     vertexArrays.clear();
   });
@@ -292,6 +294,7 @@ function view(gl, program, schema, { signal } = {}) {
     uniforms: !schema.uniforms ? void 0 : uniformView(gl, program, schema.uniforms),
     attributes,
     interleavedAttributes,
+    buffers,
     vao(participants) {
       const vertexArray = vaoView(gl, participants);
       vertexArrays.add(vertexArray);
@@ -629,6 +632,38 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
   });
   return interleavedAttributes;
 }
+function bufferView(gl, schema, { signal } = {}) {
+  const buffers = mapObject(schema, ({ target = "ARRAY_BUFFER", usage = "STATIC_DRAW" }) => {
+    const buffer = assertedNotNullish(gl.createBuffer());
+    function applyToVertexArray() {
+      const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]);
+      gl.bindBuffer(gl[target], buffer);
+      return once(() => {
+        gl.bindBuffer(gl[target], previousBuffer);
+      });
+    }
+    return {
+      applyToVertexArray,
+      bind() {
+        const restoreVertexArray = bindDefaultVertexArray(gl);
+        const restore = applyToVertexArray();
+        return once(() => {
+          restore();
+          restoreVertexArray();
+        });
+      },
+      dispose: once(() => gl.deleteBuffer(buffer)),
+      set(data) {
+        gl.bindBuffer(gl[target], buffer);
+        gl.bufferData(gl[target], data, gl[usage]);
+      }
+    };
+  });
+  signal?.addEventListener("abort", function dispose() {
+    forEachObject(buffers, (value) => value.dispose());
+  });
+  return buffers;
+}
 
 function glsl(template, ...slots) {
   return { template, slots, type: "glsl" };
@@ -689,7 +724,12 @@ function compile(gl, vertex, fragment, options) {
     interleavedAttributes: {
       ..._vertex.schema.interleavedAttributes,
       ..._fragment.schema.interleavedAttributes
-    }
+    },
+    // Never produced by a tag — a buffer has no name in the source to be
+    // parsed out of one — but `options.schema` may name buffers for the view to
+    // own, and the deep merge below indexes this object by every key it finds
+    // there. Missing, that threw.
+    buffers: {}
   };
   for (const kind in options?.schema) {
     const schemaKind = schema[kind];
