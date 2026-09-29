@@ -150,7 +150,7 @@ function bindDefaultVertexArray(gl: GL): () => void {
   if (!feature) {
     return () => {}
   }
-  const previous = gl.getParameter(VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null
+  const previous = readVertexArrayBinding(gl)
   feature.bindVertexArray(null)
   return () => feature.bindVertexArray(previous)
 }
@@ -183,7 +183,7 @@ export function vaoView(
       }
     : (() => {
         const vertexArray = created(feature.createVertexArray(), 'vertexArray')
-        const previous = gl.getParameter(VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null
+        const previous = readVertexArrayBinding(gl)
         feature.bindVertexArray(vertexArray)
         // Discarding the restorers is the point: the state lives in this array
         // now, and the array is thrown away whole.
@@ -194,9 +194,7 @@ export function vaoView(
 
         return {
           bind() {
-            const previousVertexArray = gl.getParameter(
-              VERTEX_ARRAY_BINDING,
-            ) as WebGLVertexArrayObject | null
+            const previousVertexArray = readVertexArrayBinding(gl)
             feature.bindVertexArray(vertexArray)
             // Context state the array cannot hold — see applyToContext.
             participants.forEach(participant => participant.applyToContext?.())
@@ -367,6 +365,12 @@ function handleAttribute(
 // Same enum in webgl2 and in the webgl1 extensions, which expose no constants
 const VERTEX_ATTRIB_ARRAY_DIVISOR = 0x88fe
 const VERTEX_ARRAY_BINDING = 0x85b5
+
+// Anything but an array or null would make the restore throw a TypeError.
+function readVertexArrayBinding(gl: GL): WebGLVertexArrayObject | null {
+  const bound: unknown = gl.getParameter(VERTEX_ARRAY_BINDING)
+  return typeof bound === 'object' ? (bound as WebGLVertexArrayObject | null) : null
+}
 
 // Reads the divisor currently attached to a location, 0 where instancing is
 // unavailable and nothing can have set one

@@ -159,6 +159,26 @@ describe('AttributeNotFoundError', () => {
   })
 })
 
+describe('restoring the vertex array binding', () => {
+  it.each([
+    ['a number', 0],
+    ['undefined', undefined],
+  ])('restores null when the binding reads back as %s', (_, binding) => {
+    gl.getParameter = vi.fn(() => binding)
+    gl.bindVertexArray = vi.fn((array: unknown) => {
+      if (array !== null && typeof array !== 'object') {
+        throw new TypeError("parameter 1 is not of type 'WebGLVertexArrayObject'")
+      }
+    })
+
+    const vao = vaoView(gl, [])
+    const unbind = vao.bind()
+    unbind()
+
+    expect(gl.bindVertexArray).toHaveBeenLastCalledWith(null)
+  })
+})
+
 function catchError(fn: () => unknown): unknown {
   try {
     fn()
