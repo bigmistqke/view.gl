@@ -1,4 +1,4 @@
-import './index-COgnx6-Z.js';
+import './index-BmNWmWzi.js';
 import './utils-2dzuv_bW.js';
 
 true              &&(function polyfill() {

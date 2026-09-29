@@ -1,3 +1,41 @@
+class ShaderCompileError extends Error {
+  constructor(stage, infoLog, glError) {
+    super(`Failed to compile ${stage} shader: ${infoLog}`);
+    this.stage = stage;
+    this.infoLog = infoLog;
+    this.glError = glError;
+  }
+  name = "ShaderCompileError";
+}
+class ProgramLinkError extends Error {
+  constructor(infoLog, glError) {
+    super(`Failed to link program: ${infoLog}`);
+    this.infoLog = infoLog;
+    this.glError = glError;
+  }
+  name = "ProgramLinkError";
+}
+class GLCreateError extends Error {
+  constructor(resource) {
+    super(`Failed to create ${resource}`);
+    this.resource = resource;
+  }
+  name = "GLCreateError";
+}
+class AttributeNotFoundError extends Error {
+  constructor(attribute) {
+    super(`Attribute '${attribute}' not found`);
+    this.attribute = attribute;
+  }
+  name = "AttributeNotFoundError";
+}
+function created(value, resource) {
+  if (value === null) {
+    throw new GLCreateError(resource);
+  }
+  return value;
+}
+
 function assertedNotNullish(value, message) {
   if (value === void 0 || value === null) throw new Error(message);
   return value;
@@ -66,7 +104,7 @@ function createTexture(gl, {
   width,
   height
 }, data, { signal } = {}) {
-  const texture = assertedNotNullish(gl.createTexture(), "Failed to create texture");
+  const texture = created(gl.createTexture(), "texture");
   function getTextureConstant(name) {
     if (!(name in gl)) {
       throw new Error(`Attempted to create webgl2-only texture (${name}) in webgl1`);
@@ -125,7 +163,7 @@ class FramebufferError extends Error {
 }
 function createFramebuffer(gl, { attachment, texture: providedTexture, ...definition }, { signal } = {}) {
   const texture = providedTexture ?? createTexture(gl, definition);
-  const framebuffer = assertedNotNullish(gl.createFramebuffer(), "Failed to create framebuffer");
+  const framebuffer = created(gl.createFramebuffer(), "framebuffer");
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
   gl.framebufferTexture2D(
     gl.FRAMEBUFFER,
@@ -189,33 +227,33 @@ function isWebGL2RenderingContext(gl) {
   return typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
 }
 function createShader(gl, type, source) {
-  const shader = gl.createShader(type);
-  if (!shader) throw new Error("Failed to create shader");
+  const shader = created(gl.createShader(type), "shader");
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader);
-    gl.deleteShader(shader);
-    throw new Error(
-      `Failed to compile ${type === gl.VERTEX_SHADER ? "vertex" : "fragment"} shader: ${info}`
+    const error = new ShaderCompileError(
+      type === gl.VERTEX_SHADER ? "vertex" : "fragment",
+      gl.getShaderInfoLog(shader),
+      gl.getError()
     );
+    gl.deleteShader(shader);
+    throw error;
   }
   return shader;
 }
 function createProgram(gl, vertexSource, fragmentSource, { signal } = {}) {
-  const program = gl.createProgram();
-  if (!program) throw new Error("Failed to create WebGL program");
+  const program = created(gl.createProgram(), "program");
   const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
   const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
   gl.attachShader(program, vertexShader);
   gl.attachShader(program, fragmentShader);
   gl.linkProgram(program);
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(program);
+    const error = new ProgramLinkError(gl.getProgramInfoLog(program), gl.getError());
     gl.deleteProgram(program);
     gl.deleteShader(vertexShader);
     gl.deleteShader(fragmentShader);
-    throw new Error(`Failed to link program: ${info}`);
+    throw error;
   }
   gl.deleteShader(vertexShader);
   gl.deleteShader(fragmentShader);
@@ -315,7 +353,7 @@ function bindDefaultVertexArray(gl) {
     return () => {
     };
   }
-  const previous = gl.getParameter(VERTEX_ARRAY_BINDING);
+  const previous = readVertexArrayBinding(gl);
   feature.bindVertexArray(null);
   return () => feature.bindVertexArray(previous);
 }
@@ -332,8 +370,8 @@ function vaoView(gl, participants, { signal } = {}) {
     dispose() {
     }
   } : (() => {
-    const vertexArray = assertedNotNullish(feature.createVertexArray());
-    const previous = gl.getParameter(VERTEX_ARRAY_BINDING);
+    const vertexArray = created(feature.createVertexArray(), "vertexArray");
+    const previous = readVertexArrayBinding(gl);
     feature.bindVertexArray(vertexArray);
     for (const participant of participants) {
       participant.applyToVertexArray();
@@ -341,9 +379,7 @@ function vaoView(gl, participants, { signal } = {}) {
     feature.bindVertexArray(previous);
     return {
       bind() {
-        const previousVertexArray = gl.getParameter(
-          VERTEX_ARRAY_BINDING
-        );
+        const previousVertexArray = readVertexArrayBinding(gl);
         feature.bindVertexArray(vertexArray);
         participants.forEach((participant) => participant.applyToContext?.());
         return once(() => feature.bindVertexArray(previousVertexArray));
@@ -445,6 +481,10 @@ function handleAttribute(gl, location, size, stride, offset, glType, isIntegerKi
 }
 const VERTEX_ATTRIB_ARRAY_DIVISOR = 35070;
 const VERTEX_ARRAY_BINDING = 34229;
+function readVertexArrayBinding(gl) {
+  const bound = gl.getParameter(VERTEX_ARRAY_BINDING);
+  return typeof bound === "object" ? bound : null;
+}
 function readDivisor(gl, location) {
   return getInstancedArrays(gl) ? gl.getVertexAttrib(location, VERTEX_ATTRIB_ARRAY_DIVISOR) : 0;
 }
@@ -453,10 +493,10 @@ function attributeView(gl, program, schema, { signal } = {}) {
     schema,
     ({ kind, format, normalized = false, instanced, buffer: providedBuffer }, key) => {
       const name = toID(key);
-      const buffer = providedBuffer ?? assertedNotNullish(gl.createBuffer());
+      const buffer = providedBuffer ?? created(gl.createBuffer(), "buffer");
       const location = gl.getAttribLocation(program, name);
       if (location < 0) {
-        throw new Error(`Attribute '${name}' not found`);
+        throw new AttributeNotFoundError(name);
       }
       const size = kindToSize(kind);
       const resolvedFormat = format ?? defaultFormat(kind);
@@ -566,7 +606,7 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
       const name = toID(layout2.key);
       const location = gl.getAttribLocation(program, name);
       if (location < 0) {
-        throw new Error(`Attribute '${name}' not found`);
+        throw new AttributeNotFoundError(name);
       }
       locations.push(location);
       const size = kindToSize(layout2.kind);
@@ -589,7 +629,7 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
       );
     });
     const stride = index2;
-    const buffer = assertedNotNullish(gl.createBuffer());
+    const buffer = created(gl.createBuffer(), "buffer");
     function applyToVertexArray(divisor) {
       const previousDivisors = locations.map(
         (location) => [location, readDivisor(gl, location)]
@@ -652,7 +692,7 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
 }
 function bufferView(gl, schema, { signal } = {}) {
   const buffers = mapObject(schema, ({ target = "ARRAY_BUFFER", usage = "STATIC_DRAW" }) => {
-    const buffer = assertedNotNullish(gl.createBuffer());
+    const buffer = created(gl.createBuffer(), "buffer");
     function applyToVertexArray() {
       const previousBuffer = gl.getParameter(gl[`${target}_BINDING`]);
       gl.bindBuffer(gl[target], buffer);
