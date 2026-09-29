@@ -1,3 +1,4 @@
+import { created } from './errors'
 import type {
   AttributeKind,
   FramebufferDefinition,
@@ -135,7 +136,7 @@ export function createTexture(
   data?: ArrayBufferView | null,
   { signal }: ViewOptions = {},
 ): WebGLTexture {
-  const texture = assertedNotNullish(gl.createTexture(), 'Failed to create texture')
+  const texture = created(gl.createTexture(), 'texture')
 
   function getTextureConstant(name: string) {
     if (!(name in gl)) {
@@ -217,7 +218,7 @@ export function createFramebuffer(
   const texture = providedTexture ?? createTexture(gl, definition)
 
   // Create framebuffer
-  const framebuffer = assertedNotNullish(gl.createFramebuffer(), 'Failed to create framebuffer')
+  const framebuffer = created(gl.createFramebuffer(), 'framebuffer')
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
 

@@ -1,5 +1,6 @@
 import { RemoveSuffix } from './type-utils'
 import type { GL, ViewOptions } from './types'
+import { created, ProgramLinkError, ShaderCompileError } from './errors'
 import { once } from './utils'
 
 function isWebGL2RenderingContext(
@@ -15,18 +16,19 @@ function isWebGL2RenderingContext(
 /**********************************************************************************/
 
 export function createShader(gl: GL, type: number, source: string): WebGLShader {
-  const shader = gl.createShader(type)
-  if (!shader) throw new Error('Failed to create shader')
+  const shader = created(gl.createShader(type), 'shader')
 
   gl.shaderSource(shader, source)
   gl.compileShader(shader)
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const info = gl.getShaderInfoLog(shader)
-    gl.deleteShader(shader)
-    throw new Error(
-      `Failed to compile ${type === gl.VERTEX_SHADER ? 'vertex' : 'fragment'} shader: ${info}`,
+    const error = new ShaderCompileError(
+      type === gl.VERTEX_SHADER ? 'vertex' : 'fragment',
+      gl.getShaderInfoLog(shader),
+      gl.getError(),
     )
+    gl.deleteShader(shader)
+    throw error
   }
 
   return shader
@@ -44,8 +46,7 @@ export function createProgram(
   fragmentSource: string,
   { signal }: ViewOptions = {},
 ): WebGLProgram {
-  const program = gl.createProgram()
-  if (!program) throw new Error('Failed to create WebGL program')
+  const program = created(gl.createProgram(), 'program')
 
   const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource)
   const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource)
@@ -55,11 +56,11 @@ export function createProgram(
   gl.linkProgram(program)
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const info = gl.getProgramInfoLog(program)
+    const error = new ProgramLinkError(gl.getProgramInfoLog(program), gl.getError())
     gl.deleteProgram(program)
     gl.deleteShader(vertexShader)
     gl.deleteShader(fragmentShader)
-    throw new Error(`Failed to link program: ${info}`)
+    throw error
   }
 
   // Clean up shaders after linking

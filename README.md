@@ -39,6 +39,7 @@
   - 🏗️ [createProgram](#️-createprogram)
   - 🖼️ [createTexture](#️-createtexture)
   - 🖥️ [createFramebuffer](#️-createframebuffer)
+- 🚨 [Errors](#-errors)
 - 🔍 [WebGL Type Compatibility](#-webgl-type-compatibility)
   - 🎯 [Uniform Types](#-uniform-types)
   - 📝 [Attribute Types](#-attribute-types)
@@ -909,6 +910,32 @@ Supports color, depth, stencil, and combined depth-stencil attachments with comp
 Pass a `texture` to attach one you already have — ping-ponging a pair of
 framebuffers over shared textures, say. `dispose()` then deletes the framebuffer
 and leaves that texture alone, because it is not the framebuffer's to delete.
+
+## 🚨 Errors
+
+Every error view.gl throws for a GL call that failed is a class exported from `@bigmistqke/view.gl`, carrying what the GL answered:
+
+| Error | Thrown when | Carries |
+| --- | --- | --- |
+| `ShaderCompileError` | a shader does not compile | `stage`, `infoLog` (`string \| null`, as the driver answered it), `glError` |
+| `ProgramLinkError` | a program does not link | `infoLog` (`string \| null`), `glError` |
+| `GLCreateError` | a `create*` call answers `null` | `resource`: `'shader'`, `'program'`, `'buffer'`, `'vertexArray'`, `'texture'` or `'framebuffer'` |
+| `AttributeNotFoundError` | `getAttribLocation` answers -1 | `attribute` |
+
+A lost WebGL context answers every call with a default: `null` from a `create*`, -1 for an attribute, `false` with an empty or `null` log for a compile or link. So an empty `infoLog` or a `GLCreateError` carries no cause, where a non-empty `infoLog` is the driver's own reason.
+
+```typescript
+import { createProgram } from '@bigmistqke/view.gl/gl'
+import { ShaderCompileError } from '@bigmistqke/view.gl'
+
+try {
+  createProgram(gl, vertex, fragment)
+} catch (error) {
+  if (error instanceof ShaderCompileError && error.infoLog?.trim()) {
+    console.error(`${error.stage} shader rejected:`, error.infoLog)
+  }
+}
+```
 
 ## 🔍 WebGL Type Compatibility
 

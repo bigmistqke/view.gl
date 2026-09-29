@@ -1,3 +1,4 @@
+import { AttributeNotFoundError, created } from './errors'
 import { getInstancedArrays, getVertexArrayObject } from './gl'
 import type {
   AttributeFormat,
@@ -31,6 +32,7 @@ import {
   once,
 } from './utils'
 import { createUpsertMap, mapObject } from './utils'
+export * from './errors'
 export * from './types'
 // Documented under Utils but reachable from nowhere until now: utils is not a
 // build entry, and named rather than star so the internal helpers stay internal.
@@ -180,7 +182,7 @@ export function vaoView(
         dispose() {},
       }
     : (() => {
-        const vertexArray = assertedNotNullish(feature.createVertexArray())
+        const vertexArray = created(feature.createVertexArray(), 'vertexArray')
         const previous = gl.getParameter(VERTEX_ARRAY_BINDING) as WebGLVertexArrayObject | null
         feature.bindVertexArray(vertexArray)
         // Discarding the restorers is the point: the state lives in this array
@@ -392,11 +394,11 @@ export function attributeView<T extends AttributeSchema>(
       // belongs to another view — the quad `compile.toQuad` shares across every
       // program on a context, an attribute two programs step over — and
       // deleting one of those would take it out from under its owner.
-      const buffer = providedBuffer ?? assertedNotNullish(gl.createBuffer())
+      const buffer = providedBuffer ?? created(gl.createBuffer(), 'buffer')
 
       const location = gl.getAttribLocation(program, name)
       if (location < 0) {
-        throw new Error(`Attribute '${name}' not found`)
+        throw new AttributeNotFoundError(name)
       }
 
       const size = kindToSize(kind)
@@ -551,7 +553,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
       const location = gl.getAttribLocation(program, name)
 
       if (location < 0) {
-        throw new Error(`Attribute '${name}' not found`)
+        throw new AttributeNotFoundError(name)
       }
 
       locations.push(location)
@@ -582,7 +584,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
     const stride = index
 
     // Create a buffer
-    const buffer = assertedNotNullish(gl.createBuffer())
+    const buffer = created(gl.createBuffer(), 'buffer')
 
     // This layout used to create a vertex array of its own, here, which is why
     // the other participants in a draw had to be bound after it to be included
@@ -670,7 +672,7 @@ export function bufferView<T extends BufferSchema>(
 ): BufferView<T> {
   // Initialize buffers
   const buffers = mapObject(schema, ({ target = 'ARRAY_BUFFER', usage = 'STATIC_DRAW' }) => {
-    const buffer = assertedNotNullish(gl.createBuffer())
+    const buffer = created(gl.createBuffer(), 'buffer')
 
     function applyToVertexArray() {
       // Snapshot before the change, restore in the disposer. Restoring the
