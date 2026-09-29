@@ -1,4 +1,4 @@
-import { g as glsl, u as uniform, a as attribute, c as compile } from './tag-pBCFk9FX.js';
+import { g as glsl, u as uniform, a as attribute, c as compile } from './tag-DTGjfyF2.js';
 import { d as dom } from './utils-2dzuv_bW.js';
 
 const canvas = dom("canvas", {

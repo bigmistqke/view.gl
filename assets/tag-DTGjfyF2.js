@@ -617,6 +617,14 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
         set(value, usage = "STATIC_DRAW") {
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
           gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage]);
+        },
+        allocate(length, usage = "STATIC_DRAW") {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.bufferData(gl.ARRAY_BUFFER, length * Float32Array.BYTES_PER_ELEMENT, gl[usage]);
+        },
+        write(data, offset) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+          gl.bufferSubData(gl.ARRAY_BUFFER, offset * Float32Array.BYTES_PER_ELEMENT, data);
         }
       }),
       // Lazy: a layout key can be perfectly good in a buffer and impossible as
