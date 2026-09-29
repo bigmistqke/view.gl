@@ -674,6 +674,14 @@ function bufferView(gl, schema, { signal } = {}) {
       set(data) {
         gl.bindBuffer(gl[target], buffer);
         gl.bufferData(gl[target], data, gl[usage]);
+      },
+      allocate(byteLength) {
+        gl.bindBuffer(gl[target], buffer);
+        gl.bufferData(gl[target], byteLength, gl[usage]);
+      },
+      write(data, byteOffset) {
+        gl.bindBuffer(gl[target], buffer);
+        gl.bufferSubData(gl[target], byteOffset, data);
       }
     };
   });
