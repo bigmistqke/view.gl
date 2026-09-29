@@ -319,17 +319,31 @@ const interleavedAttributes = interleavedAttributeView(gl, program, {
   },
 })
 
-interleavedAttributes.vertexData.set(interleavedVertexData).bind()
+interleavedAttributes.vertexData.buffer.set(interleavedVertexData)
 ```
 
-Where vertex array objects are available this binds one, and it stays selected
-for every later draw — which would then write its own attributes into it. The
-disposer returned by `bind()` selects the previous array again:
+Where vertex array objects are available `bind()` binds one, and it stays
+selected for every later draw — which would then write its own attributes into
+it. The disposer returned by `bind()` selects the previous array again:
 
 ```typescript
-const unbind = interleavedAttributes.vertexData.bind()
+const unbind = interleavedAttributes.vertexData.buffer.bind()
 gl.drawElements(gl.TRIANGLES, count, gl.UNSIGNED_SHORT, 0)
 unbind()
+```
+
+Whether the buffer steps once per vertex or once per instance is chosen per
+draw, not in the schema: `buffer` steps per vertex, `buffer.perInstance` per
+instance. `constant` sets the same layout as constant attribute values, for a
+draw that needs one set of values without a buffer.
+
+A large buffer can be sized first and filled in parts, so it never has to exist
+whole in JavaScript. Both count in floats:
+
+```typescript
+const { buffer } = interleavedAttributes.vertexData
+buffer.allocate(totalFloats)             // sizes the buffer, contents undefined
+buffer.write(chunk, offsetFloats)        // overwrites a range with bufferSubData
 ```
 
 ##### 📋 InterleavedAttributeSchema
@@ -337,8 +351,6 @@ unbind()
 A mapping of interleaved buffer names to their layout configuration. Each layout defines multiple attributes packed into a single buffer.
 
 - `layout`: Array of attribute definitions with `key` and `kind` (see [Attribute Types](#-attribute-types))
-- `instanced`: Boolean - applies to all attributes in layout
-- `buffer`: Custom WebGLBuffer (optional) - by default it gets created automatically during compilation
 
 <details>
 <summary>TypeScript Types</summary>
@@ -349,8 +361,6 @@ interface InterleavedAttributeDefinition {
     key: string | symbol
     kind: AttributeKind
   }>
-  instanced?: boolean                         // Applies vertexAttribDivisor to all attributes
-  buffer?: WebGLBuffer                        // Custom buffer for interleaved data
 }
 
 type InterleavedAttributeSchema = Record<string | symbol, InterleavedAttributeDefinition>
