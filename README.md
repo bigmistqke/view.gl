@@ -268,6 +268,14 @@ gl.drawArraysInstanced(gl.TRIANGLES, 0, 3, 100)
 unbind()
 ```
 
+A large buffer can be sized first and filled in parts, counting in elements of
+the attribute's format:
+
+```typescript
+attributes.position.allocate(totalElements)   // sizes the buffer, contents undefined
+attributes.position.write(chunk, offset)      // overwrites a range with bufferSubData
+```
+
 ##### 📋 AttributeSchema
 
 A mapping of attribute names to their configuration.

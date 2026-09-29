@@ -438,6 +438,16 @@ export function attributeView<T extends AttributeSchema>(
           gl.bufferData(gl.ARRAY_BUFFER, data, gl[usage])
           return this
         },
+        allocate(length, usage = 'STATIC_DRAW') {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+          gl.bufferData(gl.ARRAY_BUFFER, length * FORMAT_BYTE_SIZE[resolvedFormat], gl[usage])
+          return this
+        },
+        write(data, offset) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+          gl.bufferSubData(gl.ARRAY_BUFFER, offset * FORMAT_BYTE_SIZE[resolvedFormat], data)
+          return this
+        },
       }
     },
   )

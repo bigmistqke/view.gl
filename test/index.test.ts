@@ -435,6 +435,31 @@ describe('attributeView', () => {
     program = gl.createProgram()!
   })
 
+  it('sizes the buffer without data, then fills it in parts, counting in its format', () => {
+    const schema = {
+      a_position: { kind: 'vec2' },
+      a_uv: { kind: 'vec2', format: 'int16' },
+    } satisfies AttributeSchema
+
+    const { a_position, a_uv } = attributeView(gl, program, schema)
+
+    a_position.allocate(12, 'DYNAMIC_DRAW')
+    expect(gl.bindBuffer).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, a_position.buffer)
+    expect(gl.bufferData).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, 48, gl.DYNAMIC_DRAW)
+
+    const floats = new Float32Array([1, 2])
+    a_position.write(floats, 6)
+    expect(gl.bufferSubData).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, 24, floats)
+
+    a_uv.allocate(12)
+    expect(gl.bindBuffer).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, a_uv.buffer)
+    expect(gl.bufferData).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, 24, gl.STATIC_DRAW)
+
+    const shorts = new Int16Array([1, 2])
+    a_uv.write(shorts, 6)
+    expect(gl.bufferSubData).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, 12, shorts)
+  })
+
   it('should create attribute methods for basic types', () => {
     const schema = {
       a_position: { kind: 'vec2' },

@@ -366,6 +366,17 @@ export interface AttributeMethods<T extends AttributeDefinition = AttributeDefin
   bind(): () => void
   set(data: FormatToArray[ResolvedFormat<T>], usage?: GLUsage): { bind(): () => void }
   /**
+   * Sizes the buffer to `length` elements of the attribute's format, contents
+   * undefined, discarding what it held.
+   */
+  allocate(length: number, usage?: GLUsage): { bind(): () => void }
+  /**
+   * Overwrites the elements from `offset` on with `data`, leaving the rest as
+   * it is. Counts in elements of the attribute's format; the range must fit
+   * inside the buffer's current size.
+   */
+  write(data: FormatToArray[ResolvedFormat<T>], offset: number): { bind(): () => void }
+  /**
    * Delete the buffer, if this attribute is the one that made it.
    *
    * A buffer named by the schema came from somewhere else and is deleted by
