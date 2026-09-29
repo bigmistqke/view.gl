@@ -922,7 +922,7 @@ Every error view.gl throws for a GL call that failed is a class exported from `@
 | `GLCreateError` | a `create*` call answers `null` | `resource`: `'shader'`, `'program'`, `'buffer'`, `'vertexArray'`, `'texture'` or `'framebuffer'` |
 | `AttributeNotFoundError` | `getAttribLocation` answers -1 | `attribute` |
 
-A lost WebGL context answers every call with a default: `null` from a `create*`, -1 for an attribute, `false` with an empty or `null` log for a compile or link. So an empty `infoLog` or a `GLCreateError` carries no cause, where a non-empty `infoLog` is the driver's own reason.
+A lost WebGL context answers calls with defaults: -1 for an attribute, `false` with an empty or `null` log for a compile or link, and `null` from a `create*` in engines that predate infallible object creation (current ones hand out an object, and the loss shows up at the compile or link). So an empty `infoLog` or a `GLCreateError` carries no cause, where a non-empty `infoLog` is the driver's own reason.
 
 ```typescript
 import { createProgram } from '@bigmistqke/view.gl/gl'
