@@ -95,6 +95,7 @@ export function createMockGL() {
     }),
 
     bufferData: vi.fn(),
+    bufferSubData: vi.fn(),
 
     // Program methods
     createProgram: vi.fn(() => {

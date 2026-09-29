@@ -424,6 +424,13 @@ export interface BufferSource extends Source {
    */
   perInstance: Source
   set(data: Float32Array, usage?: GLUsage): void
+  /** Sizes the buffer to `length` floats, contents undefined, discarding what it held. */
+  allocate(length: number, usage?: GLUsage): void
+  /**
+   * Overwrites the floats from `offset` on with `data`, leaving the rest as it
+   * is. The range must fit inside the buffer's current size.
+   */
+  write(data: Float32Array, offset: number): void
 }
 
 export interface ConstantAttributeMethods {

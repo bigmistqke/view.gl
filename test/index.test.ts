@@ -959,6 +959,25 @@ describe('interleavedAttributeView', () => {
     expect(gl.vertexAttribDivisor).toHaveBeenCalledWith(expect.any(Number), 0)
   })
 
+  it('sizes the buffer without data, then fills it in parts', () => {
+    const schema = {
+      instanceData: { layout: [{ key: 'a_instancePos', kind: 'vec3' }] },
+    } satisfies InterleavedAttributeSchema
+
+    const { buffer } = interleavedAttributeView(gl, program, schema).instanceData
+    const target = vi.mocked(gl.createBuffer).mock.results.at(-1)!.value
+
+    buffer.allocate(12, 'DYNAMIC_DRAW')
+    expect(gl.bindBuffer).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, target)
+    expect(gl.bufferData).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, 48, gl.DYNAMIC_DRAW)
+
+    vi.mocked(gl.bindBuffer).mockClear()
+    const part = new Float32Array([1, 2, 3])
+    buffer.write(part, 6)
+    expect(gl.bindBuffer).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, target)
+    expect(gl.bufferSubData).toHaveBeenLastCalledWith(gl.ARRAY_BUFFER, 24, part)
+  })
+
   it('should handle integer attributes in layout', () => {
     const schema = {
       data: {

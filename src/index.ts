@@ -622,6 +622,14 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
           gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
           gl.bufferData(gl.ARRAY_BUFFER, value, gl[usage])
         },
+        allocate(length: number, usage: GLUsage = 'STATIC_DRAW') {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+          gl.bufferData(gl.ARRAY_BUFFER, length * Float32Array.BYTES_PER_ELEMENT, gl[usage])
+        },
+        write(data: Float32Array, offset: number) {
+          gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
+          gl.bufferSubData(gl.ARRAY_BUFFER, offset * Float32Array.BYTES_PER_ELEMENT, data)
+        },
       }),
       // Lazy: a layout key can be perfectly good in a buffer and impossible as
       // a constant, and finding that out should wait until someone asks for one.
