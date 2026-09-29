@@ -396,6 +396,14 @@ const unbind = buffers.indices.bind()
 // bound vertex array object.
 ```
 
+A large buffer can be sized first and filled in parts. A buffer has no element
+type of its own, so these count in bytes:
+
+```typescript
+buffers.data.allocate(byteLength)        // sizes the buffer, contents undefined
+buffers.data.write(chunk, byteOffset)    // overwrites a range with bufferSubData
+```
+
 ##### 📋 BufferSchema
 A mapping of buffer names to their configuration. Each buffer has a target type and optional usage pattern.
 

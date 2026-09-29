@@ -702,6 +702,14 @@ export function bufferView<T extends BufferSchema>(
         gl.bindBuffer(gl[target], buffer)
         gl.bufferData(gl[target], data, gl[usage])
       },
+      allocate(byteLength: number) {
+        gl.bindBuffer(gl[target], buffer)
+        gl.bufferData(gl[target], byteLength, gl[usage])
+      },
+      write(data: Float32Array | Uint16Array | Uint32Array, byteOffset: number) {
+        gl.bindBuffer(gl[target], buffer)
+        gl.bufferSubData(gl[target], byteOffset, data)
+      },
     }
   })
 

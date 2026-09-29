@@ -490,6 +490,16 @@ export type BufferSchema = Record<string | symbol, BufferDefinition>
 
 export interface BufferMethods extends VertexArrayParticipant {
   set(data: Float32Array | Uint16Array | Uint32Array): void
+  /**
+   * Sizes the buffer to `byteLength` bytes, contents undefined, discarding what
+   * it held. In bytes: the buffer has no element type of its own.
+   */
+  allocate(byteLength: number): void
+  /**
+   * Overwrites the bytes from `byteOffset` on with `data`, leaving the rest as
+   * it is. The range must fit inside the buffer's current size.
+   */
+  write(data: Float32Array | Uint16Array | Uint32Array, byteOffset: number): void
   /** Binds the buffer, returning a disposer that restores the previous binding */
   bind(): () => void
   dispose(): void

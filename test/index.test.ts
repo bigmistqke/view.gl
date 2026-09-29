@@ -1256,6 +1256,21 @@ describe('bufferView', () => {
     expect(gl.createBuffer).toHaveBeenCalledTimes(2)
   })
 
+  it('sizes the buffer without data, then fills it in parts, counting in bytes', () => {
+    const { indices } = bufferView(gl, {
+      indices: { target: 'ELEMENT_ARRAY_BUFFER', usage: 'DYNAMIC_DRAW' },
+    })
+    const target = vi.mocked(gl.createBuffer).mock.results.at(-1)!.value
+
+    indices.allocate(64)
+    expect(gl.bindBuffer).toHaveBeenLastCalledWith(gl.ELEMENT_ARRAY_BUFFER, target)
+    expect(gl.bufferData).toHaveBeenLastCalledWith(gl.ELEMENT_ARRAY_BUFFER, 64, gl.DYNAMIC_DRAW)
+
+    const part = new Uint16Array([0, 1, 2])
+    indices.write(part, 12)
+    expect(gl.bufferSubData).toHaveBeenLastCalledWith(gl.ELEMENT_ARRAY_BUFFER, 12, part)
+  })
+
   it('should create buffers with specified target', () => {
     const schema = {
       vertices: { target: 'ARRAY_BUFFER' },
