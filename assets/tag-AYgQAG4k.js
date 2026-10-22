@@ -263,35 +263,25 @@ function createProgram(gl, vertexSource, fragmentSource, { signal } = {}) {
   );
   return program;
 }
-const INSTANCED_ARRAYS_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
 function getInstancedArrays(gl) {
   if (isWebGL2RenderingContext(gl)) return gl;
-  const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl);
-  if (cached) return cached;
   const ext = gl.getExtension("ANGLE_instanced_arrays");
   if (!ext) return void 0;
-  const wrapper = {
+  return {
     drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
     drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
     vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext)
   };
-  INSTANCED_ARRAYS_WRAPPER_MAP.set(gl, wrapper);
-  return wrapper;
 }
-const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = /* @__PURE__ */ new WeakMap();
 function getVertexArrayObject(gl) {
   if (isWebGL2RenderingContext(gl)) return gl;
-  const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl);
-  if (cached) return cached;
   const ext = gl.getExtension("OES_vertex_array_object");
   if (!ext) return null;
-  const wrapper = {
+  return {
     bindVertexArray: ext.bindVertexArrayOES.bind(ext),
     createVertexArray: ext.createVertexArrayOES.bind(ext),
     deleteVertexArray: ext.deleteVertexArrayOES.bind(ext)
   };
-  VERTEX_ARRAY_OBJECT_WRAPPER_MAP.set(gl, wrapper);
-  return wrapper;
 }
 
 let index = 0;
@@ -907,14 +897,12 @@ function resolveGlslSlotToString(slot, v300) {
   throw new Error(`Unexpected slot: ${JSON.stringify(slot)}`);
 }
 const QUAD_FLOAT_ARRAY = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]);
-const QUAD_BUFFER_MAP = createUpsertMap(WeakMap);
 compile.toQuad = function(gl, fragment, options) {
-  const buffer = QUAD_BUFFER_MAP.getOrInsert(gl, gl.createBuffer.bind(gl));
   const webgl2 = options?.webgl2 ?? fragment.template[0]?.startsWith("#version 300 es");
   const vertex = webgl2 ? glsl`#version 300 es
 precision mediump float;
 
-${attribute.vec2("a_quad", { buffer })}
+${attribute.vec2("a_quad")}
 
 out vec2 v_uv;
 
@@ -923,7 +911,7 @@ void main() {
   gl_Position = vec4(v_uv, 0.0, 1.0);
 }` : glsl`precision mediump float;
 
-${attribute.vec2("a_quad", { buffer })}
+${attribute.vec2("a_quad")}
 
 varying vec2 v_uv;
 
