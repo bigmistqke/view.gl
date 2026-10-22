@@ -18,7 +18,7 @@ import type {
   ViewSchema,
   ViewSchemaPartial,
 } from './types'
-import { createUpsertMap, once } from './utils'
+import { once } from './utils'
 
 export function glsl<TSlot extends GLSLSlot, const TSlots extends TSlot[]>(
   template: TemplateStringsArray,
@@ -281,22 +281,19 @@ function resolveGlslSlotToString(slot: GLSLSlot, v300: boolean): string {
 }
 
 const QUAD_FLOAT_ARRAY = new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1])
-const QUAD_BUFFER_MAP = createUpsertMap(WeakMap<GL, WebGLBuffer>)
 
 compile.toQuad = function <TFragment extends GLSL, TSchema extends ViewSchemaPartial>(
   gl: GL,
   fragment: TFragment,
   options?: CompileOptions<TSchema>,
 ) {
-  const buffer = QUAD_BUFFER_MAP.getOrInsert(gl, gl.createBuffer.bind(gl))
-
   const webgl2 = options?.webgl2 ?? fragment.template[0]?.startsWith('#version 300 es')
 
   const vertex = webgl2
     ? glsl`#version 300 es
 precision mediump float;
 
-${attribute.vec2('a_quad', { buffer })}
+${attribute.vec2('a_quad')}
 
 out vec2 v_uv;
 
@@ -306,7 +303,7 @@ void main() {
 }`
     : glsl`precision mediump float;
 
-${attribute.vec2('a_quad', { buffer })}
+${attribute.vec2('a_quad')}
 
 varying vec2 v_uv;
 

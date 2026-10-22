@@ -125,8 +125,8 @@ is a label for the reader. What putting it in the schema decides is its
 | belongs to somebody else | name it on an attribute | nobody — it is borrowed |
 
 An index buffer whose lifetime is its program's belongs in the schema, beside
-the attributes it is drawn with, on the one signal. A quad cached per context,
-or a buffer handed from one program's view to another's, is its own thing.
+the attributes it is drawn with, on the one signal. A buffer handed from one
+program's view to another's is its own thing.
 
 <details>
 <summary>TypeScript Types</summary>

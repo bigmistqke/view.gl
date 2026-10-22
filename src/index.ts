@@ -395,8 +395,7 @@ export function attributeView<T extends AttributeSchema>(
       const name = toID(key)
 
       // Whoever made the buffer deletes it. A schema can name a buffer that
-      // belongs to another view — the quad `compile.toQuad` shares across every
-      // program on a context, an attribute two programs step over — and
+      // belongs to another view — an attribute two programs step over — and
       // deleting one of those would take it out from under its owner.
       const buffer = providedBuffer ?? created(gl.createBuffer(), 'buffer')
 

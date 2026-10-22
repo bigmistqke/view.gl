@@ -670,10 +670,9 @@ export interface ViewOptions {
  *
  * The other two lifetimes have their own spellings, and neither is this one. A
  * buffer that outlives the view, or is shared between views, is a standalone
- * `bufferView` — `compile.toQuad`'s per-context quad, a buffer handed from one
- * program's view to another's. A buffer that belongs to somebody else is NAMED
- * by an attribute schema, and is borrowed: the view uses it and never deletes
- * it.
+ * `bufferView` — a buffer handed from one program's view to another's. A
+ * buffer that belongs to somebody else is NAMED by an attribute schema, and is
+ * borrowed: the view uses it and never deletes it.
  */
 export interface ViewSchema {
   uniforms?: UniformSchema

@@ -1800,7 +1800,7 @@ describe('compile.toQuad', () => {
     
     // Should have quad attribute in schema
     expect(result.schema.attributes).toEqual({
-      a_quad: { kind: 'vec2', buffer: expect.any(Object) }
+      a_quad: { kind: 'vec2' }
     })
     
     // Should have fragment uniforms
@@ -1808,6 +1808,27 @@ describe('compile.toQuad', () => {
       u_time: { kind: 'float' },
       u_resolution: { kind: 'vec2' }
     })
+  })
+
+  it('uploads the quad into a live buffer after a context is lost and restored', () => {
+    let generation = 0
+    gl.createBuffer = vi.fn(() => ({ generation }) as unknown as WebGLBuffer)
+    let bound: { generation: number } | null = null
+    gl.bindBuffer = vi.fn((_target, buffer) => {
+      bound = buffer as unknown as { generation: number } | null
+    })
+    const uploadedInto: Array<{ generation: number } | null> = []
+    gl.bufferData = vi.fn(() => {
+      uploadedInto.push(bound)
+    }) as any
+    const fragment = glsl`precision mediump float;
+      void main() { gl_FragColor = vec4(1.0); }`
+
+    compile.toQuad(gl, fragment)
+    generation++
+    compile.toQuad(gl, fragment)
+
+    expect(uploadedInto.at(-1)).toEqual({ generation })
   })
 
   it('should generate vertex shader with correct uv output', () => {
@@ -1862,7 +1883,7 @@ describe('compile.toQuad', () => {
     })
 
     expect(result.schema.attributes).toEqual({
-      a_quad: { kind: 'vec2', buffer: expect.any(Object) }
+      a_quad: { kind: 'vec2' }
     })
   })
 
@@ -2028,20 +2049,23 @@ describe('compile.toQuad', () => {
 
     expect(result.schema.uniforms).toEqual({})
     expect(result.schema.attributes).toEqual({
-      a_quad: { kind: 'vec2', buffer: expect.any(Object) }
+      a_quad: { kind: 'vec2' }
     })
     expect(result.program).toBe(mockProgram)
   })
 
-  it('should reuse buffers across multiple calls', () => {
-    const fragment1 = glsl`void main() { gl_FragColor = vec4(1.0); }`
-    const fragment2 = glsl`void main() { gl_FragColor = vec4(0.5); }`
+  it('owns its quad buffer and deletes it on abort', () => {
+    const quad = { id: 'quad' } as WebGLBuffer
+    gl.createBuffer = vi.fn(() => quad)
+    gl.deleteBuffer = vi.fn()
+    const controller = new AbortController()
 
-    compile.toQuad(gl, fragment1)
-    compile.toQuad(gl, fragment2)
+    compile.toQuad(gl, glsl`void main() { gl_FragColor = vec4(1.0); }`, {
+      signal: controller.signal,
+    })
+    controller.abort()
 
-    // Buffer should only be created once (reused)
-    expect(gl.createBuffer).toHaveBeenCalledTimes(1)
+    expect(gl.deleteBuffer).toHaveBeenCalledWith(quad)
   })
 
   it('should expose quad attribute in view for binding', () => {
