@@ -1,4 +1,3 @@
-import { RemoveSuffix } from './type-utils'
 import type { GL, ViewOptions } from './types'
 import { created, ProgramLinkError, ShaderCompileError } from './errors'
 import { once } from './utils'
@@ -81,33 +80,18 @@ export function createProgram(
 /*                                                                                */
 /**********************************************************************************/
 
-const INSTANCED_ARRAYS_WRAPPER_MAP = new WeakMap<
-  GL,
-  RemoveSuffix<
-    Pick<
-      ANGLE_instanced_arrays,
-      'drawArraysInstancedANGLE' | 'drawElementsInstancedANGLE' | 'vertexAttribDivisorANGLE'
-    >,
-    'ANGLE'
-  > | null
->()
+/** Instancing on `gl`: the context on WebGL2, `ANGLE_instanced_arrays` on WebGL1, else `undefined`. */
 export function getInstancedArrays(gl: GL) {
   if (isWebGL2RenderingContext(gl)) return gl
-
-  const cached = INSTANCED_ARRAYS_WRAPPER_MAP.get(gl)
-  if (cached) return cached
 
   const ext = gl.getExtension('ANGLE_instanced_arrays')
   if (!ext) return undefined
 
-  const wrapper = {
+  return {
     drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
     drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
     vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext),
   }
-  INSTANCED_ARRAYS_WRAPPER_MAP.set(gl, wrapper)
-
-  return wrapper
 }
 
 /**********************************************************************************/
@@ -116,31 +100,16 @@ export function getInstancedArrays(gl: GL) {
 /*                                                                                */
 /**********************************************************************************/
 
-const VERTEX_ARRAY_OBJECT_WRAPPER_MAP = new WeakMap<
-  GL,
-  RemoveSuffix<
-    Pick<
-      OES_vertex_array_object,
-      'bindVertexArrayOES' | 'createVertexArrayOES' | 'deleteVertexArrayOES'
-    >,
-    'OES'
-  > | null
->()
+/** Vertex arrays on `gl`: the context on WebGL2, `OES_vertex_array_object` on WebGL1, else `null`. */
 export function getVertexArrayObject(gl: GL) {
   if (isWebGL2RenderingContext(gl)) return gl
-
-  const cached = VERTEX_ARRAY_OBJECT_WRAPPER_MAP.get(gl)
-  if (cached) return cached
 
   const ext = gl.getExtension('OES_vertex_array_object')
   if (!ext) return null
 
-  const wrapper = {
+  return {
     bindVertexArray: ext.bindVertexArrayOES.bind(ext),
     createVertexArray: ext.createVertexArrayOES.bind(ext),
     deleteVertexArray: ext.deleteVertexArrayOES.bind(ext),
   }
-  VERTEX_ARRAY_OBJECT_WRAPPER_MAP.set(gl, wrapper)
-
-  return wrapper
 }

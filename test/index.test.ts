@@ -1491,6 +1491,84 @@ describe('vaoView', () => {
   })
 })
 
+describe('a context lost and restored between two builds', () => {
+  /**
+   * A WebGL1 context whose extension objects die with the context, as on
+   * Chrome 109 and 119: an object from before the loss creates nothing and
+   * sets no divisor after the restore, while a fresh `getExtension` works.
+   */
+  function losableGL() {
+    const gl = createMockGL() as any
+    let generation = 0
+    const divisors: Array<{ generation: number; location: number; divisor: number }> = []
+    gl.getExtension = vi.fn((name: string) => {
+      const born = generation
+      const alive = () => born === generation
+      if (name === 'OES_vertex_array_object') {
+        return {
+          createVertexArrayOES: () => (alive() ? { generation: born } : null),
+          bindVertexArrayOES: () => {},
+          deleteVertexArrayOES: () => {},
+        }
+      }
+      if (name === 'ANGLE_instanced_arrays') {
+        return {
+          vertexAttribDivisorANGLE: (location: number, divisor: number) => {
+            if (alive()) {
+              divisors.push({ generation: born, location, divisor })
+            }
+          },
+          drawArraysInstancedANGLE: () => {},
+          drawElementsInstancedANGLE: () => {},
+        }
+      }
+      return null
+    })
+    return {
+      gl,
+      divisors,
+      loseAndRestore() {
+        generation++
+      },
+      get generation() {
+        return generation
+      },
+    }
+  }
+
+  it('creates a vertex array on the second build', () => {
+    const context = losableGL()
+    const program = context.gl.createProgram()
+    const build = () =>
+      vaoView(context.gl, [
+        attributeView(context.gl, program, { a_corner: { kind: 'vec2' } } satisfies AttributeSchema)
+          .a_corner,
+      ])
+
+    build()
+    context.loseAndRestore()
+    expect(build).not.toThrow()
+  })
+
+  it('sets an instanced divisor on the second build', () => {
+    const context = losableGL()
+    const program = context.gl.createProgram()
+    const build = () =>
+      vaoView(context.gl, [
+        attributeView(context.gl, program, {
+          a_offset: { kind: 'vec2', instanced: true },
+        } satisfies AttributeSchema).a_offset,
+      ])
+
+    build()
+    context.loseAndRestore()
+    build()
+    expect(context.divisors).toContainEqual(
+      expect.objectContaining({ generation: context.generation, divisor: 1 }),
+    )
+  })
+})
+
 describe('binding a participant on its own', () => {
   let gl: WebGL2RenderingContext
   let program: WebGLProgram
