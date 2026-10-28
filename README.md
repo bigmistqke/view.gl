@@ -10,6 +10,7 @@
 - 📦 [Install](#-install)
 - 👁️ [view.gl](#️-viewgl)
   - 🚀 [Basic Usage](#-basic-usage)
+  - 🧩 [The GL](#-the-gl)
   - 👁️ [view](#️-view)
     - 📋 [ViewSchema](#-viewschema)
   - 👀 [Resource Views](#-resource-views)
@@ -86,6 +87,46 @@ attributes.position.set(positionData)
 attributes.position.bind()
 ```
 
+### 🧩 The GL
+
+Everything here takes `gl`, a `GL`: what a WebGL1 context has, plus each WebGL2 feature as optional members under its WebGL2 names — instancing (`vertexAttribDivisor`, `drawArraysInstanced`, `drawElementsInstanced`, `VERTEX_ATTRIB_ARRAY_DIVISOR`) and vertex arrays (`createVertexArray`, `bindVertexArray`, `deleteVertexArray`, `VERTEX_ARRAY_BINDING`). A WebGL2 context is a `GL` as it is. view.gl asks the context nothing — no `instanceof`, no `getExtension`: a feature is on when its members are there and off when they are not.
+
+On WebGL1 you wrap: a plain object whose core methods call the context, and whose feature members call `ANGLE_instanced_arrays` and `OES_vertex_array_object` under the WebGL2 names, left off where the context has no such extension. The enums are copied, since the extension objects spell them with a suffix. Look the extensions up again after a context restore — on Chrome 95–133 their objects die with the context — so the wrapper is a function, run once more on `webglcontextrestored`:
+
+```typescript
+import type { GL } from '@bigmistqke/view.gl'
+
+function wrap(context: WebGLRenderingContext): GL {
+  const gl: Record<string, unknown> = {}
+  for (const key of Object.getOwnPropertyNames(WebGLRenderingContext.prototype)) {
+    const member = context[key as keyof WebGLRenderingContext]
+    gl[key] = typeof member === 'function' ? member.bind(context) : member
+  }
+  const instancing = context.getExtension('ANGLE_instanced_arrays')
+  if (instancing) {
+    gl.vertexAttribDivisor = instancing.vertexAttribDivisorANGLE.bind(instancing)
+    gl.drawArraysInstanced = instancing.drawArraysInstancedANGLE.bind(instancing)
+    gl.drawElementsInstanced = instancing.drawElementsInstancedANGLE.bind(instancing)
+    gl.VERTEX_ATTRIB_ARRAY_DIVISOR = 0x88fe
+  }
+  const vertexArrays = context.getExtension('OES_vertex_array_object')
+  if (vertexArrays) {
+    gl.createVertexArray = vertexArrays.createVertexArrayOES.bind(vertexArrays)
+    gl.bindVertexArray = vertexArrays.bindVertexArrayOES.bind(vertexArrays)
+    gl.deleteVertexArray = vertexArrays.deleteVertexArrayOES.bind(vertexArrays)
+    gl.VERTEX_ARRAY_BINDING = 0x85b5
+  }
+  return gl as GL
+}
+
+let gl = wrap(context)
+canvas.addEventListener('webglcontextrestored', () => {
+  gl = wrap(context)
+})
+```
+
+Where vertex arrays are off, `vao()` re-applies its participants on every bind. Where instancing is off, an `instanced: true` attribute, or a layout bound `.perInstance`, throws [`InstancingUnavailableError`](#-errors), naming the attribute.
+
 ### 👁️ view
 
 The `view()` function creates type-safe WebGL resource managers from a schema.
@@ -96,7 +137,7 @@ const { uniforms, attributes } = view(gl, program, schema)
 
 **Parameters:**
 
-- `gl`: the context, a `GL`: what a WebGL1 context has, plus the WebGL2 features (`vertexAttribDivisor` and the instanced draws, `createVertexArray` and its calls) as optional members under their WebGL2 names. A WebGL2 context is one as it is. view.gl asks the context nothing and looks no extension up: on WebGL1, a wrapper puts `ANGLE_instanced_arrays` and `OES_vertex_array_object` on the object under the WebGL2 names, and leaves a feature off where the context has none. Where vertex arrays are off, `vao()` re-applies its participants on every bind; where instancing is off, a per-instance layout or an `instanced` attribute is refused with `InstancingUnavailableError`.
+- `gl`: a [`GL`](#-the-gl) — a WebGL2 context as it is, or a WebGL1 context wrapped
 - `program`: Compiled WebGL program
 - `schema`: see [`ViewSchema`](#viewschema)
 
@@ -681,7 +722,7 @@ gl.drawArrays(gl.TRIANGLES, 0, 6)
 - Sets up clip-space quad covering the entire screen
 
 **Parameters:**
-- `gl`: WebGL rendering context
+- `gl`: a [`GL`](#-the-gl)
 - `fragment`: Fragment shader with embedded resources
 - `options`: Optional compilation options (same as `compile()`)
 
@@ -884,7 +925,7 @@ const texture = createTexture(
 )
 ```
 
-Automatically validates WebGL2-only formats and provides fallbacks for WebGL1.
+A WebGL2-only format or type (`RGBA32F`, `HALF_FLOAT`, …) is read off the [`GL`](#-the-gl) by name; where the object has no such member, `createTexture` throws.
 
 ### 🖥️ createFramebuffer
 
@@ -921,7 +962,7 @@ Every error view.gl throws for a GL call that failed is a class exported from `@
 | `ProgramLinkError` | a program does not link | `infoLog` (`string \| null`), `glError` |
 | `GLCreateError` | a `create*` call answers `null` | `resource`: `'shader'`, `'program'`, `'buffer'`, `'vertexArray'`, `'texture'` or `'framebuffer'` |
 | `AttributeNotFoundError` | `getAttribLocation` answers -1 | `attribute` |
-| `InstancingUnavailableError` | an attribute is instanced, or a layout bound per instance, on a context without `vertexAttribDivisor` | `attribute` |
+| `InstancingUnavailableError` | an `instanced` attribute, or a layout bound `.perInstance`, on a [`GL`](#-the-gl) with instancing off | `attribute` |
 
 A lost WebGL context answers calls with defaults: -1 for an attribute, `false` with an empty or `null` log for a compile or link, and `null` from a `create*` in engines that predate infallible object creation (current ones hand out an object, and the loss shows up at the compile or link). So an empty `infoLog` or a `GLCreateError` carries no cause, where a non-empty `infoLog` is the driver's own reason.
 
