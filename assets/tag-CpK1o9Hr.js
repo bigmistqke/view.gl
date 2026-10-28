@@ -29,6 +29,13 @@ class AttributeNotFoundError extends Error {
   }
   name = "AttributeNotFoundError";
 }
+class InstancingUnavailableError extends Error {
+  constructor(attribute) {
+    super(`Attribute '${attribute}' is instanced, but the context has no instancing`);
+    this.attribute = attribute;
+  }
+  name = "InstancingUnavailableError";
+}
 function created(value, resource) {
   if (value === null) {
     throw new GLCreateError(resource);
@@ -223,67 +230,6 @@ function mapObject(value, callback) {
   return result;
 }
 
-function isWebGL2RenderingContext(gl) {
-  return typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
-}
-function createShader(gl, type, source) {
-  const shader = created(gl.createShader(type), "shader");
-  gl.shaderSource(shader, source);
-  gl.compileShader(shader);
-  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    const error = new ShaderCompileError(
-      type === gl.VERTEX_SHADER ? "vertex" : "fragment",
-      gl.getShaderInfoLog(shader),
-      gl.getError()
-    );
-    gl.deleteShader(shader);
-    throw error;
-  }
-  return shader;
-}
-function createProgram(gl, vertexSource, fragmentSource, { signal } = {}) {
-  const program = created(gl.createProgram(), "program");
-  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
-  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
-  gl.attachShader(program, vertexShader);
-  gl.attachShader(program, fragmentShader);
-  gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    const error = new ProgramLinkError(gl.getProgramInfoLog(program), gl.getError());
-    gl.deleteProgram(program);
-    gl.deleteShader(vertexShader);
-    gl.deleteShader(fragmentShader);
-    throw error;
-  }
-  gl.deleteShader(vertexShader);
-  gl.deleteShader(fragmentShader);
-  signal?.addEventListener(
-    "abort",
-    once(() => gl.deleteProgram(program))
-  );
-  return program;
-}
-function getInstancedArrays(gl) {
-  if (isWebGL2RenderingContext(gl)) return gl;
-  const ext = gl.getExtension("ANGLE_instanced_arrays");
-  if (!ext) return void 0;
-  return {
-    drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
-    drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
-    vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext)
-  };
-}
-function getVertexArrayObject(gl) {
-  if (isWebGL2RenderingContext(gl)) return gl;
-  const ext = gl.getExtension("OES_vertex_array_object");
-  if (!ext) return null;
-  return {
-    bindVertexArray: ext.bindVertexArrayOES.bind(ext),
-    createVertexArray: ext.createVertexArrayOES.bind(ext),
-    deleteVertexArray: ext.deleteVertexArrayOES.bind(ext)
-  };
-}
-
 let index = 0;
 const PREFIX = "VIEW_GL_ALIAS";
 const HAS_WEAK_SYMBOL = (() => {
@@ -338,17 +284,22 @@ function view(gl, program, schema, { signal } = {}) {
   };
 }
 function bindDefaultVertexArray(gl) {
-  const feature = getVertexArrayObject(gl);
-  if (!feature) {
+  if (!hasVertexArrays(gl)) {
     return () => {
     };
   }
   const previous = readVertexArrayBinding(gl);
-  feature.bindVertexArray(null);
-  return () => feature.bindVertexArray(previous);
+  gl.bindVertexArray(null);
+  return () => gl.bindVertexArray(previous);
+}
+function hasVertexArrays(gl) {
+  return typeof gl.createVertexArray === "function" && typeof gl.bindVertexArray === "function" && typeof gl.deleteVertexArray === "function" && typeof gl.VERTEX_ARRAY_BINDING === "number";
+}
+function hasInstancing(gl) {
+  return typeof gl.vertexAttribDivisor === "function" && typeof gl.drawArraysInstanced === "function" && typeof gl.drawElementsInstanced === "function" && typeof gl.VERTEX_ATTRIB_ARRAY_DIVISOR === "number";
 }
 function vaoView(gl, participants, { signal } = {}) {
-  const feature = getVertexArrayObject(gl);
+  const feature = hasVertexArrays(gl) ? gl : null;
   const methods = !feature ? {
     bind() {
       const restores = participants.map((participant) => participant.applyToVertexArray());
@@ -361,7 +312,7 @@ function vaoView(gl, participants, { signal } = {}) {
     }
   } : (() => {
     const vertexArray = created(feature.createVertexArray(), "vertexArray");
-    const previous = readVertexArrayBinding(gl);
+    const previous = readVertexArrayBinding(feature);
     feature.bindVertexArray(vertexArray);
     for (const participant of participants) {
       participant.applyToVertexArray();
@@ -369,7 +320,7 @@ function vaoView(gl, participants, { signal } = {}) {
     feature.bindVertexArray(previous);
     return {
       bind() {
-        const previousVertexArray = readVertexArrayBinding(gl);
+        const previousVertexArray = readVertexArrayBinding(feature);
         feature.bindVertexArray(vertexArray);
         participants.forEach((participant) => participant.applyToContext?.());
         return once(() => feature.bindVertexArray(previousVertexArray));
@@ -455,28 +406,35 @@ function defaultFormat(kind) {
   if (kind.startsWith("i")) return "int32";
   return "float32";
 }
-function handleAttribute(gl, location, size, stride, offset, glType, isIntegerKind, normalized, instanced) {
+function handleAttribute(gl, location, size, stride, offset, glType, isIntegerKind, normalized, instanced, name) {
   gl.enableVertexAttribArray(location);
   if (isIntegerKind) {
-    gl.vertexAttribIPointer(location, size, gl[glType], stride, offset);
+    assertedNotNullish(gl.vertexAttribIPointer, "the context has no vertexAttribIPointer").call(
+      gl,
+      location,
+      size,
+      gl[glType],
+      stride,
+      offset
+    );
   } else {
     gl.vertexAttribPointer(location, size, gl[glType], normalized, stride, offset);
   }
-  const instancedArrays = getInstancedArrays(gl);
   if (instanced) {
-    assertedNotNullish(instancedArrays).vertexAttribDivisor(location, 1);
-  } else if (instancedArrays) {
-    instancedArrays.vertexAttribDivisor(location, 0);
+    if (!hasInstancing(gl)) {
+      throw new InstancingUnavailableError(name);
+    }
+    gl.vertexAttribDivisor(location, 1);
+  } else if (hasInstancing(gl)) {
+    gl.vertexAttribDivisor(location, 0);
   }
 }
-const VERTEX_ATTRIB_ARRAY_DIVISOR = 35070;
-const VERTEX_ARRAY_BINDING = 34229;
 function readVertexArrayBinding(gl) {
-  const bound = gl.getParameter(VERTEX_ARRAY_BINDING);
+  const bound = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
   return typeof bound === "object" ? bound : null;
 }
 function readDivisor(gl, location) {
-  return getInstancedArrays(gl) ? gl.getVertexAttrib(location, VERTEX_ATTRIB_ARRAY_DIVISOR) : 0;
+  return hasInstancing(gl) ? gl.getVertexAttrib(location, gl.VERTEX_ATTRIB_ARRAY_DIVISOR) : 0;
 }
 function attributeView(gl, program, schema, { signal } = {}) {
   const attributes = mapObject(
@@ -495,9 +453,11 @@ function attributeView(gl, program, schema, { signal } = {}) {
       function applyToVertexArray() {
         const previousDivisor = readDivisor(gl, location);
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-        handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced);
+        handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced, name);
         return once(() => {
-          getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor);
+          if (hasInstancing(gl)) {
+            gl.vertexAttribDivisor(location, previousDivisor);
+          }
         });
       }
       return {
@@ -615,7 +575,8 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
         glType,
         isIntKind,
         normalized,
-        divisor === 1
+        divisor === 1,
+        name
       );
     });
     const stride = index2;
@@ -629,10 +590,11 @@ function interleavedAttributeView(gl, program, schema, { signal } = {}) {
         handle(divisor);
       }
       return once(() => {
-        const instancedArrays = getInstancedArrays(gl);
-        previousDivisors.forEach(([location, previous]) => {
-          instancedArrays?.vertexAttribDivisor(location, previous);
-        });
+        if (hasInstancing(gl)) {
+          previousDivisors.forEach(([location, previous]) => {
+            gl.vertexAttribDivisor(location, previous);
+          });
+        }
       });
     }
     let constant;
@@ -719,6 +681,44 @@ function bufferView(gl, schema, { signal } = {}) {
     forEachObject(buffers, (value) => value.dispose());
   });
   return buffers;
+}
+
+function createShader(gl, type, source) {
+  const shader = created(gl.createShader(type), "shader");
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    const error = new ShaderCompileError(
+      type === gl.VERTEX_SHADER ? "vertex" : "fragment",
+      gl.getShaderInfoLog(shader),
+      gl.getError()
+    );
+    gl.deleteShader(shader);
+    throw error;
+  }
+  return shader;
+}
+function createProgram(gl, vertexSource, fragmentSource, { signal } = {}) {
+  const program = created(gl.createProgram(), "program");
+  const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const error = new ProgramLinkError(gl.getProgramInfoLog(program), gl.getError());
+    gl.deleteProgram(program);
+    gl.deleteShader(vertexShader);
+    gl.deleteShader(fragmentShader);
+    throw error;
+  }
+  gl.deleteShader(vertexShader);
+  gl.deleteShader(fragmentShader);
+  signal?.addEventListener(
+    "abort",
+    once(() => gl.deleteProgram(program))
+  );
+  return program;
 }
 
 function glsl(template, ...slots) {
