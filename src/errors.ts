@@ -49,6 +49,15 @@ export class AttributeNotFoundError extends Error {
   }
 }
 
+/** A divisor of 1 asked of a context without `vertexAttribDivisor`: the draw cannot instance. */
+export class InstancingUnavailableError extends Error {
+  override name = 'InstancingUnavailableError'
+
+  constructor(readonly attribute: string) {
+    super(`Attribute '${attribute}' is instanced, but the context has no instancing`)
+  }
+}
+
 /** Throws a {@link GLCreateError} for a `create*` that answered `null`. */
 export function created<T>(value: T | null, resource: GLResource): T {
   if (value === null) {

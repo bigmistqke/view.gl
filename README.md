@@ -96,7 +96,7 @@ const { uniforms, attributes } = view(gl, program, schema)
 
 **Parameters:**
 
-- `gl`: WebGL rendering context
+- `gl`: the context, a `GL`: what a WebGL1 context has, plus the WebGL2 features (`vertexAttribDivisor` and the instanced draws, `createVertexArray` and its calls) as optional members under their WebGL2 names. A WebGL2 context is one as it is. view.gl asks the context nothing and looks no extension up: on WebGL1, a wrapper puts `ANGLE_instanced_arrays` and `OES_vertex_array_object` on the object under the WebGL2 names, and leaves a feature off where the context has none. Where vertex arrays are off, `vao()` re-applies its participants on every bind; where instancing is off, a per-instance layout or an `instanced` attribute is refused with `InstancingUnavailableError`.
 - `program`: Compiled WebGL program
 - `schema`: see [`ViewSchema`](#viewschema)
 
@@ -921,6 +921,7 @@ Every error view.gl throws for a GL call that failed is a class exported from `@
 | `ProgramLinkError` | a program does not link | `infoLog` (`string \| null`), `glError` |
 | `GLCreateError` | a `create*` call answers `null` | `resource`: `'shader'`, `'program'`, `'buffer'`, `'vertexArray'`, `'texture'` or `'framebuffer'` |
 | `AttributeNotFoundError` | `getAttribLocation` answers -1 | `attribute` |
+| `InstancingUnavailableError` | an attribute is instanced, or a layout bound per instance, on a context without `vertexAttribDivisor` | `attribute` |
 
 A lost WebGL context answers calls with defaults: -1 for an attribute, `false` with an empty or `null` log for a compile or link, and `null` from a `create*` in engines that predate infallible object creation (current ones hand out an object, and the loss shows up at the compile or link). So an empty `infoLog` or a `GLCreateError` carries no cause, where a non-empty `infoLog` is the driver's own reason.
 

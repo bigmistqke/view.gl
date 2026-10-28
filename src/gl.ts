@@ -2,12 +2,6 @@ import type { GL, ViewOptions } from './types'
 import { created, ProgramLinkError, ShaderCompileError } from './errors'
 import { once } from './utils'
 
-function isWebGL2RenderingContext(
-  gl: WebGLRenderingContext | WebGL2RenderingContext,
-): gl is WebGL2RenderingContext {
-  return typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext
-}
-
 /**********************************************************************************/
 /*                                                                                */
 /*                                 Create Shader                                  */
@@ -72,44 +66,4 @@ export function createProgram(
   )
 
   return program
-}
-
-/**********************************************************************************/
-/*                                                                                */
-/*                              Get Instanced Arrays                              */
-/*                                                                                */
-/**********************************************************************************/
-
-/** Instancing on `gl`: the context on WebGL2, `ANGLE_instanced_arrays` on WebGL1, else `undefined`. */
-export function getInstancedArrays(gl: GL) {
-  if (isWebGL2RenderingContext(gl)) return gl
-
-  const ext = gl.getExtension('ANGLE_instanced_arrays')
-  if (!ext) return undefined
-
-  return {
-    drawArraysInstanced: ext.drawArraysInstancedANGLE.bind(ext),
-    drawElementsInstanced: ext.drawElementsInstancedANGLE.bind(ext),
-    vertexAttribDivisor: ext.vertexAttribDivisorANGLE.bind(ext),
-  }
-}
-
-/**********************************************************************************/
-/*                                                                                */
-/*                             Get Vertex Array Object                            */
-/*                                                                                */
-/**********************************************************************************/
-
-/** Vertex arrays on `gl`: the context on WebGL2, `OES_vertex_array_object` on WebGL1, else `null`. */
-export function getVertexArrayObject(gl: GL) {
-  if (isWebGL2RenderingContext(gl)) return gl
-
-  const ext = gl.getExtension('OES_vertex_array_object')
-  if (!ext) return null
-
-  return {
-    bindVertexArray: ext.bindVertexArrayOES.bind(ext),
-    createVertexArray: ext.createVertexArrayOES.bind(ext),
-    deleteVertexArray: ext.deleteVertexArrayOES.bind(ext),
-  }
 }

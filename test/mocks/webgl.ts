@@ -37,6 +37,8 @@ export function createMockGL() {
   const mockGL = {
     // Constants
     ARRAY_BUFFER: 0x8892,
+    VERTEX_ARRAY_BINDING: 0x85b5,
+    VERTEX_ATTRIB_ARRAY_DIVISOR: 0x88fe,
     ELEMENT_ARRAY_BUFFER: 0x8893,
     ARRAY_BUFFER_BINDING: 0x8894,
     ELEMENT_ARRAY_BUFFER_BINDING: 0x8895,
@@ -184,6 +186,7 @@ export function createMockGL() {
     // Drawing methods
     drawArrays: vi.fn(),
     drawArraysInstanced: vi.fn(),
+    drawElementsInstanced: vi.fn(),
     drawElements: vi.fn(),
 
     // Texture methods
@@ -229,24 +232,7 @@ export function createMockGL() {
 
     bindVertexArray: vi.fn(),
 
-    // Extensions
-    getExtension: vi.fn((name: string) => {
-      if (name === 'ANGLE_instanced_arrays') {
-        return {
-          vertexAttribDivisorANGLE: mockGL.vertexAttribDivisor.bind(mockGL),
-          drawArraysInstancedANGLE: mockGL.drawArraysInstanced.bind(mockGL),
-          drawElementsInstancedANGLE: mockGL.drawElements.bind(mockGL),
-        }
-      }
-      if (name === 'OES_vertex_array_object') {
-        return {
-          createVertexArrayOES: mockGL.createVertexArray.bind(mockGL),
-          deleteVertexArrayOES: mockGL.deleteVertexArray.bind(mockGL),
-          bindVertexArrayOES: mockGL.bindVertexArray.bind(mockGL),
-        }
-      }
-      return null
-    }),
+    getExtension: vi.fn(() => null),
 
     // State
     viewport: vi.fn(),

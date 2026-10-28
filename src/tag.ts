@@ -110,12 +110,7 @@ export function compile<
   TVertex extends GLSL,
   TFragment extends GLSL,
   TSchema extends ViewSchemaPartial,
->(
-  gl: WebGLRenderingContext,
-  vertex: TVertex,
-  fragment: TFragment,
-  options?: CompileOptions<TSchema> | undefined,
-) {
+>(gl: GL, vertex: TVertex, fragment: TFragment, options?: CompileOptions<TSchema> | undefined) {
   const _vertex = resolveGLSLTag(vertex, options) as { template: string; schema: ViewSchema }
   const _fragment = resolveGLSLTag(fragment, options) as { template: string; schema: ViewSchema }
 

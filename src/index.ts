@@ -1,5 +1,4 @@
-import { AttributeNotFoundError, created } from './errors'
-import { getInstancedArrays, getVertexArrayObject } from './gl'
+import { AttributeNotFoundError, InstancingUnavailableError, created } from './errors'
 import type {
   AttributeFormat,
   AttributeKind,
@@ -9,6 +8,7 @@ import type {
   BufferSchema,
   BufferView,
   GL,
+  Instancing,
   UniformView as InferUniformView,
   GLUsage,
   InterleavedAttributeLayout,
@@ -18,6 +18,7 @@ import type {
   UniformSchema,
   VertexArrayMethods,
   VertexArrayParticipant,
+  VertexArrays,
   View,
   ViewOptions,
   ViewSchema,
@@ -146,13 +147,32 @@ export function view<TSchema extends ViewSchema>(
  * outlive the call that did it.
  */
 function bindDefaultVertexArray(gl: GL): () => void {
-  const feature = getVertexArrayObject(gl)
-  if (!feature) {
+  if (!hasVertexArrays(gl)) {
     return () => {}
   }
   const previous = readVertexArrayBinding(gl)
-  feature.bindVertexArray(null)
-  return () => feature.bindVertexArray(previous)
+  gl.bindVertexArray(null)
+  return () => gl.bindVertexArray(previous)
+}
+
+/** Whether `gl` carries the vertex-array feature, every member of it. */
+function hasVertexArrays(gl: GL): gl is GL & VertexArrays {
+  return (
+    typeof gl.createVertexArray === 'function' &&
+    typeof gl.bindVertexArray === 'function' &&
+    typeof gl.deleteVertexArray === 'function' &&
+    typeof gl.VERTEX_ARRAY_BINDING === 'number'
+  )
+}
+
+/** Whether `gl` carries the instancing feature, every member of it. */
+function hasInstancing(gl: GL): gl is GL & Instancing {
+  return (
+    typeof gl.vertexAttribDivisor === 'function' &&
+    typeof gl.drawArraysInstanced === 'function' &&
+    typeof gl.drawElementsInstanced === 'function' &&
+    typeof gl.VERTEX_ATTRIB_ARRAY_DIVISOR === 'number'
+  )
 }
 
 /**
@@ -169,7 +189,7 @@ export function vaoView(
   participants: VertexArrayParticipant[],
   { signal }: ViewOptions = {},
 ): VertexArrayMethods {
-  const feature = getVertexArrayObject(gl)
+  const feature = hasVertexArrays(gl) ? gl : null
 
   const methods: VertexArrayMethods = !feature
     ? {
@@ -183,7 +203,7 @@ export function vaoView(
       }
     : (() => {
         const vertexArray = created(feature.createVertexArray(), 'vertexArray')
-        const previous = readVertexArrayBinding(gl)
+        const previous = readVertexArrayBinding(feature)
         feature.bindVertexArray(vertexArray)
         // Discarding the restorers is the point: the state lives in this array
         // now, and the array is thrown away whole.
@@ -194,7 +214,7 @@ export function vaoView(
 
         return {
           bind() {
-            const previousVertexArray = readVertexArrayBinding(gl)
+            const previousVertexArray = readVertexArrayBinding(feature)
             feature.bindVertexArray(vertexArray)
             // Context state the array cannot hold — see applyToContext.
             participants.forEach(participant => participant.applyToContext?.())
@@ -341,11 +361,19 @@ function handleAttribute(
   glType: GLType,
   isIntegerKind: boolean,
   normalized: boolean,
-  instanced?: boolean,
+  instanced: boolean | undefined,
+  name: string,
 ) {
   gl.enableVertexAttribArray(location)
   if (isIntegerKind) {
-    ;(gl as WebGL2RenderingContext).vertexAttribIPointer(location, size, gl[glType], stride, offset)
+    assertedNotNullish(gl.vertexAttribIPointer, 'the context has no vertexAttribIPointer').call(
+      gl,
+      location,
+      size,
+      gl[glType],
+      stride,
+      offset,
+    )
   } else {
     gl.vertexAttribPointer(location, size, gl[glType], normalized, stride, offset)
   }
@@ -353,30 +381,27 @@ function handleAttribute(
   // Always stated, never inherited: the divisor belongs to the location rather
   // than to the program, so a location left at 1 by an earlier instanced
   // attribute would feed one value to every vertex here.
-  // Get instanced-arrays-feature: extension if webgl, gl if webgl2
-  const instancedArrays = getInstancedArrays(gl)
   if (instanced) {
-    assertedNotNullish(instancedArrays).vertexAttribDivisor(location, 1)
-  } else if (instancedArrays) {
-    instancedArrays.vertexAttribDivisor(location, 0)
+    if (!hasInstancing(gl)) {
+      throw new InstancingUnavailableError(name)
+    }
+    gl.vertexAttribDivisor(location, 1)
+  } else if (hasInstancing(gl)) {
+    gl.vertexAttribDivisor(location, 0)
   }
 }
 
-// Same enum in webgl2 and in the webgl1 extensions, which expose no constants
-const VERTEX_ATTRIB_ARRAY_DIVISOR = 0x88fe
-const VERTEX_ARRAY_BINDING = 0x85b5
-
 // Anything but an array or null would make the restore throw a TypeError.
-function readVertexArrayBinding(gl: GL): WebGLVertexArrayObject | null {
-  const bound: unknown = gl.getParameter(VERTEX_ARRAY_BINDING)
+function readVertexArrayBinding(gl: GL & VertexArrays): WebGLVertexArrayObject | null {
+  const bound: unknown = gl.getParameter(gl.VERTEX_ARRAY_BINDING)
   return typeof bound === 'object' ? (bound as WebGLVertexArrayObject | null) : null
 }
 
 // Reads the divisor currently attached to a location, 0 where instancing is
 // unavailable and nothing can have set one
 function readDivisor(gl: GL, location: number): number {
-  return getInstancedArrays(gl)
-    ? (gl.getVertexAttrib(location, VERTEX_ATTRIB_ARRAY_DIVISOR) as number)
+  return hasInstancing(gl)
+    ? (gl.getVertexAttrib(location, gl.VERTEX_ATTRIB_ARRAY_DIVISOR) as number)
     : 0
 }
 
@@ -416,9 +441,11 @@ export function attributeView<T extends AttributeSchema>(
         // it runs, so this binding is the setup for the pointer, not a lasting
         // part of the vertex array's state.
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer)
-        handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced)
+        handleAttribute(gl, location, size, 0, 0, glType, isIntKind, normalized, instanced, name)
         return once(() => {
-          getInstancedArrays(gl)?.vertexAttribDivisor(location, previousDivisor)
+          if (hasInstancing(gl)) {
+            gl.vertexAttribDivisor(location, previousDivisor)
+          }
         })
       }
 
@@ -580,6 +607,7 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
           isIntKind,
           normalized,
           divisor === 1,
+          name,
         )
     })
 
@@ -602,10 +630,11 @@ export function interleavedAttributeView<T extends InterleavedAttributeSchema>(
         handle(divisor)
       }
       return once(() => {
-        const instancedArrays = getInstancedArrays(gl)
-        previousDivisors.forEach(([location, previous]) => {
-          instancedArrays?.vertexAttribDivisor(location, previous)
-        })
+        if (hasInstancing(gl)) {
+          previousDivisors.forEach(([location, previous]) => {
+            gl.vertexAttribDivisor(location, previous)
+          })
+        }
       })
     }
 

@@ -6,7 +6,120 @@ import { DeepMerge, Prettify, ShallowMerge } from './type-utils'
 /*                                                                                */
 /**********************************************************************************/
 
-export type GL = WebGLRenderingContext | WebGL2RenderingContext
+type NumericKeys<T> = {
+  [K in keyof T]: T[K] extends number ? K : never
+}[keyof T]
+
+/** What a WebGL1 context has and view.gl calls. */
+type WebGL1Core = Pick<
+  WebGLRenderingContext,
+  | 'activeTexture'
+  | 'attachShader'
+  | 'bindBuffer'
+  | 'bindFramebuffer'
+  | 'bindTexture'
+  | 'bufferData'
+  | 'bufferSubData'
+  | 'checkFramebufferStatus'
+  | 'compileShader'
+  | 'createBuffer'
+  | 'createFramebuffer'
+  | 'createProgram'
+  | 'createShader'
+  | 'createTexture'
+  | 'deleteBuffer'
+  | 'deleteFramebuffer'
+  | 'deleteProgram'
+  | 'deleteShader'
+  | 'deleteTexture'
+  | 'disableVertexAttribArray'
+  | 'enableVertexAttribArray'
+  | 'framebufferTexture2D'
+  | 'getAttribLocation'
+  | 'getError'
+  | 'getParameter'
+  | 'getProgramInfoLog'
+  | 'getProgramParameter'
+  | 'getShaderInfoLog'
+  | 'getShaderParameter'
+  | 'getUniformLocation'
+  | 'getVertexAttrib'
+  | 'linkProgram'
+  | 'shaderSource'
+  | 'texImage2D'
+  | 'texParameteri'
+  | 'uniform1f'
+  | 'uniform1fv'
+  | 'uniform1i'
+  | 'uniform1iv'
+  | 'uniform2f'
+  | 'uniform2fv'
+  | 'uniform2i'
+  | 'uniform2iv'
+  | 'uniform3f'
+  | 'uniform3fv'
+  | 'uniform3i'
+  | 'uniform3iv'
+  | 'uniform4f'
+  | 'uniform4fv'
+  | 'uniform4i'
+  | 'uniform4iv'
+  | 'uniformMatrix2fv'
+  | 'uniformMatrix3fv'
+  | 'uniformMatrix4fv'
+  | 'vertexAttrib1f'
+  | 'vertexAttrib2f'
+  | 'vertexAttrib3f'
+  | 'vertexAttrib4f'
+  | 'vertexAttribPointer'
+> &
+  Readonly<Record<NumericKeys<WebGLRenderingContext>, number>>
+
+/** Instancing: a WebGL2 context's own, or a wrapper's, under the WebGL2 names. */
+export type Instancing = Pick<
+  WebGL2RenderingContext,
+  'vertexAttribDivisor' | 'drawArraysInstanced' | 'drawElementsInstanced'
+> & { readonly VERTEX_ATTRIB_ARRAY_DIVISOR: number }
+
+/** Vertex arrays: a WebGL2 context's own, or a wrapper's, under the WebGL2 names. */
+export type VertexArrays = Pick<
+  WebGL2RenderingContext,
+  'createVertexArray' | 'bindVertexArray' | 'deleteVertexArray'
+> & { readonly VERTEX_ARRAY_BINDING: number }
+
+/** WebGL2-only members view.gl reaches for where a schema asks for them. */
+type WebGL2Only = Pick<
+  WebGL2RenderingContext,
+  | 'vertexAttribIPointer'
+  | 'uniform1ui'
+  | 'uniform1uiv'
+  | 'uniform2ui'
+  | 'uniform2uiv'
+  | 'uniform3ui'
+  | 'uniform3uiv'
+  | 'uniform4ui'
+  | 'uniform4uiv'
+  | 'uniformMatrix2x3fv'
+  | 'uniformMatrix2x4fv'
+  | 'uniformMatrix3x2fv'
+  | 'uniformMatrix3x4fv'
+  | 'uniformMatrix4x2fv'
+  | 'uniformMatrix4x3fv'
+  | 'RGBA32F'
+  | 'RGB32F'
+  | 'RGBA16F'
+  | 'RGB16F'
+  | 'HALF_FLOAT'
+>
+
+/**
+ * The context view.gl draws with: what a WebGL1 context has, plus each WebGL2
+ * feature as optional members under its WebGL2 names. A WebGL2 context is one
+ * as it is. A WebGL1 context with the extensions is one once a wrapper puts
+ * the extension's calls on it under the WebGL2 names; view.gl asks the context
+ * nothing and looks no extension up.
+ */
+export type GL = WebGL1Core & Partial<Instancing> & Partial<VertexArrays> & Partial<WebGL2Only>
 
 export type GLTarget = 'ARRAY_BUFFER' | 'ELEMENT_ARRAY_BUFFER'
 export type GLUsage = 'STATIC_DRAW' | 'DYNAMIC_DRAW' | 'STREAM_DRAW'

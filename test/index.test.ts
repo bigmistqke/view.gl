@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  InstancingUnavailableError,
   attributeView,
   bufferView,
   createFramebuffer,
@@ -1449,8 +1450,7 @@ describe('vaoView', () => {
     const { attributes } = participants()
     const vertexArray = { id: 'vao' } as unknown as WebGLVertexArrayObject
     const foreign = { id: 'foreign' } as unknown as WebGLVertexArrayObject
-    // Swapped before the first getVertexArrayObject call: on a context without
-    // native vertex arrays the extension wrapper binds these once, up front.
+    // Swapped before `vaoView` reads them.
     gl.createVertexArray = vi.fn(() => vertexArray) as any
     const bindVertexArray = vi.fn()
     gl.bindVertexArray = bindVertexArray as any
@@ -1469,12 +1469,11 @@ describe('vaoView', () => {
   })
 
   it('re-applies each participant per bind when the context has no vertex arrays', () => {
-    // WebGL1 without OES_vertex_array_object: nowhere to keep the state, so
-    // the array is emulated by doing the work again on every bind.
+    // A context without vertex arrays: nowhere to keep the state, so the array
+    // is emulated by doing the work again on every bind.
     const mock = createMockGL()
     const gl1 = mock as any
     gl1.createVertexArray = undefined
-    gl1.getExtension = vi.fn(() => null)
     const program1 = gl1.createProgram()
 
     const attributes = attributeView(gl1, program1, {
@@ -1491,81 +1490,49 @@ describe('vaoView', () => {
   })
 })
 
-describe('a context lost and restored between two builds', () => {
-  /**
-   * A WebGL1 context whose extension objects die with the context, as on
-   * Chrome 109 and 119: an object from before the loss creates nothing and
-   * sets no divisor after the restore, while a fresh `getExtension` works.
-   */
-  function losableGL() {
+describe('a context without instancing', () => {
+  function withoutInstancing() {
     const gl = createMockGL() as any
-    let generation = 0
-    const divisors: Array<{ generation: number; location: number; divisor: number }> = []
-    gl.getExtension = vi.fn((name: string) => {
-      const born = generation
-      const alive = () => born === generation
-      if (name === 'OES_vertex_array_object') {
-        return {
-          createVertexArrayOES: () => (alive() ? { generation: born } : null),
-          bindVertexArrayOES: () => {},
-          deleteVertexArrayOES: () => {},
-        }
-      }
-      if (name === 'ANGLE_instanced_arrays') {
-        return {
-          vertexAttribDivisorANGLE: (location: number, divisor: number) => {
-            if (alive()) {
-              divisors.push({ generation: born, location, divisor })
-            }
-          },
-          drawArraysInstancedANGLE: () => {},
-          drawElementsInstancedANGLE: () => {},
-        }
-      }
-      return null
-    })
-    return {
-      gl,
-      divisors,
-      loseAndRestore() {
-        generation++
-      },
-      get generation() {
-        return generation
-      },
-    }
+    gl.vertexAttribDivisor = undefined
+    gl.drawArraysInstanced = undefined
+    gl.drawElementsInstanced = undefined
+    return gl
   }
 
-  it('creates a vertex array on the second build', () => {
-    const context = losableGL()
-    const program = context.gl.createProgram()
-    const build = () =>
-      vaoView(context.gl, [
-        attributeView(context.gl, program, { a_corner: { kind: 'vec2' } } satisfies AttributeSchema)
-          .a_corner,
-      ])
+  it('refuses an instanced attribute by name', () => {
+    const gl = withoutInstancing()
+    const program = gl.createProgram()
+    const attributes = attributeView(gl, program, {
+      a_offset: { kind: 'vec2', instanced: true },
+    } satisfies AttributeSchema)
 
-    build()
-    context.loseAndRestore()
-    expect(build).not.toThrow()
+    expect(() => attributes.a_offset.bind()).toThrow(InstancingUnavailableError)
+    expect(() => attributes.a_offset.bind()).toThrow("Attribute 'a_offset' is instanced")
   })
 
-  it('sets an instanced divisor on the second build', () => {
-    const context = losableGL()
-    const program = context.gl.createProgram()
-    const build = () =>
-      vaoView(context.gl, [
-        attributeView(context.gl, program, {
-          a_offset: { kind: 'vec2', instanced: true },
-        } satisfies AttributeSchema).a_offset,
-      ])
+  it('refuses a per-instance layout by its key', () => {
+    const gl = withoutInstancing()
+    const program = gl.createProgram()
+    const interleaved = interleavedAttributeView(gl, program, {
+      a_instance: { layout: [{ key: 'a_pos', kind: 'vec2' }] },
+    } satisfies InterleavedAttributeSchema)
 
-    build()
-    context.loseAndRestore()
-    build()
-    expect(context.divisors).toContainEqual(
-      expect.objectContaining({ generation: context.generation, divisor: 1 }),
+    expect(() => vaoView(gl, [interleaved.a_instance.buffer.perInstance])).toThrow(
+      InstancingUnavailableError,
     )
+  })
+
+  it('sets no divisor for a plain attribute, and draws', () => {
+    const gl = withoutInstancing()
+    const program = gl.createProgram()
+    const attributes = attributeView(gl, program, {
+      a_corner: { kind: 'vec2' },
+    } satisfies AttributeSchema)
+
+    const restore = attributes.a_corner.bind()
+    restore()
+
+    expect(gl.vertexAttribPointer).toHaveBeenCalledTimes(1)
   })
 })
 
